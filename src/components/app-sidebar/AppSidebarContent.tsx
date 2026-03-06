@@ -9,16 +9,16 @@ import Link from "next/link";
 
 export default function AppSidebarContent() {
   return (
-    <SidebarContent>
+    <SidebarContent className="py-2">
       <SidebarMenu>
         <SidebarMenuItem className="px-1">
           <SidebarMenuButton asChild className="h-auto">
             <Link
               href="/"
-              className="flex flex-col items-center gap-1 py-3 px-2"
+              className="flex flex-col items-center gap-1.5 py-3 px-2"
             >
-              <House className="h-5 w-5 shrink-0" />
-              <span className="text-[10px] leading-tight text-center">
+              <House className="h-6 w-6 shrink-0" />
+              <span className="text-[11px] leading-tight text-center font-medium">
                 Home
               </span>
             </Link>
@@ -28,10 +28,10 @@ export default function AppSidebarContent() {
           <SidebarMenuButton asChild className="h-auto">
             <Link
               href="/ai-scout"
-              className="flex flex-col items-center gap-1 py-3 px-2"
+              className="flex flex-col items-center gap-1.5 py-3 px-2"
             >
-              <Sparkles className="h-5 w-5 shrink-0" />
-              <span className="text-[10px] leading-tight text-center">
+              <Sparkles className="h-6 w-6 shrink-0" />
+              <span className="text-[11px] leading-tight text-center font-medium">
                 AI Scout
               </span>
             </Link>

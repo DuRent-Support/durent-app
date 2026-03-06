@@ -1,3 +1,5 @@
+import { LogIn } from "lucide-react";
+import Link from "next/link";
 import {
   SidebarFooter,
   SidebarMenu,
@@ -5,18 +7,21 @@ import {
   SidebarMenuItem,
 } from "../ui/sidebar";
 
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-
 export default function AppSidebarFooter() {
   return (
-    <SidebarFooter>
+    <SidebarFooter className="">
       <SidebarMenu>
         <SidebarMenuItem>
-          <SidebarMenuButton>
-            <Avatar>
+          <SidebarMenuButton asChild className="">
+            <Link href="/login">
+              <div className="flex justify-center items-center rounded-lg w-12 h-12 ">
+                <LogIn className="w-5 h-5" />
+              </div>
+            </Link>
+            {/* <Avatar>
               <AvatarImage src="https://github.com/shadcn.png" />
               <AvatarFallback>CN</AvatarFallback>
-            </Avatar>
+            </Avatar> */}
           </SidebarMenuButton>
         </SidebarMenuItem>
       </SidebarMenu>

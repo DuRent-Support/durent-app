@@ -1,4 +1,3 @@
-import Image from "next/image";
 import { Input } from "@/components/ui/input";
 import { Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -9,14 +8,6 @@ export default function HomePage() {
   return (
     <main>
       <div className="relative h-[340px] overflow-hidden">
-        <Image
-          src="/hero.webp"
-          alt="Studio"
-          className="absolute inset-0 h-full w-full object-cover"
-          width={1920}
-          height={1080}
-        />
-        <div className="absolute inset-0 bg-gradient-to-b from-background/40 via-background/60 to-background" />
         <div className="relative z-10 flex h-full flex-col items-center justify-center px-4">
           <h1 className="font-display text-4xl md:text-5xl font-bold tracking-tight text-foreground mb-6 text-center">
             FIND YOUR SET
