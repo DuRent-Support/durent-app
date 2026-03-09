@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
+import type { Profile } from "@/types";
 
 export async function POST(request: Request) {
   try {
@@ -24,11 +25,29 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: error.message }, { status: 401 });
     }
 
+    // Fetch user profile to get role
+    const { data: profile, error: profileError } = await supabase
+      .from("profiles")
+      .select("*")
+      .eq("user_id", data.user.id)
+      .single<Profile>();
+
+    if (profileError || !profile) {
+      console.error("Profile fetch error:", profileError);
+      // Sign out user if profile not found
+      await supabase.auth.signOut();
+      return NextResponse.json(
+        { error: "Profile tidak ditemukan" },
+        { status: 404 },
+      );
+    }
+
     return NextResponse.json(
       {
         message: "Login berhasil",
         user: data.user,
         session: data.session,
+        profile: profile,
       },
       { status: 200 },
     );

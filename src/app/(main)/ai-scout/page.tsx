@@ -18,7 +18,6 @@ export default function AiScoutPage() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
@@ -31,7 +30,6 @@ export default function AiScoutPage() {
     const userMessage = input.trim();
     setInput("");
 
-    // Add user message to chat
     setMessages((prev) => [...prev, { role: "user", content: userMessage }]);
     setLoading(true);
 
@@ -51,7 +49,6 @@ export default function AiScoutPage() {
         throw new Error(data.error || "Failed to get response");
       }
 
-      // Add assistant response
       setMessages((prev) => [
         ...prev,
         { role: "assistant", content: data.message },
@@ -60,7 +57,6 @@ export default function AiScoutPage() {
       console.error("Chat error:", error);
       toast.error("Gagal mendapatkan response dari AI");
 
-      // Remove user message on error
       setMessages((prev) => prev.slice(0, -1));
     } finally {
       setLoading(false);
@@ -77,7 +73,6 @@ export default function AiScoutPage() {
 
   return (
     <div className="flex flex-col h-[calc(100vh-4rem)] max-w-4xl mx-auto p-4">
-      {/* Header */}
       <div className="mb-6 text-center">
         <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-primary/10 shadow-lg">
           <Sparkles className="h-7 w-7 text-primary" />
@@ -91,7 +86,6 @@ export default function AiScoutPage() {
         </p>
       </div>
 
-      {/* Chat Messages */}
       <div className="flex-1 overflow-y-auto mb-4 space-y-4 rounded-lg border bg-muted/20 p-4">
         {messages.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full text-center text-muted-foreground">
@@ -135,7 +129,6 @@ export default function AiScoutPage() {
         )}
       </div>
 
-      {/* Input Form */}
       <form onSubmit={handleSubmit} className="flex gap-2">
         <Textarea
           ref={textareaRef}

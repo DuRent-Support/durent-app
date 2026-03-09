@@ -19,7 +19,6 @@ export default function HomePage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [loading, setLoading] = useState(true);
 
-  // Fetch locations from API
   const fetchLocations = useCallback(async () => {
     try {
       setLoading(true);
@@ -37,7 +36,6 @@ export default function HomePage() {
     }
   }, []);
 
-  // Fetch tags from API
   const fetchTags = useCallback(async () => {
     try {
       const response = await fetch("/api/tags");
@@ -58,7 +56,6 @@ export default function HomePage() {
     fetchTags();
   }, [fetchLocations, fetchTags]);
 
-  // Filter locations based on selected tag and search query
   useEffect(() => {
     let filtered = locations;
 
@@ -142,56 +139,6 @@ export default function HomePage() {
       </div>
 
       <div className="flex flex-wrap justify-start mt-8 gap-6 px-4 pb-8">
-        {loading ? (
-          <div className="flex justify-center items-center w-full py-12">
-            <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-          </div>
-        ) : filteredLocations.length === 0 ? (
-          <div className="text-center w-full py-12 text-muted-foreground">
-            Tidak ada lokasi yang ditemukan
-          </div>
-        ) : (
-          filteredLocations.map((location) => (
-            <AppCard
-              key={location.shooting_location_id}
-              id={location.shooting_location_id}
-              name={location.shooting_location_name}
-              city={location.shooting_location_city}
-              price={location.shooting_location_price}
-              description={location.shooting_location_description}
-              area={location.shooting_location_area}
-              imageUrl={location.shooting_location_image_url}
-              pax={location.shooting_location_pax}
-              rate={location.shooting_location_rate}
-              tags={location.tags}
-            />
-          ))
-        )}
-        {loading ? (
-          <div className="flex justify-center items-center w-full py-12">
-            <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-          </div>
-        ) : filteredLocations.length === 0 ? (
-          <div className="text-center w-full py-12 text-muted-foreground">
-            Tidak ada lokasi yang ditemukan
-          </div>
-        ) : (
-          filteredLocations.map((location) => (
-            <AppCard
-              key={location.shooting_location_id}
-              id={location.shooting_location_id}
-              name={location.shooting_location_name}
-              city={location.shooting_location_city}
-              price={location.shooting_location_price}
-              description={location.shooting_location_description}
-              area={location.shooting_location_area}
-              imageUrl={location.shooting_location_image_url}
-              pax={location.shooting_location_pax}
-              rate={location.shooting_location_rate}
-              tags={location.tags}
-            />
-          ))
-        )}
         {loading ? (
           <div className="flex justify-center items-center w-full py-12">
             <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />

@@ -27,6 +27,8 @@ const loginSchema = z.object({
 type LoginFormValues = z.infer<typeof loginSchema>;
 
 export default function LoginPage() {
+  //tambahkan state auhtentcation lagi auth atau tidak
+
   const router = useRouter();
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -59,8 +61,12 @@ export default function LoginPage() {
         throw new Error(result.error || "Login gagal");
       }
 
-      // Success - redirect to home
-      router.push("/");
+      // Success - redirect based on user role
+      if (result.profile?.role === "admin") {
+        router.push("/admin");
+      } else {
+        router.push("/");
+      }
       router.refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Terjadi kesalahan");

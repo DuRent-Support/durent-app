@@ -1,21 +1,26 @@
 "use client";
 
-import { LogIn } from "lucide-react";
+import { LogIn, LogOut, Settings } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import { Avatar, AvatarFallback, AvatarImage } from "../ui/avatar";
+import { Avatar, AvatarFallback } from "../ui/avatar";
 import {
   SidebarFooter,
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
 } from "../ui/sidebar";
+import { Popover, PopoverContent, PopoverTrigger } from "../ui/popover";
+import { Separator } from "../ui/separator";
 import type { User } from "@supabase/supabase-js";
 
 export default function AppSidebarFooter() {
   const [user, setUser] = useState<User | null>(null);
+  const [open, setOpen] = useState(false);
   const supabase = createClient();
+  const router = useRouter();
 
   useEffect(() => {
     const getUser = async () => {
@@ -34,7 +39,14 @@ export default function AppSidebarFooter() {
     });
 
     return () => subscription.unsubscribe();
-  }, [supabase.auth]);
+  }, [supabase]);
+
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    setOpen(false);
+    router.push("/login");
+    router.refresh();
+  };
 
   return (
     <SidebarFooter className="">
@@ -42,14 +54,39 @@ export default function AppSidebarFooter() {
         <SidebarMenuItem>
           <SidebarMenuButton asChild className="">
             {user ? (
-              <div className="flex justify-center items-center cursor-pointer">
-                <Avatar size="default">
-                  <AvatarImage src={user.user_metadata?.avatar_url} />
-                  <AvatarFallback>
-                    {user.email?.charAt(0).toUpperCase() || "JD"}
-                  </AvatarFallback>
-                </Avatar>
-              </div>
+              <Popover open={open} onOpenChange={setOpen}>
+                <PopoverTrigger asChild>
+                  <div className="flex justify-center items-center cursor-pointer">
+                    <Avatar size="default">
+                      <AvatarFallback>
+                        {user.email?.charAt(0).toUpperCase() || "JD"}
+                      </AvatarFallback>
+                    </Avatar>
+                  </div>
+                </PopoverTrigger>
+                <PopoverContent className="w-48 p-2" side="right" align="end">
+                  <div className="flex flex-col gap-1">
+                    <button
+                      onClick={() => {
+                        setOpen(false);
+                        router.push("/settings");
+                      }}
+                      className="flex items-center gap-2 px-3 py-2 text-sm rounded-md hover:bg-accent hover:text-accent-foreground transition-colors"
+                    >
+                      <Settings className="h-4 w-4" />
+                      <span>Settings</span>
+                    </button>
+                    <Separator />
+                    <button
+                      onClick={handleLogout}
+                      className="flex items-center gap-2 px-3 py-2 text-sm rounded-md hover:bg-destructive/10 hover:text-destructive transition-colors"
+                    >
+                      <LogOut className="h-4 w-4" />
+                      <span>Logout</span>
+                    </button>
+                  </div>
+                </PopoverContent>
+              </Popover>
             ) : (
               <Link href="/login">
                 <div className="flex justify-center items-center rounded-lg w-12 h-12">
