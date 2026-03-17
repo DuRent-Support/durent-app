@@ -1,11 +1,61 @@
 import { NextResponse } from "next/server";
+import { createHash } from "node:crypto";
 
 import { createClient } from "@/lib/supabase/server";
 
 type MidtransWebhookPayload = {
+  transaction_time?: string;
   transaction_status?: string;
+  transaction_id?: string;
+  status_message?: string;
+  fraud_status?: string;
+  payment_type?: string;
   order_id?: string;
+  merchant_id?: string;
+  status_code?: string;
+  gross_amount?: string;
+  signature_key?: string;
+  settlement_time?: string;
+  currency?: string;
 };
+
+function isValidMidtransSignature(payload: MidtransWebhookPayload) {
+  const serverKey = process.env.MIDTRANS_SERVER_KEY || "";
+  const orderId = String(payload.order_id || "");
+  const statusCode = String(payload.status_code || "");
+  const grossAmount = String(payload.gross_amount || "");
+  const signatureKey = String(payload.signature_key || "").toLowerCase();
+
+  if (!serverKey || !orderId || !statusCode || !grossAmount || !signatureKey) {
+    return false;
+  }
+
+  const expected = createHash("sha512")
+    .update(`${orderId}${statusCode}${grossAmount}${serverKey}`)
+    .digest("hex")
+    .toLowerCase();
+
+  return expected === signatureKey;
+}
+
+function normalizeMidtransPaymentStatus(payload: MidtransWebhookPayload) {
+  const transactionStatus = String(payload.transaction_status || "")
+    .trim()
+    .toLowerCase();
+  const fraudStatus = String(payload.fraud_status || "")
+    .trim()
+    .toLowerCase();
+
+  if (transactionStatus === "settlement") {
+    return "paid";
+  }
+
+  if (transactionStatus === "capture") {
+    return fraudStatus === "challenge" ? "challenge" : "paid";
+  }
+
+  return transactionStatus;
+}
 
 export async function POST(request: Request) {
   try {
@@ -13,9 +63,7 @@ export async function POST(request: Request) {
     const body = (await request.json()) as MidtransWebhookPayload;
 
     const orderId = String(body?.order_id || "").trim();
-    const transactionStatus = String(body?.transaction_status || "")
-      .trim()
-      .toLowerCase();
+    const transactionStatus = normalizeMidtransPaymentStatus(body);
 
     if (!orderId || !transactionStatus) {
       return NextResponse.json(
@@ -27,11 +75,18 @@ export async function POST(request: Request) {
       );
     }
 
+    if (!isValidMidtransSignature(body)) {
+      return NextResponse.json(
+        { message: "Signature Midtrans tidak valid" },
+        { status: 401 },
+      );
+    }
+
     const { data: updatedRows, error: updateError } = await supabase
-      .from("bookings")
+      .from("orders")
       .update({ payment_status: transactionStatus })
-      .eq("booking_id", orderId)
-      .select("id");
+      .eq("order_id", orderId)
+      .select("order_id");
 
     if (updateError) {
       console.error("Midtrans webhook update error:", updateError);
@@ -44,8 +99,8 @@ export async function POST(request: Request) {
     if (!updatedRows || updatedRows.length === 0) {
       return NextResponse.json(
         {
-          message: "Booking dengan booking_id tidak ditemukan",
-          booking_id: orderId,
+          message: "Order dengan order_id tidak ditemukan",
+          order_id: orderId,
         },
         { status: 404 },
       );
@@ -54,8 +109,11 @@ export async function POST(request: Request) {
     return NextResponse.json(
       {
         message: "Status pembayaran berhasil diperbarui",
-        booking_id: orderId,
-        transaction_status: transactionStatus,
+        order_id: orderId,
+        transaction_status: String(body.transaction_status || "")
+          .trim()
+          .toLowerCase(),
+        payment_status: transactionStatus,
       },
       { status: 200 },
     );

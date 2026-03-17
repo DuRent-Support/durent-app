@@ -6,7 +6,7 @@ import { format } from "date-fns";
 import { id } from "date-fns/locale";
 import { ArrowLeft, CalendarIcon, ShoppingBag, Trash2 } from "lucide-react";
 import Script from "next/script";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
@@ -62,16 +62,9 @@ type Snap = {
   ) => void;
 };
 
-type BookingRow = {
-  location_id: string | null;
-  booking_start: string | null;
-  booking_end: string | null;
-  payment_status: string | null;
-};
-
-type DisabledRange = {
-  start: number;
-  end: number;
+type TokenizerResponse = {
+  token?: string;
+  message?: string;
 };
 
 function normalizeToStartOfDay(value: Date | string | null | undefined) {
@@ -89,9 +82,6 @@ export default function CartPage() {
   const router = useRouter();
   const supabase = useMemo(() => createClient(), []);
   const [isSnapReady, setIsSnapReady] = useState(false);
-  const [disabledRangesByLocation, setDisabledRangesByLocation] = useState<
-    Record<string, DisabledRange[]>
-  >({});
   const { items, removeItem, updateDateRange, clearCart, totalItems, getDays } =
     useCart();
   const hasUnselectedDateRange = items.some(
@@ -102,85 +92,6 @@ export default function CartPage() {
     today.setHours(0, 0, 0, 0);
     return today.getTime();
   }, []);
-
-  useEffect(() => {
-    const locationIds = Array.from(
-      new Set(
-        items.map((item) => String(item.id || "").trim()).filter(Boolean),
-      ),
-    );
-
-    if (locationIds.length === 0) {
-      setDisabledRangesByLocation({});
-      return;
-    }
-
-    let cancelled = false;
-
-    const loadBookings = async () => {
-      const { data, error } = await supabase
-        .from("bookings")
-        .select("location_id, booking_start, booking_end, payment_status")
-        .in("location_id", locationIds);
-
-      if (cancelled) {
-        return;
-      }
-
-      if (error) {
-        console.error("Failed loading bookings for cart:", error);
-        setDisabledRangesByLocation({});
-        return;
-      }
-
-      const nextRanges: Record<string, DisabledRange[]> = {};
-
-      for (const row of (data || []) as BookingRow[]) {
-        const locationId = String(row.location_id || "").trim();
-        const status = String(row.payment_status || "")
-          .trim()
-          .toLowerCase();
-
-        if (!locationId) {
-          continue;
-        }
-
-        // Hanya booking expired yang dianggap free, status lain di-block.
-        if (status === "expired") {
-          continue;
-        }
-
-        const startDate = normalizeToStartOfDay(row.booking_start);
-        const endDate = normalizeToStartOfDay(
-          row.booking_end || row.booking_start,
-        );
-
-        if (!startDate || !endDate) {
-          continue;
-        }
-
-        const start = startDate.getTime();
-        const end = endDate.getTime();
-
-        if (!nextRanges[locationId]) {
-          nextRanges[locationId] = [];
-        }
-
-        nextRanges[locationId].push({
-          start: Math.min(start, end),
-          end: Math.max(start, end),
-        });
-      }
-
-      setDisabledRangesByLocation(nextRanges);
-    };
-
-    void loadBookings();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [items, supabase]);
 
   const snapUrl =
     process.env.NEXT_PUBLIC_MIDTRANS_IS_PRODUCTION === "true"
@@ -244,10 +155,15 @@ export default function CartPage() {
       }),
     });
 
-    const tokenizerResult = await response.json();
+    const tokenizerResult = (await response.json()) as TokenizerResponse;
 
     if (!response.ok) {
       console.error("Tokenizer request failed:", tokenizerResult);
+      return;
+    }
+
+    if (!tokenizerResult.token) {
+      console.error("Token Midtrans tidak tersedia:", tokenizerResult);
       return;
     }
 
@@ -451,14 +367,7 @@ export default function CartPage() {
                                   return true;
                                 }
 
-                                const blockedRanges =
-                                  disabledRangesByLocation[item.id] || [];
-
-                                return blockedRanges.some(
-                                  (range) =>
-                                    target >= range.start &&
-                                    target <= range.end,
-                                );
+                                return false;
                               }}
                               numberOfMonths={1}
                               className={cn("p-3 pointer-events-auto")}

@@ -4,9 +4,44 @@ import { createClient } from "@/lib/supabase/server";
 
 let snap = new Midtrans.Snap({
   // Set to true if you want Production Environment (accept real transaction).
-  isProduction: false,
+  isProduction: process.env.NEXT_PUBLIC_MIDTRANS_IS_PRODUCTION === "true",
   serverKey: process.env.MIDTRANS_SERVER_KEY || "",
 });
+
+type CheckoutItem = {
+  id?: string;
+  name?: string;
+  subtotal?: number;
+  unitPrice?: number;
+  days?: number;
+  dateRange?: {
+    from?: string;
+    to?: string;
+  };
+};
+
+function toDateOnly(value: string | undefined) {
+  if (!value) {
+    return null;
+  }
+
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return null;
+  }
+
+  return date.toISOString().slice(0, 10);
+}
+
+function getQuantityDays(startDateOnly: string, endDateOnly: string) {
+  const start = new Date(`${startDateOnly}T00:00:00.000Z`);
+  const end = new Date(`${endDateOnly}T00:00:00.000Z`);
+  const diffMs = end.getTime() - start.getTime();
+  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+
+  return Math.max(1, diffDays + 1);
+}
 
 export async function POST(request: Request) {
   try {
@@ -14,7 +49,9 @@ export async function POST(request: Request) {
     const body = await request.json();
     console.log("Midtrans tokenizer request body:", body);
     const user = body?.user;
-    const items = Array.isArray(body?.items) ? body.items : [];
+    const items = (
+      Array.isArray(body?.items) ? body.items : []
+    ) as CheckoutItem[];
 
     const {
       data: { user: authUser },
@@ -49,55 +86,39 @@ export async function POST(request: Request) {
       0,
     );
 
-    const bookingRows = items.map(
-      (item: {
-        id?: string;
-        subtotal?: number;
-        dateRange?: { from?: string; to?: string };
-      }) => ({
-        user_id: authUser.id,
-        location_id: String(item.id || ""),
-        booking_start: item.dateRange?.from,
-        booking_end: item.dateRange?.to ?? item.dateRange?.from,
-        total_price: Number(item.subtotal || 0),
-        payment_status: "pending",
-      }),
-    );
+    const normalizedItems = items.map((item) => {
+      const locationId = String(item.id || "").trim();
+      const bookingStart = toDateOnly(item.dateRange?.from);
+      const bookingEnd = toDateOnly(item.dateRange?.to ?? item.dateRange?.from);
 
-    const hasInvalidBookingRow = bookingRows.some(
-      (row: { location_id: any; booking_start: any; booking_end: any }) =>
-        !row.location_id || !row.booking_start || !row.booking_end,
-    );
+      if (!locationId || !bookingStart || !bookingEnd) {
+        return null;
+      }
 
-    if (hasInvalidBookingRow) {
+      return {
+        location_id: locationId,
+        booking_start: bookingStart,
+        booking_end: bookingEnd,
+        price: Number(item.unitPrice || 0),
+        quantity: getQuantityDays(bookingStart, bookingEnd),
+      };
+    });
+
+    if (normalizedItems.some((item) => item === null)) {
       return NextResponse.json(
-        { message: "Data booking tidak valid" },
+        { message: "Data order item tidak valid" },
         { status: 400 },
       );
     }
 
-    const { error: bookingInsertError } = await supabase
-      .from("bookings")
-      .insert(bookingRows);
-
-    if (bookingInsertError) {
-      console.error("Insert bookings error:", bookingInsertError);
-      return NextResponse.json(
-        { message: "Gagal membuat booking" },
-        { status: 500 },
-      );
-    }
-
-    const orderId = `ORDER-${Date.now()}-${user.id.slice(0, 8)}`;
+    const orderId = `ORD-${crypto.randomUUID()}`;
 
     const parameter = {
       transaction_details: {
         order_id: orderId,
         gross_amount: grossAmount,
       },
-      //   credit_card: {
-      //     secure: true,
-      //   },
+
       enabled_payments: [
         "bca_va",
         "bni_va",
@@ -113,26 +134,57 @@ export async function POST(request: Request) {
         duration: 5,
         unit: "minute",
       },
-      item_details: items.map(
-        (item: {
-          id: string;
-          name: string;
-          days: number;
-          unitPrice: number;
-        }) => ({
-          id: item.id,
-          price: Number(item.unitPrice || 0),
-          quantity: Number(item.days || 1),
-          name: item.name,
-        }),
-      ),
+      item_details: items.map((item) => ({
+        id: String(item.id || ""),
+        price: Number(item.unitPrice || 0),
+        quantity: Number(item.days || 1),
+        name: String(item.name || "Item"),
+      })),
     };
 
     const token = await snap.createTransaction(parameter);
 
+    const { error: orderInsertError } = await supabase.from("orders").insert({
+      order_id: orderId,
+      user_id: authUser.id,
+      payment_status: "pending",
+      total_price: grossAmount,
+    });
+
+    if (orderInsertError) {
+      console.error("Insert orders error:", orderInsertError);
+      return NextResponse.json(
+        { message: "Gagal membuat order" },
+        { status: 500 },
+      );
+    }
+
+    const orderItemRows = normalizedItems
+      .filter((item): item is NonNullable<typeof item> => item !== null)
+      .map((item) => ({
+        order_id: orderId,
+        location_id: item.location_id,
+        booking_start: item.booking_start,
+        booking_end: item.booking_end,
+        price: item.price,
+        quantity: item.quantity,
+      }));
+
+    const { error: orderItemsInsertError } = await supabase
+      .from("order_items")
+      .insert(orderItemRows);
+
+    if (orderItemsInsertError) {
+      console.error("Insert order_items error:", orderItemsInsertError);
+      await supabase.from("orders").delete().eq("order_id", orderId);
+      return NextResponse.json(
+        { message: "Gagal membuat order item" },
+        { status: 500 },
+      );
+    }
+
     return NextResponse.json({
       token: token.token,
-      redirect_url: token.redirect_url,
       order_id: orderId,
       gross_amount: grossAmount,
     });
