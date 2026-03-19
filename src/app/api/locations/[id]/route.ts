@@ -128,7 +128,9 @@ export async function PUT(
 
     if (deleteTagsError) {
       return NextResponse.json(
-        { error: `Gagal menghapus relasi tag lama: ${deleteTagsError.message}` },
+        {
+          error: `Gagal menghapus relasi tag lama: ${deleteTagsError.message}`,
+        },
         { status: 400 },
       );
     }

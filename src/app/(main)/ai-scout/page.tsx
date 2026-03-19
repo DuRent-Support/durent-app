@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useState, useRef, useEffect } from "react";
 import {
   Sparkles,
@@ -201,6 +202,11 @@ export default function AiScoutPage() {
     setIsDragOver(false);
   };
 
+  const detailHref =
+    sceneResults.length > 0
+      ? `/ai-scout/detail?data=${encodeURIComponent(JSON.stringify(sceneResults))}`
+      : "/ai-scout/detail";
+
   return (
     <>
       <div className="flex flex-col h-[calc(100vh-4rem)] max-w-4xl mx-auto p-4">
@@ -375,6 +381,9 @@ export default function AiScoutPage() {
             <DrawerDescription>
               {sceneResults.length} scene dianalisis dari naskah kamu
             </DrawerDescription>
+            <Button asChild className="mt-3 w-fit">
+              <Link href={detailHref}>Lihat detail halaman lengkap</Link>
+            </Button>
           </DrawerHeader>
 
           <div className="flex-1 overflow-y-auto p-4 space-y-6">
