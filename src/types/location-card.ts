@@ -1,5 +1,5 @@
-// Props for AppCard component
-export interface AppCardProps {
+// Props for LocationCard component
+export interface LocationCardProps {
   id: string;
   name: string;
   city: string;

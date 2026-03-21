@@ -1,22 +1,14 @@
 "use client";
 
-import { ArrowLeft, CalendarCheck, MapPin } from "lucide-react";
-import { format } from "date-fns";
-import { id } from "date-fns/locale";
+import { ArrowLeft, CalendarCheck } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 
+import ReservationCard, {
+  type ReservationCardData,
+} from "@/components/reservation-card/ReservationCard";
 import { Button } from "@/components/ui/button";
 import { createClient } from "@/lib/supabase/client";
-
-function parsePrice(price: string | number | null | undefined) {
-  const numericValue = String(price ?? "").replace(/[^0-9]/g, "");
-  return Number.parseInt(numericValue, 10) || 0;
-}
-
-function formatPrice(value: number) {
-  return `Rp ${value.toLocaleString("id-ID")}`;
-}
 
 function parseNumber(value: string | number | null | undefined) {
   if (typeof value === "number") {
@@ -68,23 +60,10 @@ type LocationRow = {
   shooting_location_image_url: string[] | null;
 };
 
-type ReservationCardItem = {
-  id: string;
-  orderId: string;
-  name: string;
-  city: string;
-  imageUrl: string;
-  bookingFrom: Date;
-  bookingTo: Date;
-  days: number;
-  subtotal: number;
-  paymentStatus: string;
-};
-
 export default function ReservationsPage() {
   const router = useRouter();
   const supabase = useMemo(() => createClient(), []);
-  const [reservations, setReservations] = useState<ReservationCardItem[]>([]);
+  const [reservations, setReservations] = useState<ReservationCardData[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
@@ -179,7 +158,7 @@ export default function ReservationsPage() {
         locations.map((location) => [location.shooting_location_id, location]),
       );
 
-      const reservationItems: ReservationCardItem[] = orderItems
+      const reservationItems: ReservationCardData[] = orderItems
         .map((item) => {
           const order = orderMap.get(item.order_id);
           const location = locationMap.get(item.location_id);
@@ -211,7 +190,36 @@ export default function ReservationsPage() {
             paymentStatus: String(order?.payment_status || "pending"),
           };
         })
-        .filter((item): item is ReservationCardItem => item !== null);
+        .filter((item): item is ReservationCardData => item !== null);
+
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+
+      reservationItems.sort((a, b) => {
+        const aIsOngoing = a.bookingFrom <= today && a.bookingTo >= today;
+        const bIsOngoing = b.bookingFrom <= today && b.bookingTo >= today;
+
+        if (aIsOngoing !== bIsOngoing) {
+          return aIsOngoing ? -1 : 1;
+        }
+
+        const aIsUpcoming = a.bookingFrom > today;
+        const bIsUpcoming = b.bookingFrom > today;
+
+        if (aIsUpcoming !== bIsUpcoming) {
+          return aIsUpcoming ? -1 : 1;
+        }
+
+        if (aIsUpcoming && bIsUpcoming) {
+          return a.bookingFrom.getTime() - b.bookingFrom.getTime();
+        }
+
+        if (aIsOngoing && bIsOngoing) {
+          return a.bookingTo.getTime() - b.bookingTo.getTime();
+        }
+
+        return b.bookingTo.getTime() - a.bookingTo.getTime();
+      });
 
       setReservations(reservationItems);
       setIsLoading(false);
@@ -279,62 +287,11 @@ export default function ReservationsPage() {
             );
 
             return (
-              <article
+              <ReservationCard
                 key={reservation.id}
-                className="rounded-2xl border border-border/40 bg-card/50 p-4"
-              >
-                <div className="flex gap-4">
-                  <img
-                    src={reservation.imageUrl}
-                    alt={reservation.name}
-                    className="h-28 w-28 rounded-xl object-cover"
-                  />
-                  <div className="flex min-w-0 flex-1 flex-col justify-between">
-                    <div>
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="min-w-0">
-                          <h3 className="truncate font-display text-base font-semibold text-foreground">
-                            {reservation.name}
-                          </h3>
-                          <div className="mt-1 flex items-center gap-1 text-xs text-muted-foreground">
-                            <MapPin className="h-3.5 w-3.5" />
-                            <span>{reservation.city}</span>
-                          </div>
-                        </div>
-                        <span
-                          className={`rounded-md px-2.5 py-1 text-[10px] font-semibold ${status.cls}`}
-                        >
-                          {status.text}
-                        </span>
-                      </div>
-
-                      <div className="mt-3 flex items-center gap-2 text-xs text-muted-foreground">
-                        <CalendarCheck className="h-3.5 w-3.5" />
-                        <span>
-                          {format(reservation.bookingFrom, "d MMM yyyy", {
-                            locale: id,
-                          })}{" "}
-                          -{" "}
-                          {format(reservation.bookingTo, "d MMM yyyy", {
-                            locale: id,
-                          })}
-                        </span>
-                        <span className="text-muted-foreground/50">•</span>
-                        <span>{`${reservation.days} hari`}</span>
-                      </div>
-                      <div className="mt-2 text-[10px] uppercase tracking-[0.08em] text-muted-foreground">
-                        {`Order ${reservation.orderId} • Status ${reservation.paymentStatus}`}
-                      </div>
-                    </div>
-
-                    <div className="mt-3 flex items-center justify-end">
-                      <span className="text-sm font-semibold text-primary">
-                        {formatPrice(reservation.subtotal)}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              </article>
+                reservation={reservation}
+                status={status}
+              />
             );
           })}
         </div>

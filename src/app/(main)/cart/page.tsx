@@ -17,6 +17,10 @@ import {
 import { useCart } from "@/hooks/use-cart";
 import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
+import {
+  buildWhatsappLink,
+  buildWhatsappMessage,
+} from "@/lib/whatsappMessageHelper";
 import { type CartDateRange } from "@/types/cart";
 
 function parsePrice(price: string | number | null | undefined) {
@@ -174,6 +178,11 @@ export default function CartPage() {
   const hasUnselectedDateRange = items.some(
     (item) => !hasSelectedDateRange(item.dateRange),
   );
+  const whatsappHref = useMemo(() => {
+    const message = buildWhatsappMessage(items);
+    console.log("Generated WhatsApp message: di use memo", items);
+    return buildWhatsappLink("628111029064", message);
+  }, [items]);
   const todayTimestamp = useMemo(() => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
@@ -301,7 +310,7 @@ export default function CartPage() {
     const purchasedItems = items.map((item) => {
       const days = getDays(item);
       const unitPrice = parsePrice(item.price);
-
+      console.log("Processing item for checkout: item", item);
       return {
         id: item.id,
         name: item.name,
@@ -634,11 +643,18 @@ export default function CartPage() {
               variant="secondary"
               className="mt-3 w-full"
               size="lg"
+              disabled={hasUnselectedDateRange}
             >
               <a
-                href="https://wa.me/628111029064"
+                href={hasUnselectedDateRange ? undefined : whatsappHref}
                 target="_blank"
                 rel="noopener noreferrer"
+                aria-disabled={hasUnselectedDateRange}
+                onClick={(event) => {
+                  if (hasUnselectedDateRange) {
+                    event.preventDefault();
+                  }
+                }}
               >
                 Pesan via WhatsApp
               </a>

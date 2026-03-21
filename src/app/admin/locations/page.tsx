@@ -168,17 +168,39 @@ export default function LocationsPage() {
   // Validate all required fields
   const validateForm = (): boolean => {
     const errors: Record<string, string> = {};
-    if (!String(formData.shooting_location_name ?? "").trim()) errors.name = "Wajib diisi";
-    if (!String(formData.shooting_location_description ?? "").trim()) errors.description = "Wajib diisi";
-    if (!String(formData.shooting_location_city ?? "").trim()) errors.city = "Wajib diisi";
-    if (!String(formData.shooting_location_price ?? "").trim()) errors.price = "Wajib diisi";
-    if (!formData.shooting_location_area || formData.shooting_location_area <= 0) errors.area = "Wajib diisi";
-    if (!formData.shooting_location_pax || formData.shooting_location_pax <= 0) errors.pax = "Wajib diisi";
-    if (!formData.shooting_location_rate || formData.shooting_location_rate <= 0) errors.rate = "Wajib diisi";
-    else if (formData.shooting_location_rate > 5) errors.rate = "Rating maksimal 5";
+    if (!String(formData.shooting_location_name ?? "").trim())
+      errors.name = "Wajib diisi";
+    if (!String(formData.shooting_location_description ?? "").trim())
+      errors.description = "Wajib diisi";
+    if (!String(formData.shooting_location_city ?? "").trim())
+      errors.city = "Wajib diisi";
+    if (!String(formData.shooting_location_price ?? "").trim())
+      errors.price = "Wajib diisi";
+    if (
+      !formData.shooting_location_area ||
+      formData.shooting_location_area <= 0
+    )
+      errors.area = "Wajib diisi";
+    if (!formData.shooting_location_pax || formData.shooting_location_pax <= 0)
+      errors.pax = "Wajib diisi";
+    if (
+      !formData.shooting_location_rate ||
+      formData.shooting_location_rate <= 0
+    )
+      errors.rate = "Wajib diisi";
+    else if (formData.shooting_location_rate > 5)
+      errors.rate = "Rating maksimal 5";
     setFormErrors(errors);
     if (Object.keys(errors).length > 0) {
-      const fieldOrder = ["name", "description", "city", "price", "area", "pax", "rate"];
+      const fieldOrder = [
+        "name",
+        "description",
+        "city",
+        "price",
+        "area",
+        "pax",
+        "rate",
+      ];
       const firstError = fieldOrder.find((f) => errors[f]);
       if (firstError) {
         setTimeout(() => {
@@ -188,7 +210,11 @@ export default function LocationsPage() {
           let parent = el.parentElement;
           while (parent) {
             if (parent.scrollHeight > parent.clientHeight + 1) {
-              const offset = el.getBoundingClientRect().top - parent.getBoundingClientRect().top + parent.scrollTop - 80;
+              const offset =
+                el.getBoundingClientRect().top -
+                parent.getBoundingClientRect().top +
+                parent.scrollTop -
+                80;
               parent.scrollTo({ top: offset, behavior: "smooth" });
               break;
             }
@@ -441,8 +467,14 @@ export default function LocationsPage() {
           </DialogHeader>
           <div className="grid gap-4 py-2">
             <div className="grid gap-1.5">
-              <Label>Nama Lokasi <span className="text-destructive">*</span></Label>
-              {formErrors.name && <p className="text-xs text-destructive -mb-1">{formErrors.name}</p>}
+              <Label>
+                Nama Lokasi <span className="text-destructive">*</span>
+              </Label>
+              {formErrors.name && (
+                <p className="text-xs text-destructive -mb-1">
+                  {formErrors.name}
+                </p>
+              )}
               <Input
                 id="field-name"
                 value={formData.shooting_location_name}
@@ -458,8 +490,14 @@ export default function LocationsPage() {
             </div>
 
             <div className="grid gap-1.5">
-              <Label>Deskripsi <span className="text-destructive">*</span></Label>
-              {formErrors.description && <p className="text-xs text-destructive -mb-1">{formErrors.description}</p>}
+              <Label>
+                Deskripsi <span className="text-destructive">*</span>
+              </Label>
+              {formErrors.description && (
+                <p className="text-xs text-destructive -mb-1">
+                  {formErrors.description}
+                </p>
+              )}
               <Textarea
                 id="field-description"
                 value={formData.shooting_location_description}
@@ -477,8 +515,14 @@ export default function LocationsPage() {
 
             <div className="grid grid-cols-2 gap-4">
               <div className="grid gap-1.5">
-                <Label>Kota <span className="text-destructive">*</span></Label>
-                {formErrors.city && <p className="text-xs text-destructive -mb-1">{formErrors.city}</p>}
+                <Label>
+                  Kota <span className="text-destructive">*</span>
+                </Label>
+                {formErrors.city && (
+                  <p className="text-xs text-destructive -mb-1">
+                    {formErrors.city}
+                  </p>
+                )}
                 <Input
                   id="field-city"
                   value={formData.shooting_location_city}
@@ -493,8 +537,14 @@ export default function LocationsPage() {
                 />
               </div>
               <div className="grid gap-1.5">
-                <Label>Harga <span className="text-destructive">*</span></Label>
-                {formErrors.price && <p className="text-xs text-destructive -mb-1">{formErrors.price}</p>}
+                <Label>
+                  Harga <span className="text-destructive">*</span>
+                </Label>
+                {formErrors.price && (
+                  <p className="text-xs text-destructive -mb-1">
+                    {formErrors.price}
+                  </p>
+                )}
                 <Input
                   id="field-price"
                   value={formData.shooting_location_price}
@@ -512,8 +562,14 @@ export default function LocationsPage() {
 
             <div className="grid grid-cols-3 gap-4">
               <div className="grid gap-1.5">
-                <Label>Area (m²) <span className="text-destructive">*</span></Label>
-                {formErrors.area && <p className="text-xs text-destructive -mb-1">{formErrors.area}</p>}
+                <Label>
+                  Area (m²) <span className="text-destructive">*</span>
+                </Label>
+                {formErrors.area && (
+                  <p className="text-xs text-destructive -mb-1">
+                    {formErrors.area}
+                  </p>
+                )}
                 <Input
                   id="field-area"
                   value={formData.shooting_location_area || ""}
@@ -528,8 +584,14 @@ export default function LocationsPage() {
                 />
               </div>
               <div className="grid gap-1.5">
-                <Label>Kapasitas (orang) <span className="text-destructive">*</span></Label>
-                {formErrors.pax && <p className="text-xs text-destructive -mb-1">{formErrors.pax}</p>}
+                <Label>
+                  Kapasitas (orang) <span className="text-destructive">*</span>
+                </Label>
+                {formErrors.pax && (
+                  <p className="text-xs text-destructive -mb-1">
+                    {formErrors.pax}
+                  </p>
+                )}
                 <Input
                   id="field-pax"
                   value={formData.shooting_location_pax || ""}
@@ -544,8 +606,14 @@ export default function LocationsPage() {
                 />
               </div>
               <div className="grid gap-1.5">
-                <Label>Rating (0-5) <span className="text-destructive">*</span></Label>
-                {formErrors.rate && <p className="text-xs text-destructive -mb-1">{formErrors.rate}</p>}
+                <Label>
+                  Rating (0-5) <span className="text-destructive">*</span>
+                </Label>
+                {formErrors.rate && (
+                  <p className="text-xs text-destructive -mb-1">
+                    {formErrors.rate}
+                  </p>
+                )}
                 <Input
                   id="field-rate"
                   value={formData.shooting_location_rate || ""}
@@ -556,7 +624,10 @@ export default function LocationsPage() {
                       shooting_location_rate: val,
                     }));
                     if (val > 5) {
-                      setFormErrors((prev) => ({ ...prev, rate: "Rating maksimal 5" }));
+                      setFormErrors((prev) => ({
+                        ...prev,
+                        rate: "Rating maksimal 5",
+                      }));
                     } else {
                       setFormErrors((prev) => ({ ...prev, rate: "" }));
                     }
@@ -575,6 +646,8 @@ export default function LocationsPage() {
                     <img
                       src={url}
                       alt={`Existing ${index + 1}`}
+                      loading="lazy"
+                      decoding="async"
                       className="w-full h-24 object-cover rounded-lg"
                     />
                     <Button
@@ -595,6 +668,8 @@ export default function LocationsPage() {
                     <img
                       src={preview}
                       alt={`Preview ${index + 1}`}
+                      loading="lazy"
+                      decoding="async"
                       className="w-full h-24 object-cover rounded-lg"
                     />
                     <Button
@@ -660,8 +735,10 @@ export default function LocationsPage() {
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                   Processing...
                 </>
+              ) : editingLocation ? (
+                "Simpan"
               ) : (
-                editingLocation ? "Simpan" : "Tambah"
+                "Tambah"
               )}
             </Button>
           </DialogFooter>

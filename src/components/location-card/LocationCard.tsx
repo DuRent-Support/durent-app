@@ -26,11 +26,11 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { useCart } from "@/hooks/use-cart";
-import { AppCardProps } from "@/types/app-card";
+import { LocationCardProps } from "@/types/location-card";
 
 import formatPrice from "@/lib/formatPrice";
 
-export default function AppCard({
+export default function LocationCard({
   id,
   name,
   city,
@@ -41,7 +41,7 @@ export default function AppCard({
   pax,
   rate,
   tags,
-}: AppCardProps) {
+}: LocationCardProps) {
   const { addItem, isInCart } = useCart();
   const isAdded = isInCart(id);
   const images = imageUrl && imageUrl.length > 0 ? imageUrl : ["/hero.webp"];

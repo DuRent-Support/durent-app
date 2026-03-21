@@ -6,7 +6,7 @@ import { Search, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import Image from "next/image";
 
-import AppCard from "@/components/app-card/AppCard";
+import LocationCard from "@/components/location-card/LocationCard";
 import { LocationWithTags } from "@/types/location";
 
 export default function HomePage() {
@@ -149,7 +149,7 @@ export default function HomePage() {
           </div>
         ) : (
           filteredLocations.map((location) => (
-            <AppCard
+            <LocationCard
               key={location.shooting_location_id}
               id={location.shooting_location_id}
               name={location.shooting_location_name}

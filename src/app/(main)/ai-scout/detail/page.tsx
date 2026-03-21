@@ -6,7 +6,7 @@ import { useSearchParams } from "next/navigation";
 import { ArrowLeft, Loader2, MapPin, Tag } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import AppCard from "@/components/app-card/AppCard";
+import LocationCard from "@/components/location-card/LocationCard";
 import { LocationWithTags } from "@/types/location";
 
 type SceneLocation = {
@@ -116,95 +116,86 @@ export default function AIScoutDetailPage() {
         </div>
       ) : (
         <div className="space-y-10">
-          {recommendations.map((scene, i) => (
-            <section key={`${scene.heading}-${i}`}>
-              <div className="mb-4">
-                <div className="flex items-center gap-2 mb-1">
-                  <span className="inline-flex items-center justify-center h-6 w-6 rounded-md bg-primary text-primary-foreground text-xs font-bold">
-                    {i + 1}
-                  </span>
-                  <h2 className="font-display text-lg font-semibold text-foreground">
-                    {scene.heading}
-                  </h2>
+          {recommendations.map((scene, i) => {
+            const matchedLocations = scene.location
+              .map((loc) => findMatchedLocation(loc.name, loc.city))
+              .filter(
+                (loc): loc is LocationWithTags =>
+                  loc !== undefined && loc !== null,
+              );
+
+            return (
+              <section key={`${scene.heading}-${i}`}>
+                <div className="mb-4">
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="inline-flex items-center justify-center h-6 w-6 rounded-md bg-primary text-primary-foreground text-xs font-bold">
+                      {i + 1}
+                    </span>
+                    <h2 className="font-display text-lg font-semibold text-foreground">
+                      {scene.heading}
+                    </h2>
+                  </div>
+                  <p className="text-sm text-muted-foreground ml-8">
+                    {scene.script}
+                  </p>
+                  {scene.tags?.length > 0 && (
+                    <div className="ml-8 mt-3 flex items-center gap-1.5 flex-wrap">
+                      <Tag className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                      {scene.tags.map((tag) => (
+                        <Badge
+                          key={tag}
+                          variant="secondary"
+                          className="text-xs"
+                        >
+                          {tag}
+                        </Badge>
+                      ))}
+                    </div>
+                  )}
                 </div>
-                <p className="text-sm text-muted-foreground ml-8">
-                  {scene.script}
-                </p>
-                {scene.tags?.length > 0 && (
-                  <div className="ml-8 mt-3 flex items-center gap-1.5 flex-wrap">
-                    <Tag className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                    {scene.tags.map((tag) => (
-                      <Badge key={tag} variant="secondary" className="text-xs">
-                        {tag}
-                      </Badge>
+
+                {loadingLocations ? (
+                  <div className="ml-8 rounded-xl border bg-card p-6 flex items-center gap-2 text-muted-foreground text-sm">
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Memuat card lokasi...
+                  </div>
+                ) : matchedLocations.length > 0 ? (
+                  <div className="flex flex-wrap justify-start mt-4 gap-6 ml-8">
+                    {matchedLocations.map((location) => (
+                      <LocationCard
+                        key={location.shooting_location_id}
+                        id={location.shooting_location_id}
+                        name={location.shooting_location_name}
+                        city={location.shooting_location_city}
+                        price={location.shooting_location_price}
+                        description={location.shooting_location_description}
+                        area={location.shooting_location_area}
+                        imageUrl={location.shooting_location_image_url}
+                        pax={location.shooting_location_pax}
+                        rate={location.shooting_location_rate}
+                        tags={location.tags}
+                      />
                     ))}
                   </div>
+                ) : (
+                  <div className="ml-8 rounded-xl border border-dashed bg-card p-4">
+                    <p className="text-sm text-muted-foreground">
+                      Belum ada lokasi katalog yang cocok untuk scene ini.
+                    </p>
+                    <Button asChild size="sm" className="mt-3 w-full sm:w-auto">
+                      <Link
+                        href="https://wa.me/628111029064"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                      >
+                        Hubungi kami untuk konsultasi lebih lanjut
+                      </Link>
+                    </Button>
+                  </div>
                 )}
-              </div>
-
-              {loadingLocations ? (
-                <div className="ml-8 rounded-xl border bg-card p-6 flex items-center gap-2 text-muted-foreground text-sm">
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  Memuat card lokasi...
-                </div>
-              ) : (
-                <>
-                  <div className="flex flex-wrap justify-start mt-4 gap-6 ml-8">
-                    {scene.location
-                      .map((loc) => findMatchedLocation(loc.name, loc.city))
-                      .filter(
-                        (loc): loc is LocationWithTags =>
-                          loc !== undefined && loc !== null,
-                      )
-                      .map((location) => (
-                        <AppCard
-                          key={location.shooting_location_id}
-                          id={location.shooting_location_id}
-                          name={location.shooting_location_name}
-                          city={location.shooting_location_city}
-                          price={location.shooting_location_price}
-                          description={location.shooting_location_description}
-                          area={location.shooting_location_area}
-                          imageUrl={location.shooting_location_image_url}
-                          pax={location.shooting_location_pax}
-                          rate={location.shooting_location_rate}
-                          tags={location.tags}
-                        />
-                      ))}
-                  </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 ml-8 mt-4">
-                    {scene.location
-                      .filter((loc) => !findMatchedLocation(loc.name, loc.city))
-                      .map((loc, j) => (
-                        <div
-                          key={`${loc.name}-${j}`}
-                          className="rounded-xl border border-dashed bg-card p-4"
-                        >
-                          <div className="flex items-start gap-2">
-                            <MapPin className="h-4 w-4 text-primary shrink-0 mt-0.5" />
-                            <div>
-                              <h3 className="text-sm font-semibold text-foreground">
-                                {loc.name}
-                              </h3>
-                              <p className="text-xs text-muted-foreground mt-0.5">
-                                {loc.city}
-                              </p>
-                            </div>
-                          </div>
-                          <p className="text-xs text-muted-foreground mt-3">
-                            {loc.reason}
-                          </p>
-                          <p className="text-xs text-muted-foreground mt-2">
-                            Lokasi ini belum ditemukan di katalog dashboard.
-                          </p>
-                        </div>
-                      ))}
-                  </div>
-                </>
-              )}
-            </section>
-          ))}
+              </section>
+            );
+          })}
         </div>
       )}
     </div>
