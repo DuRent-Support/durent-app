@@ -58,6 +58,7 @@ export async function GET(request: Request) {
   }
 
   const { data: profile } = await serviceRoleClient
+  
     .from("profiles")
     .select("role")
     .eq("user_id", user.id)
