@@ -15,6 +15,7 @@ import {
 import { Popover, PopoverContent, PopoverTrigger } from "../ui/popover";
 import { Separator } from "../ui/separator";
 import type { User } from "@supabase/supabase-js";
+import { get } from "http";
 
 export default function AppSidebarFooter() {
   const [user, setUser] = useState<User | null>(null);
@@ -30,6 +31,7 @@ export default function AppSidebarFooter() {
       setUser(user);
     };
 
+    console.log("User:", user);
     getUser();
 
     const {

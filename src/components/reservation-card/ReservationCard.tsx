@@ -1,5 +1,4 @@
-"use client";
-
+import Image from "next/image";
 import { CalendarCheck, MapPin } from "lucide-react";
 import { format } from "date-fns";
 import { id } from "date-fns/locale";
@@ -58,9 +57,11 @@ export default function ReservationCard({
   return (
     <article className="rounded-2xl border border-border/40 bg-card/50 p-4">
       <div className="flex gap-4">
-        <img
+        <Image
           src={reservation.imageUrl}
           alt={reservation.name}
+          width={112}
+          height={112}
           className="h-28 w-28 rounded-xl object-cover"
         />
         <div className="flex min-w-0 flex-1 flex-col justify-between">

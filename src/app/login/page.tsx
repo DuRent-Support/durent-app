@@ -2,76 +2,44 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Film, Eye, EyeOff } from "lucide-react";
+import { Film } from "lucide-react";
 import Image from "next/image";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import {
-  Form,
-  FormControl,
-  FormField,
-  FormItem,
-  FormLabel,
-  FormMessage,
-} from "@/components/ui/form";
-import { useForm } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
-import * as z from "zod";
 import Link from "next/link";
-
-const loginSchema = z.object({
-  email: z.string().email("Email tidak valid"),
-  password: z.string().min(6, "Password minimal 6 karakter"),
-});
-
-type LoginFormValues = z.infer<typeof loginSchema>;
+import { createClient } from "@/lib/supabase/client";
 
 export default function LoginPage() {
-  //tambahkan state auhtentcation lagi auth atau tidak
-
   const router = useRouter();
-  const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const supabase = createClient();
 
-  const form = useForm<LoginFormValues>({
-    resolver: zodResolver(loginSchema),
-    defaultValues: {
-      email: "",
-      password: "",
-    },
-  });
-
-  const onSubmit = async (data: LoginFormValues) => {
+  const onGoogleSignIn = async () => {
     setIsLoading(true);
     setError(null);
 
     try {
-      const response = await fetch("/api/auth/login", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
+      const redirectTo = `${window.location.origin}/auth/callback`;
+
+      const { error: oauthError } = await supabase.auth.signInWithOAuth({
+        provider: "google",
+        options: {
+          redirectTo,
+          queryParams: {
+            access_type: "offline",
+            prompt: "select_account",
+          },
         },
-        body: JSON.stringify(data),
       });
 
-      const result = await response.json();
-
-      if (!response.ok) {
-        throw new Error(result.error || "Login gagal");
+      if (oauthError) {
+        throw oauthError;
       }
-
-      // Success - redirect based on user role
-      if (result.profile?.role === "admin") {
-        router.push("/admin");
-      } else {
-        router.push("/");
-      }
-      router.refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Terjadi kesalahan");
-    } finally {
       setIsLoading(false);
+    } finally {
+      router.refresh();
     }
   };
 
@@ -110,87 +78,38 @@ export default function LoginPage() {
           <p className="text-sm text-muted-foreground">Masuk ke akun kamu</p>
         </div>
 
-        <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-5">
-            {error && (
-              <div className="p-3 rounded-lg bg-destructive/10 border border-destructive/20 text-destructive text-sm">
-                {error}
-              </div>
-            )}
-
-            <FormField
-              control={form.control}
-              name="email"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel className="text-foreground/80">Email</FormLabel>
-                  <FormControl>
-                    <Input
-                      type="email"
-                      placeholder="you@example.com"
-                      className="glass-input h-11 border-border/30 bg-transparent text-foreground placeholder:text-muted-foreground focus-visible:ring-ring"
-                      disabled={isLoading}
-                      {...field}
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            <FormField
-              control={form.control}
-              name="password"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel className="text-foreground/80">Password</FormLabel>
-                  <FormControl>
-                    <div className="relative">
-                      <Input
-                        type={showPassword ? "text" : "password"}
-                        placeholder="••••••••"
-                        className="glass-input h-11 border-border/30 bg-transparent pr-10 text-foreground placeholder:text-muted-foreground focus-visible:ring-ring"
-                        disabled={isLoading}
-                        {...field}
-                      />
-                      <button
-                        type="button"
-                        onClick={() => setShowPassword(!showPassword)}
-                        disabled={isLoading}
-                        className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
-                      >
-                        {showPassword ? (
-                          <EyeOff className="h-4 w-4" />
-                        ) : (
-                          <Eye className="h-4 w-4" />
-                        )}
-                      </button>
-                    </div>
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            <div className="flex justify-end">
-              <button
-                type="button"
-                disabled={isLoading}
-                className="text-xs text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
-              >
-                Lupa password?
-              </button>
+        <div className="space-y-5">
+          {error && (
+            <div className="rounded-lg border border-destructive/20 bg-destructive/10 p-3 text-sm text-destructive">
+              {error}
             </div>
+          )}
 
-            <Button
-              type="submit"
-              className="w-full h-11 font-semibold"
-              disabled={isLoading}
+          <Button
+            type="button"
+            variant="secondary"
+            className="h-11 w-full gap-2 font-semibold"
+            onClick={onGoogleSignIn}
+            disabled={isLoading}
+          >
+            <svg
+              aria-hidden="true"
+              className="h-[18px] w-[18px]"
+              viewBox="0 0 24 24"
             >
-              {isLoading ? "Memproses..." : "Masuk"}
-            </Button>
-          </form>
-        </Form>
+              <path
+                fill="#EA4335"
+                d="M12 10.2v3.9h5.5c-.2 1.2-1.4 3.6-5.5 3.6-3.3 0-6-2.7-6-6s2.7-6 6-6c1.9 0 3.1.8 3.8 1.5l2.6-2.5C16.8 3.1 14.7 2.2 12 2.2 6.6 2.2 2.2 6.6 2.2 12s4.4 9.8 9.8 9.8c5.7 0 9.4-4 9.4-9.6 0-.6-.1-1.1-.2-1.6H12z"
+              />
+            </svg>
+            {isLoading ? "Mengarahkan..." : "Masuk dengan Google"}
+          </Button>
+
+          <p className="text-center text-xs text-muted-foreground">
+            Dengan masuk, kamu menyetujui penggunaan akun Google untuk
+            autentikasi.
+          </p>
+        </div>
 
         <div className="mt-6 text-center">
           <span className="text-sm text-muted-foreground">

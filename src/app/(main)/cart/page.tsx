@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { format } from "date-fns";
@@ -453,11 +454,15 @@ export default function CartPage() {
                   className="rounded-3xl border border-border/40 bg-card/40 p-4 shadow-sm backdrop-blur-sm"
                 >
                   <div className="flex flex-col gap-4 sm:flex-row">
-                    <img
-                      src={item.imageUrl}
-                      alt={item.name}
-                      className="h-44 w-full rounded-2xl object-cover sm:h-36 sm:w-28"
-                    />
+                    <div className="relative h-44 w-full overflow-hidden rounded-2xl sm:h-36 sm:w-28">
+                      <Image
+                        src={item.imageUrl}
+                        alt={item.name}
+                        fill
+                        sizes="(max-width: 640px) 100vw, 112px"
+                        className="object-cover"
+                      />
+                    </div>
                     <div className="flex min-w-0 flex-1 flex-col justify-between gap-4">
                       <div className="flex items-start justify-between gap-4">
                         <div className="min-w-0">

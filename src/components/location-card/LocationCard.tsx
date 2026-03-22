@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import {
   Users,
   Check,
@@ -53,11 +54,12 @@ export default function LocationCard({
           <button type="button" className="w-full text-left">
             {/* Image */}
             <div className="relative aspect-[4/3] overflow-hidden rounded-xl">
-              <img
+              <Image
                 src={images[0]}
                 alt={name}
-                className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
-                loading="lazy"
+                fill
+                sizes="(max-width: 640px) 100vw, 440px"
+                className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
               />
               {/* Rating badge */}
               <div className="absolute top-3 right-3 flex items-center gap-1 bg-background/90 backdrop-blur-sm px-2 py-1 rounded-lg text-sm font-semibold">
@@ -146,11 +148,15 @@ export default function LocationCard({
               <CarouselContent className="ml-0">
                 {images.map((img, index) => (
                   <CarouselItem key={`${id}-${index}`} className="pl-0">
-                    <img
-                      src={img}
-                      alt={`${name} ${index + 1}`}
-                      className="w-full h-[260px] sm:h-[360px] md:h-[460px] object-cover"
-                    />
+                    <div className="relative h-[260px] w-full sm:h-[360px] md:h-[460px]">
+                      <Image
+                        src={img}
+                        alt={`${name} ${index + 1}`}
+                        fill
+                        sizes="(max-width: 640px) 88vw, (max-width: 1024px) 768px, 1024px"
+                        className="h-full w-full object-cover"
+                      />
+                    </div>
                   </CarouselItem>
                 ))}
               </CarouselContent>

@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { useState, useEffect, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -394,9 +395,11 @@ export default function LocationsPage() {
                     <TableCell>
                       {loc.shooting_location_image_url &&
                       loc.shooting_location_image_url.length > 0 ? (
-                        <img
+                        <Image
                           src={loc.shooting_location_image_url[0]}
                           alt={loc.shooting_location_name}
+                          width={40}
+                          height={40}
                           className="h-10 w-10 rounded-lg object-cover"
                         />
                       ) : (
@@ -642,13 +645,13 @@ export default function LocationsPage() {
               <div className="grid grid-cols-3 gap-2">
                 {/* Display existing images */}
                 {existingImageUrls.map((url, index) => (
-                  <div key={`existing-${index}`} className="relative">
-                    <img
+                  <div key={`existing-${index}`} className="relative h-24">
+                    <Image
                       src={url}
                       alt={`Existing ${index + 1}`}
-                      loading="lazy"
-                      decoding="async"
-                      className="w-full h-24 object-cover rounded-lg"
+                      fill
+                      sizes="(max-width: 768px) 33vw, 180px"
+                      className="h-24 w-full rounded-lg object-cover"
                     />
                     <Button
                       type="button"
@@ -664,13 +667,14 @@ export default function LocationsPage() {
 
                 {/* Display new image previews */}
                 {imagePreviews.map((preview, index) => (
-                  <div key={`preview-${index}`} className="relative">
-                    <img
+                  <div key={`preview-${index}`} className="relative h-24">
+                    <Image
                       src={preview}
                       alt={`Preview ${index + 1}`}
-                      loading="lazy"
-                      decoding="async"
-                      className="w-full h-24 object-cover rounded-lg"
+                      fill
+                      sizes="(max-width: 768px) 33vw, 180px"
+                      unoptimized
+                      className="h-24 w-full rounded-lg object-cover"
                     />
                     <Button
                       type="button"
