@@ -2,12 +2,14 @@ import Image from "next/image";
 import { CalendarCheck, MapPin } from "lucide-react";
 import { format } from "date-fns";
 import { id } from "date-fns/locale";
+import type { ReactNode } from "react";
 
 import { Badge } from "@/components/ui/badge";
 
 export type ReservationCardData = {
   id: string;
   orderId: string;
+  locationId: string;
   name: string;
   city: string;
   imageUrl: string;
@@ -26,6 +28,7 @@ type ReservationStatus = {
 type ReservationCardProps = {
   reservation: ReservationCardData;
   status: ReservationStatus;
+  action?: ReactNode;
 };
 
 function formatPrice(value: number) {
@@ -53,6 +56,7 @@ function getPaymentStatusClass(paymentStatus: string) {
 export default function ReservationCard({
   reservation,
   status,
+  action,
 }: ReservationCardProps) {
   return (
     <article className="rounded-2xl border border-border/40 bg-card/50 p-4">
@@ -122,7 +126,8 @@ export default function ReservationCard({
             </div>
           </div>
 
-          <div className="mt-3 flex items-center justify-end">
+          <div className="mt-3 flex items-center justify-between gap-3">
+            <div>{action}</div>
             <span className="text-sm font-semibold text-primary">
               {formatPrice(reservation.subtotal)}
             </span>

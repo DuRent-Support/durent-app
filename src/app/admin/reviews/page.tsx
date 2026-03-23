@@ -1,15 +1,17 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Star, MapPin, ArrowLeft, MessageSquare, Filter, ArrowUpDown } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { format } from "date-fns";
-import { id } from "date-fns/locale";
+import Image from "next/image";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
+import { createClient } from "@/lib/supabase/client";
 
 interface Review {
   id: string;
+  userId: string;
+  locationId: string;
   userName: string;
   avatar: string;
   locationTitle: string;
@@ -17,21 +19,42 @@ interface Review {
   location: string;
   rating: number;
   comment: string;
-  date: Date;
 }
 
-const seedReviews: Review[] = [
-  { id: "1", userName: "Andi Pratama", avatar: "AP", locationTitle: "Skyline Rooftop Terrace", locationImage: "https://picsum.photos/id/1018/400/300", location: "Jakarta Selatan", rating: 5, comment: "Lokasi yang luar biasa! View sunset-nya sangat memukau, perfect untuk scene romantis. Crew sangat puas dengan hasilnya.", date: new Date(2026, 1, 15) },
-  { id: "2", userName: "Siti Rahayu", avatar: "SR", locationTitle: "Grand Victorian Mansion", locationImage: "https://picsum.photos/id/1040/400/300", location: "Bandung", rating: 4, comment: "Interior klasiknya sangat detail dan otentik. Sedikit sempit untuk tim besar, tapi overall sangat recommended.", date: new Date(2026, 1, 20) },
-  { id: "3", userName: "Budi Santoso", avatar: "BS", locationTitle: "Minimalist White Studio", locationImage: "https://picsum.photos/id/1025/400/300", location: "Jakarta Pusat", rating: 5, comment: "Studio paling clean yang pernah saya pakai. Pencahayaan natural-nya sempurna, ga perlu banyak setup lighting tambahan.", date: new Date(2026, 2, 1) },
-  { id: "4", userName: "Maya Putri", avatar: "MP", locationTitle: "Tropical Garden Courtyard", locationImage: "https://picsum.photos/id/1039/400/300", location: "Bali", rating: 5, comment: "Suasana tropis yang autentik! Tanaman-tanamannya terawat, cocok banget untuk konsep nature & wellness.", date: new Date(2026, 2, 8) },
-  { id: "5", userName: "Raka Wijaya", avatar: "RW", locationTitle: "Skyline Rooftop Terrace", locationImage: "https://picsum.photos/id/1018/400/300", location: "Jakarta Selatan", rating: 4, comment: "Bagus untuk night scene. Agak berisik dari jalan raya tapi bisa di-handle dengan sound editing.", date: new Date(2026, 2, 12) },
-  { id: "6", userName: "Dewi Lestari", avatar: "DL", locationTitle: "Grand Victorian Mansion", locationImage: "https://picsum.photos/id/1040/400/300", location: "Bandung", rating: 5, comment: "Properti yang sangat well-maintained. Staff-nya sangat kooperatif dan helpful selama proses shooting.", date: new Date(2026, 2, 18) },
-  { id: "7", userName: "Fajar Nugroho", avatar: "FN", locationTitle: "Minimalist White Studio", locationImage: "https://picsum.photos/id/1025/400/300", location: "Jakarta Pusat", rating: 2, comment: "AC-nya kurang dingin saat shooting siang hari. Agak mengganggu kenyamanan crew.", date: new Date(2026, 2, 20) },
-  { id: "8", userName: "Lina Kusuma", avatar: "LK", locationTitle: "Tropical Garden Courtyard", locationImage: "https://picsum.photos/id/1039/400/300", location: "Bali", rating: 1, comment: "Saat datang, lokasi sedang renovasi sebagian. Tidak sesuai foto. Sangat mengecewakan.", date: new Date(2026, 2, 22) },
-  { id: "9", userName: "Hendra Saputra", avatar: "HS", locationTitle: "Skyline Rooftop Terrace", locationImage: "https://picsum.photos/id/1018/400/300", location: "Jakarta Selatan", rating: 3, comment: "Viewnya oke tapi fasilitas toilet kurang bersih. Perlu improvement di area pendukung.", date: new Date(2026, 2, 25) },
-  { id: "10", userName: "Rina Melati", avatar: "RM", locationTitle: "Grand Victorian Mansion", locationImage: "https://picsum.photos/id/1040/400/300", location: "Bandung", rating: 2, comment: "Parkir sangat terbatas, kendaraan unit besar susah masuk. Lokasi cantik tapi aksesnya kurang.", date: new Date(2026, 3, 1) },
-];
+type ReviewRow = {
+  review_id?: string;
+  user_id: string;
+  location_id: string;
+  rating: number;
+  comment: string;
+};
+
+type AuthUserRow = {
+  user_id: string;
+  full_name: string | null;
+  email: string | null;
+};
+
+type LocationRow = {
+  shooting_location_id: string;
+  shooting_location_name: string;
+  shooting_location_city: string;
+  shooting_location_image_url: string[] | null;
+};
+
+function getInitials(name: string) {
+  const words = name
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2);
+
+  if (words.length === 0) {
+    return "U";
+  }
+
+  return words.map((word) => word[0]?.toUpperCase() ?? "").join("");
+}
 
 const StarRating = ({ rating, size = "sm" }: { rating: number; size?: "sm" | "md" }) => (
   <div className="flex gap-0.5">
@@ -44,23 +67,129 @@ const StarRating = ({ rating, size = "sm" }: { rating: number; size?: "sm" | "md
   </div>
 );
 
-const locations = [...new Set(seedReviews.map((r) => r.locationTitle))];
-
 const ReviewsPage = () => {
   const router = useRouter();
+  const supabase = useMemo(() => createClient(), []);
+  const [reviews, setReviews] = useState<Review[]>([]);
+  const [loading, setLoading] = useState(true);
   const [filterLocation, setFilterLocation] = useState<string>("all");
   const [filterRating, setFilterRating] = useState<string>("all");
-  const [sortOrder, setSortOrder] = useState<string>("desc");
+  const [sortOrder, setSortOrder] = useState<string>("high");
+
+  useEffect(() => {
+    const loadReviews = async () => {
+      setLoading(true);
+
+      const { data: reviewsData, error: reviewsError } = await supabase
+        .from("reviews")
+        .select("review_id, user_id, location_id, rating, comment");
+
+      if (reviewsError) {
+        console.error("Fetch reviews error:", reviewsError);
+        setReviews([]);
+        setLoading(false);
+        return;
+      }
+
+      const reviewRows = (reviewsData ?? []) as ReviewRow[];
+
+      if (reviewRows.length === 0) {
+        setReviews([]);
+        setLoading(false);
+        return;
+      }
+
+      const userIds = [...new Set(reviewRows.map((review) => review.user_id))];
+      const locationIds = [
+        ...new Set(reviewRows.map((review) => review.location_id)),
+      ];
+
+      const [{ data: locationsData, error: locationsError }, authUsersResponse] = await Promise.all([
+        supabase
+          .from("shooting_locations")
+          .select(
+            "shooting_location_id, shooting_location_name, shooting_location_city, shooting_location_image_url",
+          )
+          .in("shooting_location_id", locationIds),
+        fetch("/api/admin/auth-users", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ userIds }),
+        }),
+      ]);
+
+      if (locationsError) {
+        console.error("Fetch locations error:", locationsError);
+      }
+
+      let authUsers: AuthUserRow[] = [];
+
+      if (!authUsersResponse.ok) {
+        console.error("Fetch auth users error:", await authUsersResponse.text());
+      } else {
+        const authUsersJson = (await authUsersResponse.json()) as {
+          users?: AuthUserRow[];
+        };
+        authUsers = authUsersJson.users ?? [];
+      }
+
+      const locations = (locationsData ?? []) as LocationRow[];
+
+      const authUserMap = new Map(
+        authUsers.map((authUser) => [authUser.user_id, authUser]),
+      );
+      const locationMap = new Map(
+        locations.map((location) => [location.shooting_location_id, location]),
+      );
+
+      const mappedReviews: Review[] = reviewRows.map((review, index) => {
+        const authUser = authUserMap.get(review.user_id);
+        const location = locationMap.get(review.location_id);
+        const userName =
+          authUser?.full_name ||
+          authUser?.email ||
+          review.user_id;
+
+        return {
+          id: review.review_id ?? `${review.user_id}-${review.location_id}-${index}`,
+          userId: review.user_id,
+          locationId: review.location_id,
+          userName,
+          avatar: getInitials(userName),
+          locationTitle:
+            location?.shooting_location_name ?? "Lokasi tidak ditemukan",
+          locationImage:
+            location?.shooting_location_image_url?.[0] ||
+            "https://picsum.photos/seed/location-review/400/300",
+          location: location?.shooting_location_city ?? "-",
+          rating: Number(review.rating) || 0,
+          comment: review.comment || "-",
+        };
+      });
+
+      setReviews(mappedReviews);
+      setLoading(false);
+    };
+
+    void loadReviews();
+  }, [supabase]);
+
+  const locations = useMemo(
+    () => [...new Set(reviews.map((review) => review.locationTitle))],
+    [reviews],
+  );
 
 
   // Filtered + sorted reviews
   const filteredReviews = useMemo(() => {
-    let result = [...seedReviews];
+    let result = [...reviews];
     if (filterLocation !== "all") result = result.filter((r) => r.locationTitle === filterLocation);
     if (filterRating !== "all") result = result.filter((r) => r.rating === Number(filterRating));
-    result.sort((a, b) => sortOrder === "desc" ? b.date.getTime() - a.date.getTime() : a.date.getTime() - b.date.getTime());
+    result.sort((a, b) => sortOrder === "high" ? b.rating - a.rating : a.rating - b.rating);
     return result;
-  }, [filterLocation, filterRating, sortOrder]);
+  }, [filterLocation, filterRating, sortOrder, reviews]);
 
   return (
       <div className="px-6 py-8 max-w-5xl mx-auto space-y-8">
@@ -107,8 +236,8 @@ const ReviewsPage = () => {
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="desc">Terbaru Dulu</SelectItem>
-              <SelectItem value="asc">Terlama Dulu</SelectItem>
+              <SelectItem value="high">Rating Tertinggi</SelectItem>
+              <SelectItem value="low">Rating Terendah</SelectItem>
             </SelectContent>
           </Select>
           {(filterLocation !== "all" || filterRating !== "all") && (
@@ -124,9 +253,11 @@ const ReviewsPage = () => {
           {filteredReviews.map((review) => (
             <div key={review.id} className="glass-card overflow-hidden group">
               <div className="flex gap-4 p-4">
-                <img
+                <Image
                   src={review.locationImage}
                   alt={review.locationTitle}
+                  width={96}
+                  height={96}
                   className="h-24 w-24 rounded-xl object-cover flex-shrink-0 group-hover:scale-105 transition-transform"
                 />
                 <div className="flex-1 min-w-0 space-y-2">
@@ -139,7 +270,7 @@ const ReviewsPage = () => {
                       </div>
                     </div>
                     <span className="text-[10px] text-muted-foreground flex-shrink-0 whitespace-nowrap">
-                      {format(review.date, "d MMM yyyy", { locale: id })}
+                      user: {review.userId.slice(0, 8)}...
                     </span>
                   </div>
                   <div className="flex items-center gap-2">
@@ -159,7 +290,11 @@ const ReviewsPage = () => {
           ))}
         </div>
 
-        {filteredReviews.length === 0 && (
+        {loading ? (
+          <div className="text-center py-16 text-muted-foreground">
+            <p className="text-sm">Memuat data review...</p>
+          </div>
+        ) : filteredReviews.length === 0 && (
           <div className="text-center py-16 text-muted-foreground">
             <MessageSquare className="h-10 w-10 mx-auto mb-3 opacity-30" />
             <p className="text-sm">Tidak ada review yang sesuai filter.</p>

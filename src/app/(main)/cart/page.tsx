@@ -68,6 +68,8 @@ type Snap = {
 
 type TokenizerResponse = {
   token?: string;
+  order_id?: string;
+  expires_at?: string;
   message?: string;
 };
 
@@ -171,6 +173,7 @@ export default function CartPage() {
   const router = useRouter();
   const supabase = useMemo(() => createClient(), []);
   const [isSnapReady, setIsSnapReady] = useState(false);
+  const [isCheckingOut, setIsCheckingOut] = useState(false);
   const [bookedRangesByLocation, setBookedRangesByLocation] = useState<
     Record<string, BookedRange[]>
   >({});
@@ -281,6 +284,13 @@ export default function CartPage() {
       return;
     }
 
+    if (isCheckingOut) {
+      return;
+    }
+
+    setIsCheckingOut(true);
+
+    try {
     const snap = await ensureSnap();
 
     if (!snap) {
@@ -326,6 +336,8 @@ export default function CartPage() {
     console.log("Checkout user:", checkoutUser);
     console.log("Checkout items:", purchasedItems);
 
+    clearCart();
+
     const response = await fetch("/api/midtrans/tokenizer", {
       method: "POST",
       headers: {
@@ -352,22 +364,28 @@ export default function CartPage() {
     snap.pay(tokenizerResult.token, {
       onSuccess: (result) => {
         console.log("Midtrans success:", result);
-        clearCart();
-        router.push("/");
+        router.push("/payments");
         router.refresh();
       },
       onPending: (result) => {
         console.log("Midtrans pending:", result);
+        router.push("/payments");
+        router.refresh();
       },
       onError: (result) => {
         console.error("Midtrans error:", result);
+        router.push("/payments");
       },
       onClose: () => {
         console.log(
           "User menutup popup Midtrans sebelum menyelesaikan pembayaran",
         );
+        router.push("/payments");
       },
     });
+    } finally {
+      setIsCheckingOut(false);
+    }
   };
 
   const subtotal = items.reduce((sum, item) => {
@@ -634,9 +652,9 @@ export default function CartPage() {
               className="mt-6 w-full"
               size="lg"
               onClick={handleCheckout}
-              disabled={hasUnselectedDateRange}
+              disabled={hasUnselectedDateRange || !isSnapReady || isCheckingOut}
             >
-              Checkout
+              {isCheckingOut ? "Memproses..." : "Checkout"}
             </Button>
             {hasUnselectedDateRange ? (
               <p className="mt-2 text-xs text-destructive">

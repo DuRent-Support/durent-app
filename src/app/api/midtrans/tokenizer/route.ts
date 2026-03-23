@@ -43,6 +43,10 @@ function getQuantityDays(startDateOnly: string, endDateOnly: string) {
   return Math.max(1, diffDays + 1);
 }
 
+function addMinutes(date: Date, minutes: number) {
+  return new Date(date.getTime() + minutes * 60 * 1000);
+}
+
 export async function POST(request: Request) {
   try {
     const supabase = await createClient();
@@ -112,6 +116,8 @@ export async function POST(request: Request) {
     }
 
     const orderId = `ORD-${crypto.randomUUID()}`;
+    const pageExpiryMinutes = 5;
+    const expiresAt = addMinutes(new Date(), pageExpiryMinutes).toISOString();
 
     const parameter = {
       transaction_details: {
@@ -131,7 +137,7 @@ export async function POST(request: Request) {
         email: user.email,
       },
       page_expiry: {
-        duration: 5,
+        duration: pageExpiryMinutes,
         unit: "minute",
       },
       item_details: items.map((item) => ({
@@ -144,11 +150,20 @@ export async function POST(request: Request) {
 
     const token = await snap.createTransaction(parameter);
 
+    if (!token?.token) {
+      return NextResponse.json(
+        { message: "Gagal mendapatkan token Midtrans" },
+        { status: 500 },
+      );
+    }
+
     const { error: orderInsertError } = await supabase.from("orders").insert({
       order_id: orderId,
       user_id: authUser.id,
       payment_status: "pending",
       total_price: grossAmount,
+      midtrans_token: token.token,
+      midtrans_expire_at: expiresAt,
     });
 
     if (orderInsertError) {
@@ -187,6 +202,7 @@ export async function POST(request: Request) {
       token: token.token,
       order_id: orderId,
       gross_amount: grossAmount,
+      expires_at: expiresAt,
     });
   } catch (error) {
     console.error("Midtrans tokenizer error:", error);

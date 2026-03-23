@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowLeft, CalendarCheck } from "lucide-react";
+import { ArrowLeft, CalendarCheck, Star } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 
@@ -8,7 +8,17 @@ import ReservationCard, {
   type ReservationCardData,
 } from "@/components/reservation-card/ReservationCard";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { createClient } from "@/lib/supabase/client";
+import { toast } from "sonner";
 
 function parseNumber(value: string | number | null | undefined) {
   if (typeof value === "number") {
@@ -60,12 +70,25 @@ type LocationRow = {
   shooting_location_image_url: string[] | null;
 };
 
+type ExistingReviewRow = {
+  order_id: string;
+  location_id: string;
+};
+
 export default function ReservationsPage() {
   const router = useRouter();
   const supabase = useMemo(() => createClient(), []);
   const [reservations, setReservations] = useState<ReservationCardData[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const [reviewDialogOpen, setReviewDialogOpen] = useState(false);
+  const [selectedReservation, setSelectedReservation] =
+    useState<ReservationCardData | null>(null);
+  const [rating, setRating] = useState(0);
+  const [comment, setComment] = useState("");
+  const [isSubmittingReview, setIsSubmittingReview] = useState(false);
+  const [reviewedKeys, setReviewedKeys] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     const loadReservations = async () => {
@@ -87,6 +110,8 @@ export default function ReservationsPage() {
         router.push("/login");
         return;
       }
+
+      setCurrentUserId(user.id);
 
       const { data: orderRows, error: orderError } = await supabase
         .from("orders")
@@ -111,6 +136,28 @@ export default function ReservationsPage() {
 
       const orderIds = orders.map((order) => order.order_id);
       const orderMap = new Map(orders.map((order) => [order.order_id, order]));
+
+      const { data: existingReviewsData, error: existingReviewsError } =
+        await supabase
+          .from("reviews")
+          .select("order_id, location_id")
+          .eq("user_id", user.id)
+          .in("order_id", orderIds);
+
+      if (existingReviewsError) {
+        console.warn("Fetch existing reviews warning:", existingReviewsError);
+        setReviewedKeys(new Set());
+      } else {
+        const existingReviews =
+          (existingReviewsData ?? []) as ExistingReviewRow[];
+        setReviewedKeys(
+          new Set(
+            existingReviews.map(
+              (review) => `${review.order_id}-${review.location_id}`,
+            ),
+          ),
+        );
+      }
 
       const { data: orderItemRows, error: orderItemsError } = await supabase
         .from("order_items")
@@ -180,6 +227,7 @@ export default function ReservationsPage() {
           return {
             id: `${item.order_id}-${item.location_id}-${item.booking_start}`,
             orderId: item.order_id,
+            locationId: item.location_id,
             name: location.shooting_location_name,
             city: location.shooting_location_city,
             imageUrl: location.shooting_location_image_url?.[0] || "/hero.webp",
@@ -227,6 +275,63 @@ export default function ReservationsPage() {
 
     void loadReservations();
   }, [router, supabase]);
+
+  const handleOpenReviewDialog = (reservation: ReservationCardData) => {
+    setSelectedReservation(reservation);
+    setRating(0);
+    setComment("");
+    setReviewDialogOpen(true);
+  };
+
+  const handleSubmitReview = async () => {
+    if (!selectedReservation || !currentUserId) {
+      return;
+    }
+
+    if (rating < 1 || rating > 5) {
+      toast.error("Pilih rating 1 sampai 5.");
+      return;
+    }
+
+    const trimmedComment = comment.trim();
+
+    if (!trimmedComment) {
+      toast.error("Komentar wajib diisi.");
+      return;
+    }
+
+    setIsSubmittingReview(true);
+
+    const payload = {
+      user_id: currentUserId,
+      order_id: selectedReservation.orderId,
+      location_id: selectedReservation.locationId,
+      rating,
+      comment: trimmedComment,
+    };
+
+    const { error } = await supabase.from("reviews").insert(payload);
+
+    if (error) {
+      console.error("Submit review error:", error);
+      toast.error("Gagal mengirim review. Cek struktur tabel reviews.");
+      setIsSubmittingReview(false);
+      return;
+    }
+
+    setReviewedKeys((prev) => {
+      const next = new Set(prev);
+      next.add(`${selectedReservation.orderId}-${selectedReservation.locationId}`);
+      return next;
+    });
+
+    toast.success("Review berhasil dikirim.");
+    setReviewDialogOpen(false);
+    setSelectedReservation(null);
+    setRating(0);
+    setComment("");
+    setIsSubmittingReview(false);
+  };
 
   return (
     <div className="mx-auto w-full max-w-5xl px-6 py-8">
@@ -285,17 +390,104 @@ export default function ReservationsPage() {
               reservation.bookingFrom,
               reservation.bookingTo,
             );
+            const reviewKey = `${reservation.orderId}-${reservation.locationId}`;
+            const hasReviewed = reviewedKeys.has(reviewKey);
+            const canReview = status.text === "Selesai";
 
             return (
               <ReservationCard
                 key={reservation.id}
                 reservation={reservation}
                 status={status}
+                action={
+                  canReview ? (
+                    hasReviewed ? (
+                      <span className="rounded-md bg-emerald-100 px-2 py-1 text-xs font-medium text-emerald-700">
+                        Sudah direview
+                      </span>
+                    ) : (
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        onClick={() => handleOpenReviewDialog(reservation)}
+                      >
+                        Review
+                      </Button>
+                    )
+                  ) : null
+                }
               />
             );
           })}
         </div>
       )}
+
+      <Dialog open={reviewDialogOpen} onOpenChange={setReviewDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>
+              Review: {selectedReservation?.name ?? "Lokasi"}
+            </DialogTitle>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            <div>
+              <Label className="mb-2 block">Rating</Label>
+              <div className="flex items-center gap-1">
+                {[1, 2, 3, 4, 5].map((value) => (
+                  <button
+                    key={value}
+                    type="button"
+                    onClick={() => setRating(value)}
+                    className="rounded-md p-1 transition-colors hover:bg-accent"
+                    aria-label={`Pilih rating ${value}`}
+                  >
+                    <Star
+                      className={`h-6 w-6 ${
+                        value <= rating
+                          ? "fill-primary text-primary"
+                          : "text-muted-foreground/40"
+                      }`}
+                    />
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <Label htmlFor="review-comment" className="mb-2 block">
+                Komentar
+              </Label>
+              <Textarea
+                id="review-comment"
+                value={comment}
+                onChange={(event) => setComment(event.target.value)}
+                placeholder="Tulis pengalaman kamu tentang lokasi ini"
+                rows={4}
+              />
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => setReviewDialogOpen(false)}
+              disabled={isSubmittingReview}
+            >
+              Batal
+            </Button>
+            <Button
+              type="button"
+              onClick={() => void handleSubmitReview()}
+              disabled={isSubmittingReview}
+            >
+              {isSubmittingReview ? "Mengirim..." : "Kirim Review"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
