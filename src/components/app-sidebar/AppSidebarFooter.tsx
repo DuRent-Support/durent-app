@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import { Avatar, AvatarFallback } from "../ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "../ui/avatar";
 import {
   SidebarFooter,
   SidebarMenu,
@@ -14,30 +14,66 @@ import {
 } from "../ui/sidebar";
 import { Popover, PopoverContent, PopoverTrigger } from "../ui/popover";
 import { Separator } from "../ui/separator";
+import { Skeleton } from "../ui/skeleton";
 import type { User } from "@supabase/supabase-js";
-import { get } from "http";
 
 export default function AppSidebarFooter() {
   const [user, setUser] = useState<User | null>(null);
+  const [profileImageUrl, setProfileImageUrl] = useState<string>("");
+  const [isAuthLoading, setIsAuthLoading] = useState(true);
   const [open, setOpen] = useState(false);
   const supabase = createClient();
   const router = useRouter();
 
   useEffect(() => {
-    const getUser = async () => {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      setUser(user);
+    const getProfileImage = async (userId: string) => {
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("profile_image_url")
+        .eq("user_id", userId)
+        .maybeSingle<{ profile_image_url: string | null }>();
+
+      if (error) {
+        setProfileImageUrl("");
+        return;
+      }
+
+      setProfileImageUrl(data?.profile_image_url ?? "");
     };
 
-    console.log("User:", user);
+    const getUser = async () => {
+      try {
+        const {
+          data: { user },
+        } = await supabase.auth.getUser();
+
+        setUser(user);
+
+        if (user?.id) {
+          await getProfileImage(user.id);
+        } else {
+          setProfileImageUrl("");
+        }
+      } finally {
+        setIsAuthLoading(false);
+      }
+    };
+
     getUser();
 
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, session) => {
-      setUser(session?.user ?? null);
+      const currentUser = session?.user ?? null;
+      setUser(currentUser);
+
+      if (currentUser?.id) {
+        void getProfileImage(currentUser.id);
+      } else {
+        setProfileImageUrl("");
+      }
+
+      setIsAuthLoading(false);
     });
 
     return () => subscription.unsubscribe();
@@ -55,11 +91,19 @@ export default function AppSidebarFooter() {
       <SidebarMenu>
         <SidebarMenuItem>
           <SidebarMenuButton asChild className="">
-            {user ? (
+            {isAuthLoading ? (
+              <div
+                className="flex h-14 w-14 items-center justify-center rounded-lg pointer-events-none"
+                aria-disabled="true"
+              >
+                <Skeleton className="h-8 w-8 rounded-full" />
+              </div>
+            ) : user ? (
               <Popover open={open} onOpenChange={setOpen}>
                 <PopoverTrigger asChild>
                   <div className="flex justify-center items-center cursor-pointer">
                     <Avatar size="default">
+                      <AvatarImage src={profileImageUrl} alt={user.email ?? "User avatar"} />
                       <AvatarFallback>
                         {user.email?.charAt(0).toUpperCase() || "JD"}
                       </AvatarFallback>

@@ -9,9 +9,11 @@ import {
 import { useCart } from "@/hooks/use-cart";
 import {
   CalendarCheck,
+  FileText,
   House,
   LayoutDashboard,
   MapPin,
+  MessageSquare,
   ShoppingBag,
   Sparkles,
   Tag,
@@ -79,6 +81,40 @@ export default function AppSidebarAdminContent() {
               <Tag className="h-6 w-6 shrink-0" />
               <span className="text-center text-[11px] font-medium leading-tight">
                 Tags
+              </span>
+            </Link>
+          </SidebarMenuButton>
+        </SidebarMenuItem>
+        <SidebarMenuItem className="px-1">
+          <SidebarMenuButton
+            asChild
+            className="h-auto"
+            isActive={isPathActive(pathname, "/admin/bookings")}
+          >
+            <Link
+              href="/admin/bookings"
+              className="flex flex-col items-center gap-1.5 px-2 py-3"
+            >
+              <FileText className="h-6 w-6 shrink-0" />
+              <span className="text-center text-[11px] font-medium leading-tight">
+                Bookings
+              </span>
+            </Link>
+          </SidebarMenuButton>
+        </SidebarMenuItem>
+        <SidebarMenuItem className="px-1">
+          <SidebarMenuButton
+            asChild
+            className="h-auto"
+            isActive={isPathActive(pathname, "/admin/reviews")}
+          >
+            <Link
+              href="/admin/reviews"
+              className="flex flex-col items-center gap-1.5 px-2 py-3"
+            >
+              <MessageSquare className="h-6 w-6 shrink-0" />
+              <span className="text-center text-[11px] font-medium leading-tight">
+                Reviews
               </span>
             </Link>
           </SidebarMenuButton>

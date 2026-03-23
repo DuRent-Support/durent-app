@@ -2,7 +2,7 @@ import Midtrans from "midtrans-client";
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 
-let snap = new Midtrans.Snap({
+const snap = new Midtrans.Snap({
   // Set to true if you want Production Environment (accept real transaction).
   isProduction: process.env.NEXT_PUBLIC_MIDTRANS_IS_PRODUCTION === "true",
   serverKey: process.env.MIDTRANS_SERVER_KEY || "",
