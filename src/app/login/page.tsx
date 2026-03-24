@@ -69,7 +69,14 @@ export default function LoginPage() {
         {/* Logo */}
         <div className="mb-8 flex flex-col items-center gap-3">
           <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-primary glow-primary">
-            <Film className="h-7 w-7 text-primary-foreground" />
+            {/* <Film className="h-7 w-7 text-primary-foreground" /> */}
+            <Image
+              src="/durent-black.webp"
+              alt="DuRent Logo"
+              className="h-10 w-10 object-contain"
+              width={50}
+              height={50}
+              />
           </div>
           <h1 className="font-display text-2xl font-bold tracking-tight text-foreground">
             DuRent
