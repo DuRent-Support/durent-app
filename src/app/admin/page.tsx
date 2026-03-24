@@ -1,5 +1,5 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { MapPin, Tag, Users, TrendingUp, TrendingDown, AlertTriangle, Star } from "lucide-react";
+import { MapPin, Tag, Users, TrendingUp, Star } from "lucide-react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { createServiceRoleClient } from "@/lib/supabase/server";
@@ -166,34 +166,9 @@ export default async function AdminPage() {
         seedReviews.length) *
       100,
   }));
-  const negativeReviews = seedReviews
-    .filter((review) => review.rating <= 2)
+  const recentReviews = [...seedReviews]
     .sort((a, b) => b.date.getTime() - a.date.getTime())
-    .slice(0, 3);
-  const sortedReviews = [...seedReviews].sort(
-    (a, b) => a.date.getTime() - b.date.getTime(),
-  );
-  const firstHalfReviews = sortedReviews.slice(
-    0,
-    Math.ceil(sortedReviews.length / 2),
-  );
-  const secondHalfReviews = sortedReviews.slice(
-    Math.ceil(sortedReviews.length / 2),
-  );
-  const avgFirstHalf =
-    firstHalfReviews.reduce((acc, review) => acc + review.rating, 0) /
-    firstHalfReviews.length;
-  const avgSecondHalf =
-    secondHalfReviews.reduce((acc, review) => acc + review.rating, 0) /
-    secondHalfReviews.length;
-  const trendUp = avgSecondHalf >= avgFirstHalf;
-  const reviewLocations = [...new Set(seedReviews.map((review) => review.locationTitle))];
-  const locationStats = reviewLocations.map((loc) => {
-    const reviews = seedReviews.filter((review) => review.locationTitle === loc);
-    const avg = reviews.reduce((acc, review) => acc + review.rating, 0) / reviews.length;
-    return { loc, avg };
-  });
-  const droppingLocations = locationStats.filter((location) => location.avg < 3.5);
+    .slice(0, 6);
 
   const recentOrders = (recentOrdersResult.data ?? []) as OrderRow[];
 
@@ -368,7 +343,7 @@ export default async function AdminPage() {
         </Card>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+      <div className="mb-8 grid grid-cols-1 gap-4 md:grid-cols-2">
         <div className="glass-card p-5 space-y-2">
           <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
             Rating Rata-rata
@@ -404,70 +379,18 @@ export default async function AdminPage() {
             ))}
           </div>
         </div>
-
-        <div className="glass-card p-5 space-y-2">
-          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-            Tren Review
-          </p>
-          <div className="flex items-center gap-3">
-            {trendUp ? (
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10">
-                <TrendingUp className="h-5 w-5 text-primary" />
-              </div>
-            ) : (
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-destructive/10">
-                <TrendingDown className="h-5 w-5 text-destructive" />
-              </div>
-            )}
-            <div>
-              <p className="text-sm font-semibold text-foreground">
-                {trendUp ? "Naik" : "Turun"}
-              </p>
-              <p className="text-[10px] text-muted-foreground">
-                {avgFirstHalf.toFixed(1)} - {avgSecondHalf.toFixed(1)} avg
-              </p>
-            </div>
-          </div>
-        </div>
-
-        <div className="glass-card p-5 space-y-2">
-          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-            Perlu Perhatian
-          </p>
-          {droppingLocations.length > 0 ? (
-            <div className="space-y-2">
-              {droppingLocations.map((location) => (
-                <div key={location.loc} className="flex items-center gap-2">
-                  <AlertTriangle className="h-4 w-4 text-destructive flex-shrink-0" />
-                  <div className="min-w-0">
-                    <p className="text-xs font-medium text-foreground truncate">
-                      {location.loc}
-                    </p>
-                    <p className="text-[10px] text-muted-foreground">
-                      Avg: {location.avg.toFixed(1)} ★
-                    </p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <p className="text-xs text-muted-foreground">
-              Semua lokasi dalam kondisi baik
-            </p>
-          )}
-        </div>
       </div>
 
-      {negativeReviews.length > 0 && (
+      {recentReviews.length > 0 && (
         <div className="glass-card p-5 space-y-3 mb-8">
           <div className="flex items-center gap-2">
-            <AlertTriangle className="h-4 w-4 text-destructive" />
+            <Star className="h-4 w-4 text-primary" />
             <p className="text-sm font-semibold text-foreground">
-              Review Negatif Terbaru
+              Review Terbaru
             </p>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-            {negativeReviews.map((review) => (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            {recentReviews.map((review) => (
               <div key={review.id} className="rounded-xl bg-secondary/50 p-3 space-y-2">
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-medium text-foreground">
@@ -487,7 +410,7 @@ export default async function AdminPage() {
         </div>
       )}
 
-      <div className="grid gap-4 md:grid-cols-2">
+      <div className="space-y-4">
         <Card className="border-border">
           <CardHeader>
             <CardTitle className="font-display">Quick Actions</CardTitle>
