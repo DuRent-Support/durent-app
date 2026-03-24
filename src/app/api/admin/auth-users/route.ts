@@ -7,6 +7,11 @@ type RequestBody = {
   userIds?: string[];
 };
 
+type ProfileImageRow = {
+  user_id: string;
+  profile_image_url: string | null;
+};
+
 export async function POST(request: Request) {
   try {
     const { userIds } = (await request.json()) as RequestBody;
@@ -50,6 +55,23 @@ export async function POST(request: Request) {
 
     const serviceRoleClient = createServiceRoleClient();
 
+    const { data: profileImagesData, error: profileImagesError } =
+      await serviceRoleClient
+        .from("profiles")
+        .select("user_id, profile_image_url")
+        .in("user_id", sanitizedUserIds);
+
+    if (profileImagesError) {
+      console.error("Profile images lookup error:", profileImagesError);
+    }
+
+    const profileImageMap = new Map(
+      ((profileImagesData ?? []) as ProfileImageRow[]).map((profile) => [
+        profile.user_id,
+        profile.profile_image_url,
+      ]),
+    );
+
     const users = await Promise.all(
       sanitizedUserIds.map(async (userId) => {
         const { data, error } =
@@ -60,6 +82,7 @@ export async function POST(request: Request) {
             user_id: userId,
             full_name: null,
             email: null,
+            profile_image_url: profileImageMap.get(userId) ?? null,
           };
         }
 
@@ -78,6 +101,7 @@ export async function POST(request: Request) {
               ? fullNameCandidate.trim() || null
               : null,
           email: data.user.email ?? null,
+          profile_image_url: profileImageMap.get(userId) ?? null,
         };
       }),
     );

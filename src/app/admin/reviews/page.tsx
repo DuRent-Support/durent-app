@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Star, MapPin, ArrowLeft, MessageSquare, Filter, ArrowUpDown } from "lucide-react";
+import { Star, MapPin, ArrowLeft, MessageSquare, Filter, ArrowUpDown, User } from "lucide-react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -13,7 +13,7 @@ interface Review {
   userId: string;
   locationId: string;
   userName: string;
-  avatar: string;
+  avatarUrl: string | null;
   locationTitle: string;
   locationImage: string;
   location: string;
@@ -33,6 +33,7 @@ type AuthUserRow = {
   user_id: string;
   full_name: string | null;
   email: string | null;
+  profile_image_url: string | null;
 };
 
 type LocationRow = {
@@ -41,20 +42,6 @@ type LocationRow = {
   shooting_location_city: string;
   shooting_location_image_url: string[] | null;
 };
-
-function getInitials(name: string) {
-  const words = name
-    .trim()
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, 2);
-
-  if (words.length === 0) {
-    return "U";
-  }
-
-  return words.map((word) => word[0]?.toUpperCase() ?? "").join("");
-}
 
 const StarRating = ({ rating, size = "sm" }: { rating: number; size?: "sm" | "md" }) => (
   <div className="flex gap-0.5">
@@ -75,6 +62,7 @@ const ReviewsPage = () => {
   const [filterLocation, setFilterLocation] = useState<string>("all");
   const [filterRating, setFilterRating] = useState<string>("all");
   const [sortOrder, setSortOrder] = useState<string>("high");
+  const [locationOptions, setLocationOptions] = useState<string[]>([]);
 
   useEffect(() => {
     const loadReviews = async () => {
@@ -100,9 +88,6 @@ const ReviewsPage = () => {
       }
 
       const userIds = [...new Set(reviewRows.map((review) => review.user_id))];
-      const locationIds = [
-        ...new Set(reviewRows.map((review) => review.location_id)),
-      ];
 
       const [{ data: locationsData, error: locationsError }, authUsersResponse] = await Promise.all([
         supabase
@@ -110,7 +95,7 @@ const ReviewsPage = () => {
           .select(
             "shooting_location_id, shooting_location_name, shooting_location_city, shooting_location_image_url",
           )
-          .in("shooting_location_id", locationIds),
+          .order("shooting_location_name", { ascending: true }),
         fetch("/api/admin/auth-users", {
           method: "POST",
           headers: {
@@ -136,6 +121,9 @@ const ReviewsPage = () => {
       }
 
       const locations = (locationsData ?? []) as LocationRow[];
+      setLocationOptions(
+        [...new Set(locations.map((location) => location.shooting_location_name))],
+      );
 
       const authUserMap = new Map(
         authUsers.map((authUser) => [authUser.user_id, authUser]),
@@ -157,7 +145,7 @@ const ReviewsPage = () => {
           userId: review.user_id,
           locationId: review.location_id,
           userName,
-          avatar: getInitials(userName),
+          avatarUrl: authUser?.profile_image_url ?? null,
           locationTitle:
             location?.shooting_location_name ?? "Lokasi tidak ditemukan",
           locationImage:
@@ -175,12 +163,6 @@ const ReviewsPage = () => {
 
     void loadReviews();
   }, [supabase]);
-
-  const locations = useMemo(
-    () => [...new Set(reviews.map((review) => review.locationTitle))],
-    [reviews],
-  );
-
 
   // Filtered + sorted reviews
   const filteredReviews = useMemo(() => {
@@ -214,7 +196,7 @@ const ReviewsPage = () => {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">Semua Lokasi</SelectItem>
-              {locations.map((loc) => (
+              {locationOptions.map((loc) => (
                 <SelectItem key={loc} value={loc}>{loc}</SelectItem>
               ))}
             </SelectContent>
@@ -274,9 +256,19 @@ const ReviewsPage = () => {
                     </span>
                   </div>
                   <div className="flex items-center gap-2">
-                    <div className="flex h-6 w-6 items-center justify-center rounded-full bg-primary/20 text-[9px] font-bold text-primary">
-                      {review.avatar}
-                    </div>
+                    {review.avatarUrl ? (
+                      <Image
+                        src={review.avatarUrl}
+                        alt={review.userName}
+                        width={24}
+                        height={24}
+                        className="h-6 w-6 rounded-full object-cover"
+                      />
+                    ) : (
+                      <div className="flex h-6 w-6 items-center justify-center rounded-full bg-primary/20 text-primary">
+                        <User className="h-3.5 w-3.5" />
+                      </div>
+                    )}
                     <span className="text-xs font-medium text-foreground">{review.userName}</span>
                     <StarRating rating={review.rating} />
                   </div>
@@ -297,7 +289,7 @@ const ReviewsPage = () => {
         ) : filteredReviews.length === 0 && (
           <div className="text-center py-16 text-muted-foreground">
             <MessageSquare className="h-10 w-10 mx-auto mb-3 opacity-30" />
-            <p className="text-sm">Tidak ada review yang sesuai filter.</p>
+            <p className="text-sm">belom ada review</p>
           </div>
         )}
       </div>

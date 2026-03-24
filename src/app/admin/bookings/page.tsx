@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { Fragment, useEffect, useMemo, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import {
   CalendarDays,
   CheckCircle2,
@@ -14,7 +14,14 @@ import {
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   Table,
   TableBody,
@@ -171,8 +178,12 @@ export default function BookingsPage() {
   const [loading, setLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [openRows, setOpenRows] = useState<Set<string>>(new Set());
+  const [searchQuery, setSearchQuery] = useState("");
+  const [paymentFilter, setPaymentFilter] = useState<string>("all");
+  const [pageSize, setPageSize] = useState<number>(25);
+  const [currentPage, setCurrentPage] = useState<number>(1);
 
-  const loadBookings = async () => {
+  const loadBookings = useCallback(async () => {
     setLoading(true);
     setErrorMessage(null);
 
@@ -325,31 +336,57 @@ export default function BookingsPage() {
 
     setOrders(mappedOrders);
     setLoading(false);
-  };
+  }, [supabase]);
 
   useEffect(() => {
-    void loadBookings();
-  }, []);
+    const timer = setTimeout(() => {
+      void loadBookings();
+    }, 0);
 
-  const summary = useMemo(() => {
-    const totalRevenue = orders.reduce(
-      (acc, order) => acc + order.totalPrice,
-      0,
-    );
-    const totalLocations = orders.reduce(
-      (acc, order) => acc + order.places.length,
-      0,
-    );
-    const paidOrders = orders.filter(
-      (order) => order.paymentStatus === "paid",
-    ).length;
-
-    return {
-      totalRevenue,
-      totalLocations,
-      paidOrders,
+    return () => {
+      clearTimeout(timer);
     };
-  }, [orders]);
+  }, [loadBookings]);
+
+  const filteredOrders = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase();
+
+    return orders.filter((order) => {
+      const matchesQuery =
+        query.length === 0 ||
+        order.customerName.toLowerCase().includes(query) ||
+        order.orderId.toLowerCase().includes(query);
+      const matchesPayment =
+        paymentFilter === "all" || order.paymentStatus === paymentFilter;
+
+      return matchesQuery && matchesPayment;
+    });
+  }, [orders, searchQuery, paymentFilter]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredOrders.length / pageSize));
+  const safeCurrentPage = Math.min(currentPage, totalPages);
+
+  const paginatedOrders = useMemo(() => {
+    const start = (safeCurrentPage - 1) * pageSize;
+    return filteredOrders.slice(start, start + pageSize);
+  }, [filteredOrders, safeCurrentPage, pageSize]);
+
+  const pageNumbers = useMemo(() => {
+    const maxVisible = 5;
+
+    if (totalPages <= maxVisible) {
+      return Array.from({ length: totalPages }, (_, index) => index + 1);
+    }
+
+    const start = Math.max(1, safeCurrentPage - 2);
+    const end = Math.min(totalPages, start + maxVisible - 1);
+    const adjustedStart = Math.max(1, end - maxVisible + 1);
+
+    return Array.from(
+      { length: end - adjustedStart + 1 },
+      (_, index) => adjustedStart + index,
+    );
+  }, [safeCurrentPage, totalPages]);
 
   const toggle = (id: string) => {
     setOpenRows((prev) => {
@@ -374,41 +411,60 @@ export default function BookingsPage() {
         </p>
       </div>
 
-      <div className="mb-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <Card className="gap-2 py-4">
-          <CardContent className="px-4">
-            <p className="text-xs text-muted-foreground">Total Order</p>
-            <p className="mt-1 text-2xl font-semibold text-foreground">
-              {orders.length}
-            </p>
-          </CardContent>
-        </Card>
-        <Card className="gap-2 py-4">
-          <CardContent className="px-4">
-            <p className="text-xs text-muted-foreground">Order Lunas</p>
-            <p className="mt-1 text-2xl font-semibold text-foreground">
-              {summary.paidOrders}
-            </p>
-          </CardContent>
-        </Card>
-        <Card className="gap-2 py-4">
-          <CardContent className="px-4">
-            <p className="text-xs text-muted-foreground">Lokasi Dibooking</p>
-            <p className="mt-1 text-2xl font-semibold text-foreground">
-              {summary.totalLocations}
-            </p>
-          </CardContent>
-        </Card>
-        <Card className="gap-2 py-4">
-          <CardContent className="px-4">
-            <p className="text-xs text-muted-foreground">
-              Total Nilai Transaksi
-            </p>
-            <p className="mt-1 text-2xl font-semibold text-foreground">
-              {formatRupiah(summary.totalRevenue)}
-            </p>
-          </CardContent>
-        </Card>
+      <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+        <div className="flex flex-1 flex-col gap-3 sm:flex-row">
+          <Input
+            value={searchQuery}
+            onChange={(event) => {
+              setSearchQuery(event.target.value);
+              setCurrentPage(1);
+            }}
+            placeholder="Cari nama pelanggan atau Order ID"
+            className="sm:max-w-sm"
+          />
+
+          <Select
+            value={paymentFilter}
+            onValueChange={(value) => {
+              setPaymentFilter(value);
+              setCurrentPage(1);
+            }}
+          >
+            <SelectTrigger className="sm:w-[220px]">
+              <SelectValue placeholder="Filter pembayaran" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Semua Pembayaran</SelectItem>
+              <SelectItem value="paid">Lunas</SelectItem>
+              <SelectItem value="unpaid">Belum Bayar</SelectItem>
+              <SelectItem value="pending">Pending</SelectItem>
+              <SelectItem value="partial">Sebagian</SelectItem>
+              <SelectItem value="challenge">Challenge</SelectItem>
+              <SelectItem value="refunded">Refund</SelectItem>
+              <SelectItem value="failed">Gagal</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <span className="text-sm text-muted-foreground">Per halaman</span>
+          <Select
+            value={String(pageSize)}
+            onValueChange={(value) => {
+              setPageSize(Number(value));
+              setCurrentPage(1);
+            }}
+          >
+            <SelectTrigger className="w-[100px]">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="25">25</SelectItem>
+              <SelectItem value="50">50</SelectItem>
+              <SelectItem value="100">100</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
       </div>
 
       <div className="rounded-lg border border-border bg-card">
@@ -421,138 +477,187 @@ export default function BookingsPage() {
             <p className="text-sm text-muted-foreground">{errorMessage}</p>
             <Button onClick={() => void loadBookings()}>Coba Lagi</Button>
           </div>
-        ) : orders.length === 0 ? (
+        ) : filteredOrders.length === 0 ? (
           <div className="px-6 py-14 text-center text-sm text-muted-foreground">
             Belum ada data booking.
           </div>
         ) : (
-          <Table>
-            <TableHeader>
-              <TableRow className="hover:bg-transparent">
-                <TableHead className="w-12" />
-                <TableHead>Order ID</TableHead>
-                <TableHead>Pelanggan</TableHead>
-                <TableHead className="hidden sm:table-cell">
-                  Pembayaran
-                </TableHead>
-                <TableHead className="hidden md:table-cell text-right">
-                  Lokasi
-                </TableHead>
-                <TableHead className="text-right">Total</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {orders.map((order) => {
-                const isOpen = openRows.has(order.orderId);
-                const payment = paymentConfig[order.paymentStatus];
+          <>
+            <Table>
+              <TableHeader>
+                <TableRow className="hover:bg-transparent">
+                  <TableHead className="w-12" />
+                  <TableHead>Order ID</TableHead>
+                  <TableHead>Pelanggan</TableHead>
+                  <TableHead className="hidden sm:table-cell">
+                    Pembayaran
+                  </TableHead>
+                  <TableHead className="hidden md:table-cell text-right">
+                    Lokasi
+                  </TableHead>
+                  <TableHead className="text-right">Total</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {paginatedOrders.map((order) => {
+                  const isOpen = openRows.has(order.orderId);
+                  const payment = paymentConfig[order.paymentStatus];
 
-                return (
-                  <Fragment key={order.orderId}>
-                    <TableRow
-                      className="cursor-pointer"
-                      onClick={() => toggle(order.orderId)}
-                    >
-                      <TableCell>
-                        <button
-                          type="button"
-                          aria-expanded={isOpen}
-                          aria-label={`Toggle detail ${order.orderId}`}
-                          className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-border text-muted-foreground"
-                        >
-                          {isOpen ? (
-                            <ChevronDown className="h-4 w-4" />
-                          ) : (
-                            <ChevronRight className="h-4 w-4" />
-                          )}
-                        </button>
-                      </TableCell>
-                      <TableCell className="font-mono text-xs text-foreground">
-                        {order.orderId}
-                      </TableCell>
-                      <TableCell className="max-w-[240px] truncate font-medium text-foreground">
-                        {order.customerName}
-                      </TableCell>
-                      <TableCell className="hidden sm:table-cell">
-                        <Badge variant={payment.variant}>{payment.label}</Badge>
-                      </TableCell>
-                      <TableCell className="hidden md:table-cell text-right text-muted-foreground">
-                        {order.places.length} lokasi
-                      </TableCell>
-                      <TableCell className="text-right font-semibold text-foreground">
-                        {formatRupiah(order.totalPrice)}
-                      </TableCell>
-                    </TableRow>
-
-                    {isOpen && (
-                      <TableRow className="hover:bg-transparent">
-                        <TableCell colSpan={6} className="bg-muted/30 p-0">
-                          <div className="space-y-3 px-4 py-4 md:px-6">
-                            {order.places.length === 0 ? (
-                              <div className="rounded-lg border border-dashed border-border bg-background px-4 py-6 text-center text-sm text-muted-foreground">
-                                Order ini belum memiliki detail item.
-                              </div>
+                  return (
+                    <Fragment key={order.orderId}>
+                      <TableRow
+                        className="cursor-pointer"
+                        onClick={() => toggle(order.orderId)}
+                      >
+                        <TableCell>
+                          <button
+                            type="button"
+                            aria-expanded={isOpen}
+                            aria-label={`Toggle detail ${order.orderId}`}
+                            className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-border text-muted-foreground"
+                          >
+                            {isOpen ? (
+                              <ChevronDown className="h-4 w-4" />
                             ) : (
-                              order.places.map((place, index) => {
-                                const status = getExecutionStatus(
-                                  place.startDate,
-                                  place.endDate,
-                                );
-
-                                return (
-                                  <div
-                                    key={`${order.orderId}-${index}`}
-                                    className="flex flex-wrap items-center gap-4 rounded-lg border border-border/60 bg-background p-3"
-                                  >
-                                    <Image
-                                      src={place.imageUrl}
-                                      alt={place.locationTitle}
-                                      width={64}
-                                      height={64}
-                                      className="h-16 w-16 rounded-lg object-cover"
-                                    />
-
-                                    <div className="min-w-[200px] flex-1">
-                                      <p className="truncate text-sm font-semibold text-foreground">
-                                        {place.locationTitle}
-                                      </p>
-                                      <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-                                        <span className="inline-flex items-center gap-1">
-                                          <CalendarDays className="h-3.5 w-3.5" />
-                                          {formatDate(place.startDate)} -{" "}
-                                          {formatDate(place.endDate)}
-                                        </span>
-                                        <span>{place.days} hari</span>
-                                      </div>
-                                    </div>
-
-                                    <div
-                                      className={`inline-flex items-center gap-1 text-xs font-medium ${status.className}`}
-                                    >
-                                      <status.icon className="h-3.5 w-3.5" />
-                                      <span>{status.label}</span>
-                                    </div>
-
-                                    <div className="ml-auto text-right">
-                                      <p className="text-sm font-semibold text-foreground">
-                                        {formatRupiah(place.subtotal)}
-                                      </p>
-                                      <p className="text-xs text-muted-foreground">
-                                        {formatRupiah(place.pricePerDay)}/hari
-                                      </p>
-                                    </div>
-                                  </div>
-                                );
-                              })
+                              <ChevronRight className="h-4 w-4" />
                             )}
-                          </div>
+                          </button>
+                        </TableCell>
+                        <TableCell className="font-mono text-xs text-foreground">
+                          {order.orderId}
+                        </TableCell>
+                        <TableCell className="max-w-[240px] truncate font-medium text-foreground">
+                          {order.customerName}
+                        </TableCell>
+                        <TableCell className="hidden sm:table-cell">
+                          <Badge variant={payment.variant}>{payment.label}</Badge>
+                        </TableCell>
+                        <TableCell className="hidden md:table-cell text-right text-muted-foreground">
+                          {order.places.length} lokasi
+                        </TableCell>
+                        <TableCell className="text-right font-semibold text-foreground">
+                          {formatRupiah(order.totalPrice)}
                         </TableCell>
                       </TableRow>
-                    )}
-                  </Fragment>
-                );
-              })}
-            </TableBody>
-          </Table>
+
+                      {isOpen && (
+                        <TableRow className="hover:bg-transparent">
+                          <TableCell colSpan={6} className="bg-muted/30 p-0">
+                            <div className="space-y-3 px-4 py-4 md:px-6">
+                              {order.places.length === 0 ? (
+                                <div className="rounded-lg border border-dashed border-border bg-background px-4 py-6 text-center text-sm text-muted-foreground">
+                                  Order ini belum memiliki detail item.
+                                </div>
+                              ) : (
+                                order.places.map((place, index) => {
+                                  const status = getExecutionStatus(
+                                    place.startDate,
+                                    place.endDate,
+                                  );
+
+                                  return (
+                                    <div
+                                      key={`${order.orderId}-${index}`}
+                                      className="flex flex-wrap items-center gap-4 rounded-lg border border-border/60 bg-background p-3"
+                                    >
+                                      <Image
+                                        src={place.imageUrl}
+                                        alt={place.locationTitle}
+                                        width={64}
+                                        height={64}
+                                        className="h-16 w-16 rounded-lg object-cover"
+                                      />
+
+                                      <div className="min-w-[200px] flex-1">
+                                        <p className="truncate text-sm font-semibold text-foreground">
+                                          {place.locationTitle}
+                                        </p>
+                                        <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                                          <span className="inline-flex items-center gap-1">
+                                            <CalendarDays className="h-3.5 w-3.5" />
+                                            {formatDate(place.startDate)} -{" "}
+                                            {formatDate(place.endDate)}
+                                          </span>
+                                          <span>{place.days} hari</span>
+                                        </div>
+                                      </div>
+
+                                      <div
+                                        className={`inline-flex items-center gap-1 text-xs font-medium ${status.className}`}
+                                      >
+                                        <status.icon className="h-3.5 w-3.5" />
+                                        <span>{status.label}</span>
+                                      </div>
+
+                                      <div className="ml-auto text-right">
+                                        <p className="text-sm font-semibold text-foreground">
+                                          {formatRupiah(place.subtotal)}
+                                        </p>
+                                        <p className="text-xs text-muted-foreground">
+                                          {formatRupiah(place.pricePerDay)}/hari
+                                        </p>
+                                      </div>
+                                    </div>
+                                  );
+                                })
+                              )}
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      )}
+                    </Fragment>
+                  );
+                })}
+              </TableBody>
+            </Table>
+
+            <div className="flex flex-col gap-3 border-t border-border px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+              <p className="text-sm text-muted-foreground">
+                Menampilkan {(safeCurrentPage - 1) * pageSize + 1}-
+                {Math.min(safeCurrentPage * pageSize, filteredOrders.length)} dari {filteredOrders.length} data
+              </p>
+
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() =>
+                    setCurrentPage((prev) =>
+                      Math.max(1, Math.min(prev, totalPages) - 1),
+                    )
+                  }
+                  disabled={safeCurrentPage === 1}
+                >
+                  Sebelumnya
+                </Button>
+
+                {pageNumbers.map((page) => (
+                  <Button
+                    key={page}
+                    variant={page === safeCurrentPage ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => setCurrentPage(page)}
+                    className="min-w-9"
+                  >
+                    {page}
+                  </Button>
+                ))}
+
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() =>
+                    setCurrentPage((prev) =>
+                      Math.min(totalPages, Math.min(prev, totalPages) + 1),
+                    )
+                  }
+                  disabled={safeCurrentPage === totalPages}
+                >
+                  Berikutnya
+                </Button>
+              </div>
+            </div>
+          </>
         )}
       </div>
     </div>

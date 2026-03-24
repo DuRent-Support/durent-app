@@ -409,7 +409,7 @@ export default function ReservationsPage() {
                       <Button
                         type="button"
                         size="sm"
-                        variant="outline"
+                        variant="secondary"
                         onClick={() => handleOpenReviewDialog(reservation)}
                       >
                         Review

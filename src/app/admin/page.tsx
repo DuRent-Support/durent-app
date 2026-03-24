@@ -10,6 +10,11 @@ type OrderRow = {
   created_at: string;
 };
 
+type OrderSummaryRow = {
+  payment_status: string | null;
+  total_price: string | number | null;
+};
+
 type OrderItemRow = {
   order_id: string;
   location_id: string;
@@ -84,6 +89,28 @@ function formatDateRange(start: string, end: string) {
   return `${startDate.toLocaleDateString("id-ID")} - ${endDate.toLocaleDateString("id-ID")}`;
 }
 
+function parseNumber(value: string | number | null | undefined) {
+  if (typeof value === "number") {
+    return Number.isFinite(value) ? value : 0;
+  }
+
+  if (typeof value === "string") {
+    const sanitized = value.replace(/[^0-9]/g, "");
+    return Number.parseInt(sanitized, 10) || 0;
+  }
+
+  return 0;
+}
+
+function formatRupiah(value: number) {
+  return "Rp " + value.toLocaleString("id-ID");
+}
+
+function isPaidStatus(value: string | null | undefined) {
+  const status = String(value || "").trim().toLowerCase();
+  return status === "paid" || status === "settlement";
+}
+
 export default async function AdminPage() {
   const supabase = createServiceRoleClient();
 
@@ -92,6 +119,8 @@ export default async function AdminPage() {
     locationsCountResult,
     tagsCountResult,
     ordersCountResult,
+    ordersSummaryResult,
+    orderItemsCountResult,
     recentOrdersResult,
   ] = await Promise.all([
     supabase.from("profiles").select("user_id", { count: "exact", head: true }),
@@ -100,6 +129,8 @@ export default async function AdminPage() {
       .select("shooting_location_id", { count: "exact", head: true }),
     supabase.from("tags").select("tag_id", { count: "exact", head: true }),
     supabase.from("orders").select("order_id", { count: "exact", head: true }),
+    supabase.from("orders").select("payment_status, total_price"),
+    supabase.from("order_items").select("order_id", { count: "exact", head: true }),
     supabase
       .from("orders")
       .select("order_id, user_id, created_at")
@@ -111,6 +142,17 @@ export default async function AdminPage() {
   const totalLocations = locationsCountResult.count ?? 0;
   const totalTags = tagsCountResult.count ?? 0;
   const totalBookings = ordersCountResult.count ?? 0;
+  const orderSummaryRows = (ordersSummaryResult.data ?? []) as OrderSummaryRow[];
+  const bookingSummary = {
+    totalOrder: orderSummaryRows.length,
+    paidOrders: orderSummaryRows.filter((order) => isPaidStatus(order.payment_status))
+      .length,
+    totalLocations: orderItemsCountResult.count ?? 0,
+    totalRevenue: orderSummaryRows.reduce(
+      (acc, order) => acc + parseNumber(order.total_price),
+      0,
+    ),
+  };
 
   const avgRating = (
     seedReviews.reduce((acc, review) => acc + review.rating, 0) /
@@ -287,6 +329,43 @@ export default async function AdminPage() {
             </Card>
           );
         })}
+      </div>
+
+      <div className="mb-8 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <Card className="gap-2 py-4">
+          <CardContent className="px-4">
+            <p className="text-xs text-muted-foreground">Total Order</p>
+            <p className="mt-1 text-2xl font-semibold text-foreground">
+              {bookingSummary.totalOrder}
+            </p>
+          </CardContent>
+        </Card>
+        <Card className="gap-2 py-4">
+          <CardContent className="px-4">
+            <p className="text-xs text-muted-foreground">Order Lunas</p>
+            <p className="mt-1 text-2xl font-semibold text-foreground">
+              {bookingSummary.paidOrders}
+            </p>
+          </CardContent>
+        </Card>
+        <Card className="gap-2 py-4">
+          <CardContent className="px-4">
+            <p className="text-xs text-muted-foreground">Lokasi Dibooking</p>
+            <p className="mt-1 text-2xl font-semibold text-foreground">
+              {bookingSummary.totalLocations}
+            </p>
+          </CardContent>
+        </Card>
+        <Card className="gap-2 py-4">
+          <CardContent className="px-4">
+            <p className="text-xs text-muted-foreground">
+              Total Nilai Transaksi
+            </p>
+            <p className="mt-1 text-2xl font-semibold text-foreground">
+              {formatRupiah(bookingSummary.totalRevenue)}
+            </p>
+          </CardContent>
+        </Card>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
