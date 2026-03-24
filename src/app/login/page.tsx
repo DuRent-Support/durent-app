@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 import { Film } from "lucide-react";
 import Image from "next/image";
 import { Button } from "@/components/ui/button";
-import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 
 export default function LoginPage() {
@@ -19,7 +18,7 @@ export default function LoginPage() {
     setError(null);
 
     try {
-      const redirectTo = `${window.location.origin}/auth/callback`;
+      const redirectTo = `${window.location.origin}/api/auth/callback`;
 
       const { error: oauthError } = await supabase.auth.signInWithOAuth({
         provider: "google",
@@ -111,8 +110,8 @@ export default function LoginPage() {
           </p>
         </div>
 
-        <div className="mt-6 text-center">
-          <span className="text-sm text-muted-foreground">
+        {/* <div className="mt-6 text-center"> */}
+          {/* <span className="text-sm text-muted-foreground">
             Belum punya akun?{" "}
           </span>
           <Link
@@ -120,8 +119,8 @@ export default function LoginPage() {
             className="text-sm font-medium text-foreground hover:underline"
           >
             Daftar
-          </Link>
-        </div>
+          </Link> */}
+        {/* </div> */}
       </div>
     </div>
   );

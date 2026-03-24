@@ -19,7 +19,7 @@ export default function RegisterPage() {
     setError(null);
 
     try {
-      const redirectTo = `${window.location.origin}/auth/callback`;
+      const redirectTo = `${window.location.origin}/api/auth/callback`;
 
       const { error: oauthError } = await supabase.auth.signInWithOAuth({
         provider: "google",
