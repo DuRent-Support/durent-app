@@ -41,29 +41,21 @@ type ReviewSummaryRow = {
   location: string;
   rating: number;
   comment: string;
-  date: Date;
 };
 
-const seedReviews: ReviewSummaryRow[] = [
-  { id: "1", userName: "Andi Pratama", locationTitle: "Skyline Rooftop Terrace", location: "Jakarta Selatan", rating: 5, comment: "Lokasi yang luar biasa! View sunset-nya sangat memukau, perfect untuk scene romantis.", date: new Date(2026, 1, 15) },
-  { id: "2", userName: "Siti Rahayu", locationTitle: "Grand Victorian Mansion", location: "Bandung", rating: 4, comment: "Interior klasiknya sangat detail dan otentik. Overall sangat recommended.", date: new Date(2026, 1, 20) },
-  { id: "3", userName: "Budi Santoso", locationTitle: "Minimalist White Studio", location: "Jakarta Pusat", rating: 5, comment: "Studio clean dengan natural light yang bagus untuk produksi.", date: new Date(2026, 2, 1) },
-  { id: "4", userName: "Maya Putri", locationTitle: "Tropical Garden Courtyard", location: "Bali", rating: 5, comment: "Suasana tropis autentik dan properti terawat.", date: new Date(2026, 2, 8) },
-  { id: "5", userName: "Raka Wijaya", locationTitle: "Skyline Rooftop Terrace", location: "Jakarta Selatan", rating: 4, comment: "Bagus untuk night scene, meski ada sedikit noise sekitar.", date: new Date(2026, 2, 12) },
-  { id: "6", userName: "Dewi Lestari", locationTitle: "Grand Victorian Mansion", location: "Bandung", rating: 5, comment: "Lokasi terawat dan staf sangat kooperatif.", date: new Date(2026, 2, 18) },
-  { id: "7", userName: "Fajar Nugroho", locationTitle: "Minimalist White Studio", location: "Jakarta Pusat", rating: 2, comment: "AC kurang dingin saat sesi siang hari.", date: new Date(2026, 2, 20) },
-  { id: "8", userName: "Lina Kusuma", locationTitle: "Tropical Garden Courtyard", location: "Bali", rating: 1, comment: "Saat datang, lokasi sedang renovasi sebagian.", date: new Date(2026, 2, 22) },
-  { id: "9", userName: "Hendra Saputra", locationTitle: "Skyline Rooftop Terrace", location: "Jakarta Selatan", rating: 3, comment: "View oke, tapi fasilitas pendukung perlu improvement.", date: new Date(2026, 2, 25) },
-  { id: "10", userName: "Rina Melati", locationTitle: "Grand Victorian Mansion", location: "Bandung", rating: 2, comment: "Parkir terbatas untuk kendaraan produksi besar.", date: new Date(2026, 3, 1) },
-];
+type ReviewRow = {
+  review_id: string;
+  user_id: string;
+  location_id: string;
+  rating: number;
+  comment: string | null;
+};
 
-function formatReviewDate(date: Date) {
-  return date.toLocaleDateString("id-ID", {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-  });
-}
+type ReviewLocationRow = {
+  shooting_location_id: string;
+  shooting_location_name: string;
+  shooting_location_city: string | null;
+};
 
 function StarRating({ rating }: { rating: number }) {
   return (
@@ -122,6 +114,7 @@ export default async function AdminPage() {
     ordersSummaryResult,
     orderItemsCountResult,
     recentOrdersResult,
+    reviewsResult,
   ] = await Promise.all([
     supabase.from("profiles").select("user_id", { count: "exact", head: true }),
     supabase
@@ -136,6 +129,7 @@ export default async function AdminPage() {
       .select("order_id, user_id, created_at")
       .order("created_at", { ascending: false })
       .limit(5),
+    supabase.from("reviews").select("review_id, user_id, location_id, rating, comment"),
   ]);
 
   const totalUsers = profilesCountResult.count ?? 0;
@@ -154,21 +148,60 @@ export default async function AdminPage() {
     ),
   };
 
-  const avgRating = (
-    seedReviews.reduce((acc, review) => acc + review.rating, 0) /
-    seedReviews.length
-  ).toFixed(1);
+  const reviewRows = (reviewsResult.data ?? []) as ReviewRow[];
+  const reviewLocationIds = [
+    ...new Set(reviewRows.map((review) => review.location_id)),
+  ];
+
+  let reviewLocationsMap = new Map<string, ReviewLocationRow>();
+
+  if (reviewLocationIds.length > 0) {
+    const { data: reviewLocationsData } = await supabase
+      .from("shooting_locations")
+      .select(
+        "shooting_location_id, shooting_location_name, shooting_location_city",
+      )
+      .in("shooting_location_id", reviewLocationIds);
+
+    reviewLocationsMap = new Map(
+      ((reviewLocationsData ?? []) as ReviewLocationRow[]).map((location) => [
+        location.shooting_location_id,
+        location,
+      ]),
+    );
+  }
+
+  const reviews: ReviewSummaryRow[] = reviewRows.map((review) => {
+    const location = reviewLocationsMap.get(review.location_id);
+
+    return {
+      id: review.review_id,
+      userName: `User ${review.user_id.slice(0, 8)}`,
+      locationTitle: location?.shooting_location_name ?? "Lokasi tidak ditemukan",
+      location: location?.shooting_location_city ?? "-",
+      rating: Number(review.rating) || 0,
+      comment: review.comment?.trim() || "-",
+    };
+  });
+
+  const avgRating =
+    reviews.length > 0
+      ? (
+          reviews.reduce((acc, review) => acc + review.rating, 0) /
+          reviews.length
+        ).toFixed(1)
+      : "0.0";
   const ratingDist = [5, 4, 3, 2, 1].map((star) => ({
     star,
-    count: seedReviews.filter((review) => review.rating === star).length,
+    count: reviews.filter((review) => review.rating === star).length,
     pct:
-      (seedReviews.filter((review) => review.rating === star).length /
-        seedReviews.length) *
-      100,
+      reviews.length > 0
+        ? (reviews.filter((review) => review.rating === star).length /
+            reviews.length) *
+          100
+        : 0,
   }));
-  const recentReviews = [...seedReviews]
-    .sort((a, b) => b.date.getTime() - a.date.getTime())
-    .slice(0, 6);
+  const recentReviews = [...reviews].slice(0, 6);
 
   const recentOrders = (recentOrdersResult.data ?? []) as OrderRow[];
 
@@ -353,7 +386,7 @@ export default async function AdminPage() {
             <div className="pb-1">
               <StarRating rating={Math.round(Number(avgRating))} />
               <p className="text-[10px] text-muted-foreground mt-1">
-                {seedReviews.length} total ulasan
+                {reviews.length} total ulasan
               </p>
             </div>
           </div>
@@ -402,7 +435,7 @@ export default async function AdminPage() {
                   {review.comment}
                 </p>
                 <p className="text-[10px] text-muted-foreground">
-                  {review.locationTitle} - {formatReviewDate(review.date)}
+                  {review.locationTitle}
                 </p>
               </div>
             ))}
