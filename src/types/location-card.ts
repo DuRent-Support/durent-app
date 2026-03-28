@@ -8,6 +8,6 @@ export interface LocationCardProps {
   area: number;
   imageUrl: string[];
   pax: number;
-  rate: number;
+  rate: number | null;
   tags: string[];
 }

@@ -17,7 +17,24 @@ import { Separator } from "../ui/separator";
 import { Skeleton } from "../ui/skeleton";
 import type { User } from "@supabase/supabase-js";
 
-export default function AppSidebarFooter() {
+type AppSidebarFooterProps = {
+  mobile?: boolean;
+};
+
+function resolveFullName(user: User | null) {
+  if (!user) return null;
+
+  const metadata = (user.user_metadata ?? {}) as Record<string, unknown>;
+  const fullNameCandidate =
+    metadata.full_name ?? metadata.name ?? metadata.display_name;
+
+  if (typeof fullNameCandidate !== "string") return null;
+
+  const fullName = fullNameCandidate.trim();
+  return fullName.length > 0 ? fullName : null;
+}
+
+export default function AppSidebarFooter({ mobile = false }: AppSidebarFooterProps) {
   const [user, setUser] = useState<User | null>(null);
   const [profileImageUrl, setProfileImageUrl] = useState<string>("");
   const [isAuthLoading, setIsAuthLoading] = useState(true);
@@ -86,31 +103,65 @@ export default function AppSidebarFooter() {
     router.refresh();
   };
 
+  const fullName = resolveFullName(user);
+  const displayName = fullName ?? user?.email?.split("@")[0] ?? "Guest";
+
   return (
-    <SidebarFooter className="">
+    <SidebarFooter className={mobile ? "border-t border-sidebar-border px-2 py-2" : ""}>
       <SidebarMenu>
         <SidebarMenuItem>
-          <SidebarMenuButton asChild className="">
+          <SidebarMenuButton asChild className={mobile ? "h-auto justify-start" : ""}>
             {isAuthLoading ? (
               <div
-                className="flex h-14 w-14 items-center justify-center rounded-lg pointer-events-none"
+                className={
+                  mobile
+                    ? "flex w-full items-center gap-3 rounded-lg px-3 py-2.5"
+                    : "flex h-14 w-14 items-center justify-center rounded-lg pointer-events-none"
+                }
                 aria-disabled="true"
               >
                 <Skeleton className="h-8 w-8 rounded-full" />
+                {mobile ? (
+                  <div className="flex min-w-0 flex-col gap-1">
+                    <Skeleton className="h-3 w-24" />
+                    <Skeleton className="h-3 w-32" />
+                  </div>
+                ) : null}
               </div>
             ) : user ? (
               <Popover open={open} onOpenChange={setOpen}>
                 <PopoverTrigger asChild>
-                  <div className="flex justify-center items-center cursor-pointer">
+                  <div
+                    className={
+                      mobile
+                        ? "flex w-full cursor-pointer items-center gap-3 rounded-lg px-3 py-2.5 text-left hover:bg-sidebar-accent"
+                        : "flex cursor-pointer items-center justify-center"
+                    }
+                  >
                     <Avatar size="default">
                       <AvatarImage src={profileImageUrl} alt={user.email ?? "User avatar"} />
                       <AvatarFallback>
                         {user.email?.charAt(0).toUpperCase() || "JD"}
                       </AvatarFallback>
                     </Avatar>
+
+                    {mobile ? (
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-semibold text-sidebar-foreground">
+                          {displayName}
+                        </p>
+                        <p className="truncate text-xs text-sidebar-foreground/70">
+                          {user.email}
+                        </p>
+                      </div>
+                    ) : null}
                   </div>
                 </PopoverTrigger>
-                <PopoverContent className="w-48 p-2" side="right" align="end">
+                <PopoverContent
+                  className="w-48 p-2"
+                  side={mobile ? "top" : "right"}
+                  align={mobile ? "start" : "end"}
+                >
                   <div className="flex flex-col gap-1">
                     <button
                       onClick={() => {
@@ -135,9 +186,16 @@ export default function AppSidebarFooter() {
               </Popover>
             ) : (
               <Link href="/login">
-                <div className="flex h-14 w-14 items-center justify-center rounded-lg">
-                  <LogIn className="h-6 w-6" />
-                </div>
+                {mobile ? (
+                  <div className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left hover:bg-sidebar-accent">
+                    <LogIn className="h-6 w-6" />
+                    <span className="text-sm font-medium">Login</span>
+                  </div>
+                ) : (
+                  <div className="flex h-14 w-14 items-center justify-center rounded-lg">
+                    <LogIn className="h-6 w-6" />
+                  </div>
+                )}
               </Link>
             )}
           </SidebarMenuButton>

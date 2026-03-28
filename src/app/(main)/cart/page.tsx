@@ -16,13 +16,14 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { useCart } from "@/hooks/use-cart";
-import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
 import {
   buildWhatsappLink,
   buildWhatsappMessage,
 } from "@/lib/whatsappMessageHelper";
 import { type CartDateRange } from "@/types/cart";
+
+import {logger} from "@/lib/logger";
 
 function parsePrice(price: string | number | null | undefined) {
   const numericValue = String(price ?? "").replace(/[^0-9]/g, "");
@@ -77,6 +78,11 @@ type OrderItemBookingRow = {
   location_id: string;
   booking_start: string;
   booking_end: string;
+};
+
+type BookedRangesResponse = {
+  rows?: OrderItemBookingRow[];
+  message?: string;
 };
 
 type BookedRange = {
@@ -159,6 +165,20 @@ function normalizeToStartOfDay(value: Date | string | null | undefined) {
   return parsed;
 }
 
+function formatDateOnlyLocal(value: Date | string | null | undefined) {
+  const parsed = normalizeToStartOfDay(value);
+
+  if (!parsed) {
+    return null;
+  }
+
+  const year = parsed.getFullYear();
+  const month = String(parsed.getMonth() + 1).padStart(2, "0");
+  const day = String(parsed.getDate()).padStart(2, "0");
+
+  return `${year}-${month}-${day}`;
+}
+
 function isDateWithinRange(date: Date, range: BookedRange) {
   const target = normalizeToStartOfDay(date);
 
@@ -171,7 +191,6 @@ function isDateWithinRange(date: Date, range: BookedRange) {
 
 export default function CartPage() {
   const router = useRouter();
-  const supabase = useMemo(() => createClient(), []);
   const [isSnapReady, setIsSnapReady] = useState(false);
   const [isCheckingOut, setIsCheckingOut] = useState(false);
   const [bookedRangesByLocation, setBookedRangesByLocation] = useState<
@@ -184,7 +203,7 @@ export default function CartPage() {
   );
   const whatsappHref = useMemo(() => {
     const message = buildWhatsappMessage(items);
-    console.log("Generated WhatsApp message: di use memo", items);
+    logger.info("Generated WhatsApp message:", message); 
     return buildWhatsappLink("628111029064", message);
   }, [items]);
   const todayTimestamp = useMemo(() => {
@@ -230,18 +249,23 @@ export default function CartPage() {
         return;
       }
 
-      const { data, error } = await supabase
-        .from("order_items")
-        .select("location_id, booking_start, booking_end")
-        .in("location_id", locationIds);
+      const response = await fetch("/api/cart/booked-ranges", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ locationIds }),
+      });
 
-      if (error) {
-        console.error("Gagal mengambil tanggal booking:", error);
+      const result = (await response.json()) as BookedRangesResponse;
+
+      if (!response.ok) {
+        console.error("Gagal mengambil tanggal booking:", result.message);
         setBookedRangesByLocation({});
         return;
       }
 
-      const rows = (data ?? []) as OrderItemBookingRow[];
+      const rows = result.rows ?? [];
       const grouped: Record<string, BookedRange[]> = {};
 
       for (const row of rows) {
@@ -274,7 +298,7 @@ export default function CartPage() {
     };
 
     void loadBookedRanges();
-  }, [items, supabase]);
+  }, [items]);
 
   const handleCheckout = async () => {
     if (hasUnselectedDateRange) {
@@ -297,46 +321,29 @@ export default function CartPage() {
       console.error("Snap.js belum siap. Coba lagi beberapa detik.");
       return;
     }
-
-    const {
-      data: { user },
-      error,
-    } = await supabase.auth.getUser();
-
-    if (error) {
-      console.error("Auth check failed:", error.message);
-      return;
-    }
-
-    if (!user) {
-      router.push("/login");
-      return;
-    }
-
-    const checkoutUser = {
-      id: user.id,
-      email: user.email,
-    };
+    
 
     const purchasedItems = items.map((item) => {
       const days = getDays(item);
       const unitPrice = parsePrice(item.price);
-      console.log("Processing item for checkout: item", item);
+      const fromDateOnly = formatDateOnlyLocal(item.dateRange?.from);
+      const toDateOnly = formatDateOnlyLocal(item.dateRange?.to ?? item.dateRange?.from);
+      // console.log("Processing item for checkout: item", item);
       return {
         id: item.id,
         name: item.name,
         city: item.city,
-        dateRange: item.dateRange,
+        dateRange: {
+          from: fromDateOnly,
+          to: toDateOnly,
+        },
         days,
         unitPrice,
         subtotal: unitPrice * days,
       };
     });
 
-    console.log("Checkout user:", checkoutUser);
-    console.log("Checkout items:", purchasedItems);
-
-    clearCart();
+    // console.log("Checkout items:", purchasedItems);
 
     const response = await fetch("/api/midtrans/tokenizer", {
       method: "POST",
@@ -344,12 +351,16 @@ export default function CartPage() {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        user: checkoutUser,
         items: purchasedItems,
       }),
     });
 
     const tokenizerResult = (await response.json()) as TokenizerResponse;
+
+    if (response.status === 401) {
+      router.push("/login");
+      return;
+    }
 
     if (!response.ok) {
       console.error("Tokenizer request failed:", tokenizerResult);
@@ -361,14 +372,16 @@ export default function CartPage() {
       return;
     }
 
+    clearCart();
+
     snap.pay(tokenizerResult.token, {
       onSuccess: (result) => {
-        console.log("Midtrans success:", result);
+        // console.log("Midtrans success:", result);
         router.push("/payments");
         router.refresh();
       },
       onPending: (result) => {
-        console.log("Midtrans pending:", result);
+        // console.log("Midtrans pending:", result);
         router.push("/payments");
         router.refresh();
       },
@@ -552,13 +565,44 @@ export default function CartPage() {
                                   "bg-destructive/20 text-destructive opacity-100 line-through",
                               }}
                               onSelect={(range) => {
+                                console.log("[Cart Calendar] onSelect raw range:", {
+                                  itemId: item.id,
+                                  from: range?.from,
+                                  to: range?.to,
+                                  fromISO: range?.from?.toISOString?.(),
+                                  toISO: range?.to?.toISOString?.(),
+                                  fromLocalDateOnly: formatDateOnlyLocal(range?.from),
+                                  toLocalDateOnly: formatDateOnlyLocal(
+                                    range?.to ?? range?.from,
+                                  ),
+                                });
+
                                 if (!range?.from) {
+                                  console.log(
+                                    "[Cart Calendar] onSelect ignored because from is empty",
+                                    { itemId: item.id },
+                                  );
                                   return;
                                 }
 
-                                updateDateRange(item.id, {
+                                const nextRange = {
                                   from: range.from,
                                   to: range.to ?? range.from,
+                                };
+
+                                console.log("[Cart Calendar] updateDateRange payload:", {
+                                  itemId: item.id,
+                                  from: nextRange.from,
+                                  to: nextRange.to,
+                                  fromISO: nextRange.from.toISOString(),
+                                  toISO: nextRange.to.toISOString(),
+                                  fromLocalDateOnly: formatDateOnlyLocal(nextRange.from),
+                                  toLocalDateOnly: formatDateOnlyLocal(nextRange.to),
+                                });
+
+                                updateDateRange(item.id, {
+                                  from: nextRange.from,
+                                  to: nextRange.to,
                                 });
                               }}
                               disabled={(date) => {

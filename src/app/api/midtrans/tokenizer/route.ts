@@ -25,13 +25,22 @@ function toDateOnly(value: string | undefined) {
     return null;
   }
 
+  const dateOnlyCandidate = String(value).trim().slice(0, 10);
+  if (/^\d{4}-\d{2}-\d{2}$/.test(dateOnlyCandidate)) {
+    return dateOnlyCandidate;
+  }
+
   const date = new Date(value);
 
   if (Number.isNaN(date.getTime())) {
     return null;
   }
 
-  return date.toISOString().slice(0, 10);
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+
+  return `${year}-${month}-${day}`;
 }
 
 function getQuantityDays(startDateOnly: string, endDateOnly: string) {
@@ -49,10 +58,11 @@ function addMinutes(date: Date, minutes: number) {
 
 export async function POST(request: Request) {
   try {
+
+
     const supabase = await createClient();
     const body = await request.json();
-    console.log("Midtrans tokenizer request body:", body);
-    const user = body?.user;
+    console.log("Midtrans tokenizer request body:", body.dateRange);
     const items = (
       Array.isArray(body?.items) ? body.items : []
     ) as CheckoutItem[];
@@ -69,9 +79,9 @@ export async function POST(request: Request) {
       );
     }
 
-    if (!user || !user.id || !user.email) {
+    if (!authUser.email) {
       return NextResponse.json(
-        { message: "User checkout tidak valid" },
+        { message: "Email user tidak tersedia" },
         { status: 400 },
       );
     }
@@ -134,7 +144,7 @@ export async function POST(request: Request) {
         "shopeepay",
       ],
       customer_details: {
-        email: user.email,
+        email: authUser.email,
       },
       page_expiry: {
         duration: pageExpiryMinutes,

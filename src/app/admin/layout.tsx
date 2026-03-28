@@ -40,7 +40,7 @@ export default async function AdminLayout({
   return (
     <SidebarProvider>
       <AppSidebarAdmin />
-      <main className="relative z-10 ml-24 min-h-screen w-[calc(100%-6rem)]">
+      <main className="relative z-10 min-h-screen w-full pt-16 md:ml-24 md:w-[calc(100%-6rem)] md:pt-0">
         {children}
       </main>
     </SidebarProvider>

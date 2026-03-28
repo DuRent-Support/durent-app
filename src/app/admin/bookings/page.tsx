@@ -30,7 +30,6 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { createClient } from "@/lib/supabase/client";
 
 type PaymentStatus =
   | "paid"
@@ -59,33 +58,9 @@ interface BookingOrder {
   totalPrice: number;
 }
 
-type OrderRow = {
-  order_id: string;
-  user_id: string;
-  payment_status: string | null;
-  total_price: string | number | null;
-  created_at: string | null;
-};
-
-type OrderItemRow = {
-  order_id: string;
-  location_id: string;
-  booking_start: string;
-  booking_end: string;
-  price: string | number | null;
-  quantity: number | null;
-};
-
-type LocationRow = {
-  shooting_location_id: string;
-  shooting_location_name: string;
-  shooting_location_image_url: string[] | null;
-};
-
-type AuthUserRow = {
-  user_id: string;
-  full_name: string | null;
-  email: string | null;
+type AdminBookingsResponse = {
+  orders?: BookingOrder[];
+  message?: string;
 };
 
 const paymentConfig: Record<
@@ -103,37 +78,6 @@ const paymentConfig: Record<
   challenge: { label: "Challenge", variant: "secondary" },
   failed: { label: "Gagal", variant: "destructive" },
 };
-
-function parseNumber(value: string | number | null | undefined) {
-  if (typeof value === "number") {
-    return Number.isFinite(value) ? value : 0;
-  }
-
-  if (typeof value === "string") {
-    const sanitized = value.replace(/[^0-9]/g, "");
-    return Number.parseInt(sanitized, 10) || 0;
-  }
-
-  return 0;
-}
-
-function normalizePaymentStatus(
-  value: string | null | undefined,
-): PaymentStatus {
-  const status = String(value || "")
-    .trim()
-    .toLowerCase();
-
-  if (status === "paid" || status === "settlement") return "paid";
-  if (status === "partial") return "partial";
-  if (status === "refunded") return "refunded";
-  if (status === "challenge") return "challenge";
-  if (status === "cancel" || status === "deny" || status === "expire") {
-    return "failed";
-  }
-  if (status === "unpaid") return "unpaid";
-  return "pending";
-}
 
 function getExecutionStatus(startDate: string, endDate: string) {
   const now = new Date();
@@ -173,7 +117,6 @@ function formatRupiah(value: number) {
 }
 
 export default function BookingsPage() {
-  const supabase = useMemo(() => createClient(), []);
   const [orders, setOrders] = useState<BookingOrder[]>([]);
   const [loading, setLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -187,156 +130,23 @@ export default function BookingsPage() {
     setLoading(true);
     setErrorMessage(null);
 
-    const { data: orderRows, error: orderError } = await supabase
-      .from("orders")
-      .select("order_id, user_id, payment_status, total_price, created_at")
-      .order("created_at", { ascending: false });
-
-    if (orderError) {
-      console.error("Fetch orders error:", orderError);
-      setErrorMessage("Gagal mengambil data orders.");
-      setOrders([]);
-      setLoading(false);
-      return;
-    }
-
-    const fetchedOrders = (orderRows ?? []) as OrderRow[];
-
-    if (fetchedOrders.length === 0) {
-      setOrders([]);
-      setLoading(false);
-      return;
-    }
-
-    const orderIds = fetchedOrders.map((order) => order.order_id);
-
-    const { data: orderItemRows, error: orderItemsError } = await supabase
-      .from("order_items")
-      .select(
-        "order_id, location_id, booking_start, booking_end, price, quantity",
-      )
-      .in("order_id", orderIds)
-      .order("booking_start", { ascending: true });
-
-    if (orderItemsError) {
-      console.error("Fetch order_items error:", orderItemsError);
-      setErrorMessage("Gagal mengambil data order items.");
-      setOrders([]);
-      setLoading(false);
-      return;
-    }
-
-    const fetchedOrderItems = (orderItemRows ?? []) as OrderItemRow[];
-    const userIds = [...new Set(fetchedOrders.map((order) => order.user_id))];
-    const locationIds = [
-      ...new Set(fetchedOrderItems.map((item) => item.location_id)),
-    ];
-
-    let locationMap = new Map<string, LocationRow>();
-    let authUserMap = new Map<
-      string,
-      { fullName: string | null; email: string | null }
-    >();
-
-    if (userIds.length > 0) {
-      const response = await fetch("/api/admin/auth-users", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ userIds }),
-      });
-
-      if (!response.ok) {
-        console.error("Fetch auth users error:", response.statusText);
-      } else {
-        const data = (await response.json()) as { users?: AuthUserRow[] };
-        const users = data.users ?? [];
-        authUserMap = new Map(
-          users.map((authUser) => [
-            authUser.user_id,
-            {
-              fullName: authUser.full_name,
-              email: authUser.email,
-            },
-          ]),
-        );
-      }
-    }
-
-    if (locationIds.length > 0) {
-      const { data: locationRows, error: locationError } = await supabase
-        .from("shooting_locations")
-        .select(
-          "shooting_location_id, shooting_location_name, shooting_location_image_url",
-        )
-        .in("shooting_location_id", locationIds);
-
-      if (locationError) {
-        console.error("Fetch shooting_locations error:", locationError);
-      } else {
-        const locations = (locationRows ?? []) as LocationRow[];
-        locationMap = new Map(
-          locations.map((location) => [
-            location.shooting_location_id,
-            location,
-          ]),
-        );
-      }
-    }
-
-    const itemsByOrder = new Map<string, OrderItemRow[]>();
-
-    for (const item of fetchedOrderItems) {
-      const bucket = itemsByOrder.get(item.order_id) ?? [];
-      bucket.push(item);
-      itemsByOrder.set(item.order_id, bucket);
-    }
-
-    const mappedOrders: BookingOrder[] = fetchedOrders.map((order) => {
-      const itemRows = itemsByOrder.get(order.order_id) ?? [];
-
-      const places = itemRows.map((item) => {
-        const location = locationMap.get(item.location_id);
-        const days = Math.max(1, Number(item.quantity ?? 1));
-        const pricePerDay = parseNumber(item.price);
-
-        return {
-          locationTitle:
-            location?.shooting_location_name || `Lokasi ${item.location_id}`,
-          imageUrl:
-            location?.shooting_location_image_url?.[1] ||
-            location?.shooting_location_image_url?.[0] ||
-            "/hero.webp",
-          startDate: item.booking_start,
-          endDate: item.booking_end,
-          days,
-          pricePerDay,
-          subtotal: days * pricePerDay,
-        };
-      });
-
-      const calculatedTotal = places.reduce(
-        (acc, place) => acc + place.subtotal,
-        0,
-      );
-      const totalPrice = parseNumber(order.total_price) || calculatedTotal;
-      const authUser = authUserMap.get(order.user_id);
-      const customerName =
-        authUser?.fullName || authUser?.email || order.user_id;
-
-      return {
-        orderId: order.order_id,
-        customerName,
-        paymentStatus: normalizePaymentStatus(order.payment_status),
-        places,
-        totalPrice,
-      };
+    const response = await fetch("/api/admin/bookings", {
+      method: "GET",
+      cache: "no-store",
     });
 
-    setOrders(mappedOrders);
+    const result = (await response.json()) as AdminBookingsResponse;
+
+    if (!response.ok) {
+      setErrorMessage(result.message || "Gagal mengambil data booking.");
+      setOrders([]);
+      setLoading(false);
+      return;
+    }
+
+    setOrders(result.orders ?? []);
     setLoading(false);
-  }, [supabase]);
+  }, []);
 
   useEffect(() => {
     const timer = setTimeout(() => {

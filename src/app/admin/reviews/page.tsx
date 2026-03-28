@@ -6,7 +6,6 @@ import { useRouter } from "next/navigation";
 import Image from "next/image";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { createClient } from "@/lib/supabase/client";
 
 interface Review {
   id: string;
@@ -21,26 +20,10 @@ interface Review {
   comment: string;
 }
 
-type ReviewRow = {
-  review_id?: string;
-  user_id: string;
-  location_id: string;
-  rating: number;
-  comment: string;
-};
-
-type AuthUserRow = {
-  user_id: string;
-  full_name: string | null;
-  email: string | null;
-  profile_image_url: string | null;
-};
-
-type LocationRow = {
-  shooting_location_id: string;
-  shooting_location_name: string;
-  shooting_location_city: string;
-  shooting_location_image_url: string[] | null;
+type ReviewsResponse = {
+  reviews?: Review[];
+  locationOptions?: string[];
+  message?: string;
 };
 
 const StarRating = ({ rating, size = "sm" }: { rating: number; size?: "sm" | "md" }) => (
@@ -56,7 +39,6 @@ const StarRating = ({ rating, size = "sm" }: { rating: number; size?: "sm" | "md
 
 const ReviewsPage = () => {
   const router = useRouter();
-  const supabase = useMemo(() => createClient(), []);
   const [reviews, setReviews] = useState<Review[]>([]);
   const [loading, setLoading] = useState(true);
   const [filterLocation, setFilterLocation] = useState<string>("all");
@@ -68,101 +50,28 @@ const ReviewsPage = () => {
     const loadReviews = async () => {
       setLoading(true);
 
-      const { data: reviewsData, error: reviewsError } = await supabase
-        .from("reviews")
-        .select("review_id, user_id, location_id, rating, comment");
-
-      if (reviewsError) {
-        console.error("Fetch reviews error:", reviewsError);
-        setReviews([]);
-        setLoading(false);
-        return;
-      }
-
-      const reviewRows = (reviewsData ?? []) as ReviewRow[];
-
-      if (reviewRows.length === 0) {
-        setReviews([]);
-        setLoading(false);
-        return;
-      }
-
-      const userIds = [...new Set(reviewRows.map((review) => review.user_id))];
-
-      const [{ data: locationsData, error: locationsError }, authUsersResponse] = await Promise.all([
-        supabase
-          .from("shooting_locations")
-          .select(
-            "shooting_location_id, shooting_location_name, shooting_location_city, shooting_location_image_url",
-          )
-          .order("shooting_location_name", { ascending: true }),
-        fetch("/api/admin/auth-users", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({ userIds }),
-        }),
-      ]);
-
-      if (locationsError) {
-        console.error("Fetch locations error:", locationsError);
-      }
-
-      let authUsers: AuthUserRow[] = [];
-
-      if (!authUsersResponse.ok) {
-        console.error("Fetch auth users error:", await authUsersResponse.text());
-      } else {
-        const authUsersJson = (await authUsersResponse.json()) as {
-          users?: AuthUserRow[];
-        };
-        authUsers = authUsersJson.users ?? [];
-      }
-
-      const locations = (locationsData ?? []) as LocationRow[];
-      setLocationOptions(
-        [...new Set(locations.map((location) => location.shooting_location_name))],
-      );
-
-      const authUserMap = new Map(
-        authUsers.map((authUser) => [authUser.user_id, authUser]),
-      );
-      const locationMap = new Map(
-        locations.map((location) => [location.shooting_location_id, location]),
-      );
-
-      const mappedReviews: Review[] = reviewRows.map((review, index) => {
-        const authUser = authUserMap.get(review.user_id);
-        const location = locationMap.get(review.location_id);
-        const userName =
-          authUser?.full_name ||
-          authUser?.email ||
-          review.user_id;
-
-        return {
-          id: review.review_id ?? `${review.user_id}-${review.location_id}-${index}`,
-          userId: review.user_id,
-          locationId: review.location_id,
-          userName,
-          avatarUrl: authUser?.profile_image_url ?? null,
-          locationTitle:
-            location?.shooting_location_name ?? "Lokasi tidak ditemukan",
-          locationImage:
-            location?.shooting_location_image_url?.[0] ||
-            "https://picsum.photos/seed/location-review/400/300",
-          location: location?.shooting_location_city ?? "-",
-          rating: Number(review.rating) || 0,
-          comment: review.comment || "-",
-        };
+      const response = await fetch("/api/admin/reviews", {
+        method: "GET",
+        cache: "no-store",
       });
 
-      setReviews(mappedReviews);
+      if (!response.ok) {
+        const result = (await response.json()) as ReviewsResponse;
+        console.error("Fetch reviews error:", result.message);
+        setReviews([]);
+        setLocationOptions([]);
+        setLoading(false);
+        return;
+      }
+
+      const result = (await response.json()) as ReviewsResponse;
+      setReviews(result.reviews ?? []);
+      setLocationOptions(result.locationOptions ?? []);
       setLoading(false);
     };
 
     void loadReviews();
-  }, [supabase]);
+  }, []);
 
   // Filtered + sorted reviews
   const filteredReviews = useMemo(() => {

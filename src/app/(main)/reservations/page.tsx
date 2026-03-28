@@ -2,7 +2,7 @@
 
 import { ArrowLeft, CalendarCheck, Star } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 
 import ReservationCard, {
   type ReservationCardData,
@@ -17,21 +17,7 @@ import {
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { createClient } from "@/lib/supabase/client";
 import { toast } from "sonner";
-
-function parseNumber(value: string | number | null | undefined) {
-  if (typeof value === "number") {
-    return Number.isFinite(value) ? value : 0;
-  }
-
-  if (typeof value === "string") {
-    const sanitized = value.replace(/[^0-9]/g, "");
-    return Number.parseInt(sanitized, 10) || 0;
-  }
-
-  return 0;
-}
 
 function getStatusLabel(from: Date, to: Date) {
   const today = new Date();
@@ -48,40 +34,35 @@ function getStatusLabel(from: Date, to: Date) {
   return { text: "Akan Datang", cls: "bg-accent text-accent-foreground" };
 }
 
-type OrderRow = {
-  order_id: string;
-  payment_status: string | null;
-  created_at: string | null;
+type ReservationApiRow = {
+  id: string;
+  orderId: string;
+  locationId: string;
+  name: string;
+  city: string;
+  imageUrl: string;
+  bookingFrom: string;
+  bookingTo: string;
+  days: number;
+  subtotal: number;
+  paymentStatus: string;
 };
 
-type OrderItemRow = {
-  order_id: string;
-  location_id: string;
-  booking_start: string;
-  booking_end: string;
-  price: string | number | null;
-  quantity: number | null;
+type ReservationsResponse = {
+  reservations?: ReservationApiRow[];
+  reviewedKeys?: string[];
+  message?: string;
 };
 
-type LocationRow = {
-  shooting_location_id: string;
-  shooting_location_name: string;
-  shooting_location_city: string;
-  shooting_location_image_url: string[] | null;
-};
-
-type ExistingReviewRow = {
-  order_id: string;
-  location_id: string;
+type SubmitReviewResponse = {
+  message?: string;
 };
 
 export default function ReservationsPage() {
   const router = useRouter();
-  const supabase = useMemo(() => createClient(), []);
   const [reservations, setReservations] = useState<ReservationCardData[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [reviewDialogOpen, setReviewDialogOpen] = useState(false);
   const [selectedReservation, setSelectedReservation] =
     useState<ReservationCardData | null>(null);
@@ -95,186 +76,51 @@ export default function ReservationsPage() {
       setIsLoading(true);
       setErrorMessage(null);
 
-      const {
-        data: { user },
-        error: authError,
-      } = await supabase.auth.getUser();
+      const response = await fetch("/api/reservations", {
+        method: "GET",
+        cache: "no-store",
+      });
 
-      if (authError) {
-        setErrorMessage("Gagal memverifikasi user.");
-        setIsLoading(false);
-        return;
-      }
-
-      if (!user) {
+      if (response.status === 401) {
         router.push("/login");
         return;
       }
 
-      setCurrentUserId(user.id);
+      const result = (await response.json()) as ReservationsResponse;
 
-      const { data: orderRows, error: orderError } = await supabase
-        .from("orders")
-        .select("order_id, payment_status, created_at")
-        .eq("user_id", user.id)
-        .order("created_at", { ascending: false });
-
-      if (orderError) {
-        console.error("Fetch orders error:", orderError);
-        setErrorMessage("Gagal mengambil data orders.");
+      if (!response.ok) {
+        setErrorMessage(result.message || "Gagal memuat data reservasi.");
         setIsLoading(false);
         return;
       }
 
-      const orders = (orderRows ?? []) as OrderRow[];
-
-      if (orders.length === 0) {
-        setReservations([]);
-        setIsLoading(false);
-        return;
-      }
-
-      const orderIds = orders.map((order) => order.order_id);
-      const orderMap = new Map(orders.map((order) => [order.order_id, order]));
-
-      const { data: existingReviewsData, error: existingReviewsError } =
-        await supabase
-          .from("reviews")
-          .select("order_id, location_id")
-          .eq("user_id", user.id)
-          .in("order_id", orderIds);
-
-      if (existingReviewsError) {
-        console.warn("Fetch existing reviews warning:", existingReviewsError);
-        setReviewedKeys(new Set());
-      } else {
-        const existingReviews =
-          (existingReviewsData ?? []) as ExistingReviewRow[];
-        setReviewedKeys(
-          new Set(
-            existingReviews.map(
-              (review) => `${review.order_id}-${review.location_id}`,
-            ),
-          ),
-        );
-      }
-
-      const { data: orderItemRows, error: orderItemsError } = await supabase
-        .from("order_items")
-        .select(
-          "order_id, location_id, booking_start, booking_end, price, quantity",
-        )
-        .in("order_id", orderIds)
-        .order("booking_start", { ascending: false });
-
-      if (orderItemsError) {
-        console.error("Fetch order_items error:", orderItemsError);
-        setErrorMessage("Gagal mengambil data order items.");
-        setIsLoading(false);
-        return;
-      }
-
-      const orderItems = (orderItemRows ?? []) as OrderItemRow[];
-
-      if (orderItems.length === 0) {
-        setReservations([]);
-        setIsLoading(false);
-        return;
-      }
-
-      const locationIds = [
-        ...new Set(orderItems.map((item) => item.location_id)),
-      ];
-
-      const { data: locationRows, error: locationError } = await supabase
-        .from("shooting_locations")
-        .select(
-          "shooting_location_id, shooting_location_name, shooting_location_city, shooting_location_image_url",
-        )
-        .in("shooting_location_id", locationIds);
-
-      if (locationError) {
-        console.error("Fetch shooting_locations error:", locationError);
-        setErrorMessage("Gagal mengambil data lokasi.");
-        setIsLoading(false);
-        return;
-      }
-
-      const locations = (locationRows ?? []) as LocationRow[];
-      const locationMap = new Map(
-        locations.map((location) => [location.shooting_location_id, location]),
-      );
-
-      const reservationItems: ReservationCardData[] = orderItems
+      const reservationItems = (result.reservations ?? [])
         .map((item) => {
-          const order = orderMap.get(item.order_id);
-          const location = locationMap.get(item.location_id);
-
-          const from = new Date(item.booking_start);
-          const to = new Date(item.booking_end);
+          const bookingFrom = new Date(item.bookingFrom);
+          const bookingTo = new Date(item.bookingTo);
 
           if (
-            !location ||
-            Number.isNaN(from.getTime()) ||
-            Number.isNaN(to.getTime())
+            Number.isNaN(bookingFrom.getTime()) ||
+            Number.isNaN(bookingTo.getTime())
           ) {
             return null;
           }
 
-          const unitPrice = parseNumber(item.price);
-          const days = Math.max(1, Number(item.quantity ?? 1));
-
           return {
-            id: `${item.order_id}-${item.location_id}-${item.booking_start}`,
-            orderId: item.order_id,
-            locationId: item.location_id,
-            name: location.shooting_location_name,
-            city: location.shooting_location_city,
-            imageUrl: location.shooting_location_image_url?.[0] || "/hero.webp",
-            bookingFrom: from,
-            bookingTo: to,
-            days,
-            subtotal: unitPrice * days,
-            paymentStatus: String(order?.payment_status || "pending"),
-          };
+            ...item,
+            bookingFrom,
+            bookingTo,
+          } as ReservationCardData;
         })
         .filter((item): item is ReservationCardData => item !== null);
 
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-
-      reservationItems.sort((a, b) => {
-        const aIsOngoing = a.bookingFrom <= today && a.bookingTo >= today;
-        const bIsOngoing = b.bookingFrom <= today && b.bookingTo >= today;
-
-        if (aIsOngoing !== bIsOngoing) {
-          return aIsOngoing ? -1 : 1;
-        }
-
-        const aIsUpcoming = a.bookingFrom > today;
-        const bIsUpcoming = b.bookingFrom > today;
-
-        if (aIsUpcoming !== bIsUpcoming) {
-          return aIsUpcoming ? -1 : 1;
-        }
-
-        if (aIsUpcoming && bIsUpcoming) {
-          return a.bookingFrom.getTime() - b.bookingFrom.getTime();
-        }
-
-        if (aIsOngoing && bIsOngoing) {
-          return a.bookingTo.getTime() - b.bookingTo.getTime();
-        }
-
-        return b.bookingTo.getTime() - a.bookingTo.getTime();
-      });
-
+      setReviewedKeys(new Set(result.reviewedKeys ?? []));
       setReservations(reservationItems);
       setIsLoading(false);
     };
 
     void loadReservations();
-  }, [router, supabase]);
+  }, [router]);
 
   const handleOpenReviewDialog = (reservation: ReservationCardData) => {
     setSelectedReservation(reservation);
@@ -284,7 +130,7 @@ export default function ReservationsPage() {
   };
 
   const handleSubmitReview = async () => {
-    if (!selectedReservation || !currentUserId) {
+    if (!selectedReservation) {
       return;
     }
 
@@ -302,19 +148,27 @@ export default function ReservationsPage() {
 
     setIsSubmittingReview(true);
 
-    const payload = {
-      user_id: currentUserId,
-      order_id: selectedReservation.orderId,
-      location_id: selectedReservation.locationId,
-      rating,
-      comment: trimmedComment,
-    };
+    const response = await fetch("/api/reservations/reviews", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        order_id: selectedReservation.orderId,
+        location_id: selectedReservation.locationId,
+        rating,
+        comment: trimmedComment,
+      }),
+    });
 
-    const { error } = await supabase.from("reviews").insert(payload);
+    const result = (await response.json()) as SubmitReviewResponse;
 
-    if (error) {
-      console.error("Submit review error:", error);
-      toast.error("Gagal mengirim review. Cek struktur tabel reviews.");
+    if (!response.ok) {
+      if (response.status === 401) {
+        router.push("/login");
+      }
+
+      toast.error(result.message || "Gagal mengirim review.");
       setIsSubmittingReview(false);
       return;
     }

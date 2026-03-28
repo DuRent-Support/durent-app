@@ -2,18 +2,14 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { ArrowLeft, CalendarDays, ChevronDown, Clock3, RefreshCcw } from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
+import { ArrowLeft, RefreshCcw } from "lucide-react";
 
-import { Badge } from "@/components/ui/badge";
+import PaymentCard, {
+  type PendingPaymentRow,
+} from "@/components/payment-card/PaymentCard";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "@/components/ui/collapsible";
-import { createClient } from "@/lib/supabase/client";
+import { Card, CardContent } from "@/components/ui/card";
 
 type SnapResult = {
   order_id?: string;
@@ -33,89 +29,10 @@ type Snap = {
   ) => void;
 };
 
-type PendingPaymentRow = {
-  order_id: string;
-  total_price: string | number | null;
-  payment_status: string | null;
-  created_at: string | null;
-  midtrans_token: string | null;
-  midtrans_expire_at: string | null;
-  items: PendingPaymentItem[];
+type PendingPaymentsResponse = {
+  pendingPayments?: PendingPaymentRow[];
+  message?: string;
 };
-
-type PendingPaymentItem = {
-  order_id: string;
-  location_id: string;
-  booking_start: string;
-  booking_end: string;
-  quantity: number | null;
-  price: string | number | null;
-  location_name: string;
-};
-
-type OrderItemRow = {
-  order_id: string;
-  location_id: string;
-  booking_start: string;
-  booking_end: string;
-  quantity: number | null;
-  price: string | number | null;
-};
-
-function parseNumber(value: string | number | null | undefined) {
-  if (typeof value === "number") {
-    return Number.isFinite(value) ? value : 0;
-  }
-
-  if (typeof value === "string") {
-    const numericValue = value.replace(/[^0-9]/g, "");
-    return Number.parseInt(numericValue, 10) || 0;
-  }
-
-  return 0;
-}
-
-type LocationRow = {
-  shooting_location_id: string;
-  shooting_location_name: string;
-};
-
-function formatRupiah(value: string | number | null) {
-  const numberValue =
-    typeof value === "number"
-      ? value
-      : Number.parseInt(String(value ?? "").replace(/[^0-9]/g, ""), 10) || 0;
-
-  return `Rp ${numberValue.toLocaleString("id-ID")}`;
-}
-
-function formatExpiryLabel(msLeft: number) {
-  if (msLeft <= 0) {
-    return "Kadaluarsa";
-  }
-
-  const totalSeconds = Math.floor(msLeft / 1000);
-  const minutes = Math.floor(totalSeconds / 60)
-    .toString()
-    .padStart(2, "0");
-  const seconds = (totalSeconds % 60).toString().padStart(2, "0");
-
-  return `${minutes}:${seconds}`;
-}
-
-function formatDateOnly(value: string) {
-  const date = new Date(value);
-
-  if (Number.isNaN(date.getTime())) {
-    return "-";
-  }
-
-  return date.toLocaleDateString("id-ID", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-  });
-}
 
 async function ensureSnapLoaded(snapUrl: string, clientKey: string) {
   const win = window as Window & { snap?: Snap };
@@ -164,7 +81,6 @@ async function ensureSnapLoaded(snapUrl: string, clientKey: string) {
 
 export default function PaymentsPage() {
   const router = useRouter();
-  const supabase = useMemo(() => createClient(), []);
   const [pendingPayments, setPendingPayments] = useState<PendingPaymentRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -188,104 +104,32 @@ export default function PaymentsPage() {
   const fetchPendingPayments = useCallback(async () => {
     setRefreshing(true);
 
-    const {
-      data: { user },
-      error: userError,
-    } = await supabase.auth.getUser();
+    const response = await fetch("/api/payments/pending", {
+      method: "GET",
+      cache: "no-store",
+    });
 
-    if (userError) {
-      console.error("Auth error:", userError);
-      setPendingPayments([]);
-      setLoading(false);
-      setRefreshing(false);
-      return;
-    }
-
-    if (!user) {
+    if (response.status === 401) {
       router.push("/login");
+      setLoading(false);
+      setRefreshing(false);
       return;
     }
 
-    const { data, error } = await supabase
-      .from("orders")
-      .select(
-        "order_id, total_price, payment_status, created_at, midtrans_token, midtrans_expire_at",
-      )
-      .eq("user_id", user.id)
-      .eq("payment_status", "pending")
-      .order("created_at", { ascending: false });
+    const result = (await response.json()) as PendingPaymentsResponse;
 
-    if (error) {
-      console.error("Fetch pending payments error:", error);
+    if (!response.ok) {
+      console.error("Fetch pending payments error:", result.message);
       setPendingPayments([]);
       setLoading(false);
       setRefreshing(false);
       return;
     }
 
-    const baseRows = (data ?? []) as Omit<PendingPaymentRow, "items">[];
-    const pendingRows = baseRows.filter((row) => Boolean(row.midtrans_token));
-
-    if (pendingRows.length === 0) {
-      setPendingPayments([]);
-      setLoading(false);
-      setRefreshing(false);
-      return;
-    }
-
-    const orderIds = pendingRows.map((row) => row.order_id);
-    const { data: orderItemsData, error: orderItemsError } = await supabase
-      .from("order_items")
-      .select("order_id, location_id, booking_start, booking_end, quantity, price")
-      .in("order_id", orderIds);
-
-    if (orderItemsError) {
-      console.error("Fetch order items error:", orderItemsError);
-      setPendingPayments(pendingRows.map((row) => ({ ...row, items: [] })));
-      setLoading(false);
-      setRefreshing(false);
-      return;
-    }
-
-    const orderItems = (orderItemsData ?? []) as OrderItemRow[];
-    const locationIds = [...new Set(orderItems.map((item) => item.location_id))];
-
-    let locationMap = new Map<string, string>();
-
-    if (locationIds.length > 0) {
-      const { data: locationsData, error: locationsError } = await supabase
-        .from("shooting_locations")
-        .select("shooting_location_id, shooting_location_name")
-        .in("shooting_location_id", locationIds);
-
-      if (locationsError) {
-        console.error("Fetch locations error:", locationsError);
-      } else {
-        const locations = (locationsData ?? []) as LocationRow[];
-        locationMap = new Map(
-          locations.map((location) => [
-            location.shooting_location_id,
-            location.shooting_location_name,
-          ]),
-        );
-      }
-    }
-
-    const enrichedRows = pendingRows.map((row) => ({
-      ...row,
-      items: orderItems
-        .filter((item) => item.order_id === row.order_id)
-        .map((item) => ({
-          ...item,
-          location_name:
-            locationMap.get(item.location_id) ?? "Lokasi tidak ditemukan",
-        })),
-    }));
-
-    setPendingPayments(enrichedRows);
+    setPendingPayments(result.pendingPayments ?? []);
     setLoading(false);
     setRefreshing(false);
-  }, [router, supabase]);
+  }, [router]);
 
   useEffect(() => {
     const timeoutId = window.setTimeout(() => {
@@ -384,102 +228,17 @@ export default function PaymentsPage() {
         </Card>
       ) : (
         <div className="space-y-4">
-          {pendingPayments.map((row) => {
-            const expiresAt = row.midtrans_expire_at
-              ? new Date(row.midtrans_expire_at)
-              : null;
-            const msLeft = expiresAt ? expiresAt.getTime() - nowTs : 0;
-            const isExpired = msLeft <= 0;
-
-            return (
-              <Card key={row.order_id} className="border-border/50">
-                <CardHeader className="pb-3">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <CardTitle className="text-base">Order {row.order_id}</CardTitle>
-                    <Badge variant={isExpired ? "destructive" : "secondary"}>
-                      {isExpired ? "Expired" : "Pending"}
-                    </Badge>
-                  </div>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="flex flex-wrap items-center justify-between gap-3 text-sm">
-                    <div>
-                      <p className="text-muted-foreground">Total Pembayaran</p>
-                      <p className="font-semibold text-foreground">
-                        {formatRupiah(row.total_price)}
-                      </p>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-muted-foreground">Waktu Tersisa</p>
-                      <p className="inline-flex items-center gap-1 font-semibold text-foreground">
-                        <Clock3 className="h-4 w-4" />
-                        {formatExpiryLabel(msLeft)}
-                      </p>
-                    </div>
-                  </div>
-
-                  <Collapsible>
-                    <CollapsibleTrigger asChild>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        className="flex w-full items-center justify-between"
-                      >
-                        <span>Order items ({row.items?.length || 0})</span>
-                        <ChevronDown className="h-4 w-4" />
-                      </Button>
-                    </CollapsibleTrigger>
-                    <CollapsibleContent className="pt-3">
-                      {row.items.length === 0 ? (
-                        <p className="text-xs text-muted-foreground">
-                          Tidak ada item detail untuk order ini.
-                        </p>
-                      ) : (
-                        <div className="space-y-2">
-                          {row.items.map((item, index) => (
-                            <div
-                              key={`${item.order_id}-${item.location_id}-${index}`}
-                              className="rounded-xl border border-border/50 bg-muted/20 p-3"
-                            >
-                              <p className="text-sm font-medium text-foreground">
-                                {item.location_name}
-                              </p>
-                              <p className="mt-1 inline-flex items-center gap-1 text-xs text-muted-foreground">
-                                <CalendarDays className="h-3.5 w-3.5" />
-                                {formatDateOnly(item.booking_start)} - {formatDateOnly(item.booking_end)}
-                              </p>
-                              <p className="mt-1 text-xs text-muted-foreground">
-                                Durasi: {item.quantity ?? 1} hari
-                              </p>
-                              <p className="mt-1 text-xs text-muted-foreground">
-                                Harga/hari: {formatRupiah(item.price)}
-                              </p>
-                              <p className="mt-1 text-xs font-medium text-foreground">
-                                Subtotal: {formatRupiah(parseNumber(item.price) * (item.quantity ?? 1))}
-                              </p>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </CollapsibleContent>
-                  </Collapsible>
-
-                  <Button
-                    type="button"
-                    className="w-full"
-                    disabled={isExpired || activeOrderId === row.order_id}
-                    onClick={() => void continuePayment(row)}
-                  >
-                    {activeOrderId === row.order_id
-                      ? "Membuka pembayaran..."
-                      : isExpired
-                        ? "Pembayaran kadaluarsa"
-                        : "Lanjutkan pembayaran"}
-                  </Button>
-                </CardContent>
-              </Card>
-            );
-          })}
+          {pendingPayments.map((row) => (
+            <PaymentCard
+              key={row.order_id}
+              row={row}
+              nowTs={nowTs}
+              activeOrderId={activeOrderId}
+              onContinuePayment={(paymentRow) => {
+                void continuePayment(paymentRow);
+              }}
+            />
+          ))}
         </div>
       )}
     </div>

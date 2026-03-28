@@ -1,31 +1,8 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { MapPin, Tag, Users, TrendingUp, Star } from "lucide-react";
 import Link from "next/link";
+import { headers } from "next/headers";
 import { Button } from "@/components/ui/button";
-import { createServiceRoleClient } from "@/lib/supabase/server";
-
-type OrderRow = {
-  order_id: string;
-  user_id: string;
-  created_at: string;
-};
-
-type OrderSummaryRow = {
-  payment_status: string | null;
-  total_price: string | number | null;
-};
-
-type OrderItemRow = {
-  order_id: string;
-  location_id: string;
-  booking_start: string;
-  booking_end: string;
-};
-
-type LocationRow = {
-  shooting_location_id: string;
-  shooting_location_name: string;
-};
 
 type RecentBookingRow = {
   orderId: string;
@@ -43,18 +20,31 @@ type ReviewSummaryRow = {
   comment: string;
 };
 
-type ReviewRow = {
-  review_id: string;
-  user_id: string;
-  location_id: string;
-  rating: number;
-  comment: string | null;
+type RatingDistributionRow = {
+  star: number;
+  count: number;
+  pct: number;
 };
 
-type ReviewLocationRow = {
-  shooting_location_id: string;
-  shooting_location_name: string;
-  shooting_location_city: string | null;
+type DashboardResponse = {
+  totals?: {
+    users?: number;
+    locations?: number;
+    tags?: number;
+    bookings?: number;
+  };
+  bookingSummary?: {
+    totalOrder?: number;
+    paidOrders?: number;
+    totalLocations?: number;
+    totalRevenue?: number;
+  };
+  reviewCount?: number;
+  avgRating?: string;
+  ratingDist?: RatingDistributionRow[];
+  recentReviews?: ReviewSummaryRow[];
+  recentBookings?: RecentBookingRow[];
+  message?: string;
 };
 
 function StarRating({ rating }: { rating: number }) {
@@ -70,227 +60,109 @@ function StarRating({ rating }: { rating: number }) {
   );
 }
 
-function formatDateRange(start: string, end: string) {
-  const startDate = new Date(start);
-  const endDate = new Date(end);
-
-  if (Number.isNaN(startDate.getTime()) || Number.isNaN(endDate.getTime())) {
-    return "-";
-  }
-
-  return `${startDate.toLocaleDateString("id-ID")} - ${endDate.toLocaleDateString("id-ID")}`;
-}
-
-function parseNumber(value: string | number | null | undefined) {
-  if (typeof value === "number") {
-    return Number.isFinite(value) ? value : 0;
-  }
-
-  if (typeof value === "string") {
-    const sanitized = value.replace(/[^0-9]/g, "");
-    return Number.parseInt(sanitized, 10) || 0;
-  }
-
-  return 0;
-}
-
 function formatRupiah(value: number) {
   return "Rp " + value.toLocaleString("id-ID");
 }
 
-function isPaidStatus(value: string | null | undefined) {
-  const status = String(value || "").trim().toLowerCase();
-  return status === "paid" || status === "settlement";
+async function getAdminDashboardData(): Promise<Required<DashboardResponse>> {
+  const headersList = await headers();
+  const host = headersList.get("x-forwarded-host") ?? headersList.get("host");
+  const protocol = headersList.get("x-forwarded-proto") ?? "http";
+
+  const fallback: Required<DashboardResponse> = {
+    totals: {
+      users: 0,
+      locations: 0,
+      tags: 0,
+      bookings: 0,
+    },
+    bookingSummary: {
+      totalOrder: 0,
+      paidOrders: 0,
+      totalLocations: 0,
+      totalRevenue: 0,
+    },
+    reviewCount: 0,
+    avgRating: "0.0",
+    ratingDist: [5, 4, 3, 2, 1].map((star) => ({ star, count: 0, pct: 0 })),
+    recentReviews: [],
+    recentBookings: [],
+    message: "",
+  };
+
+  if (!host) {
+    return fallback;
+  }
+
+  try {
+    const response = await fetch(`${protocol}://${host}/api/admin/dashboard`, {
+      method: "GET",
+      cache: "no-store",
+      headers: {
+        cookie: headersList.get("cookie") ?? "",
+      },
+    });
+
+    if (!response.ok) {
+      return fallback;
+    }
+
+    const data = (await response.json()) as DashboardResponse;
+
+    return {
+      ...fallback,
+      ...data,
+      totals: {
+        ...fallback.totals,
+        ...data.totals,
+      },
+      bookingSummary: {
+        ...fallback.bookingSummary,
+        ...data.bookingSummary,
+      },
+      ratingDist: data.ratingDist ?? fallback.ratingDist,
+      recentReviews: data.recentReviews ?? fallback.recentReviews,
+      recentBookings: data.recentBookings ?? fallback.recentBookings,
+      avgRating: data.avgRating ?? fallback.avgRating,
+      reviewCount: data.reviewCount ?? fallback.reviewCount,
+      message: data.message ?? "",
+    };
+  } catch (error) {
+    console.error("Fetch admin dashboard API error:", error);
+    return fallback;
+  }
 }
 
 export default async function AdminPage() {
-  const supabase = createServiceRoleClient();
-
-  const [
-    profilesCountResult,
-    locationsCountResult,
-    tagsCountResult,
-    ordersCountResult,
-    ordersSummaryResult,
-    orderItemsCountResult,
-    recentOrdersResult,
-    reviewsResult,
-  ] = await Promise.all([
-    supabase.from("profiles").select("user_id", { count: "exact", head: true }),
-    supabase
-      .from("shooting_locations")
-      .select("shooting_location_id", { count: "exact", head: true }),
-    supabase.from("tags").select("tag_id", { count: "exact", head: true }),
-    supabase.from("orders").select("order_id", { count: "exact", head: true }),
-    supabase.from("orders").select("payment_status, total_price"),
-    supabase.from("order_items").select("order_id", { count: "exact", head: true }),
-    supabase
-      .from("orders")
-      .select("order_id, user_id, created_at")
-      .order("created_at", { ascending: false })
-      .limit(5),
-    supabase.from("reviews").select("review_id, user_id, location_id, rating, comment"),
-  ]);
-
-  const totalUsers = profilesCountResult.count ?? 0;
-  const totalLocations = locationsCountResult.count ?? 0;
-  const totalTags = tagsCountResult.count ?? 0;
-  const totalBookings = ordersCountResult.count ?? 0;
-  const orderSummaryRows = (ordersSummaryResult.data ?? []) as OrderSummaryRow[];
-  const bookingSummary = {
-    totalOrder: orderSummaryRows.length,
-    paidOrders: orderSummaryRows.filter((order) => isPaidStatus(order.payment_status))
-      .length,
-    totalLocations: orderItemsCountResult.count ?? 0,
-    totalRevenue: orderSummaryRows.reduce(
-      (acc, order) => acc + parseNumber(order.total_price),
-      0,
-    ),
-  };
-
-  const reviewRows = (reviewsResult.data ?? []) as ReviewRow[];
-  const reviewLocationIds = [
-    ...new Set(reviewRows.map((review) => review.location_id)),
-  ];
-
-  let reviewLocationsMap = new Map<string, ReviewLocationRow>();
-
-  if (reviewLocationIds.length > 0) {
-    const { data: reviewLocationsData } = await supabase
-      .from("shooting_locations")
-      .select(
-        "shooting_location_id, shooting_location_name, shooting_location_city",
-      )
-      .in("shooting_location_id", reviewLocationIds);
-
-    reviewLocationsMap = new Map(
-      ((reviewLocationsData ?? []) as ReviewLocationRow[]).map((location) => [
-        location.shooting_location_id,
-        location,
-      ]),
-    );
-  }
-
-  const reviews: ReviewSummaryRow[] = reviewRows.map((review) => {
-    const location = reviewLocationsMap.get(review.location_id);
-
-    return {
-      id: review.review_id,
-      userName: `User ${review.user_id.slice(0, 8)}`,
-      locationTitle: location?.shooting_location_name ?? "Lokasi tidak ditemukan",
-      location: location?.shooting_location_city ?? "-",
-      rating: Number(review.rating) || 0,
-      comment: review.comment?.trim() || "-",
-    };
-  });
-
-  const avgRating =
-    reviews.length > 0
-      ? (
-          reviews.reduce((acc, review) => acc + review.rating, 0) /
-          reviews.length
-        ).toFixed(1)
-      : "0.0";
-  const ratingDist = [5, 4, 3, 2, 1].map((star) => ({
-    star,
-    count: reviews.filter((review) => review.rating === star).length,
-    pct:
-      reviews.length > 0
-        ? (reviews.filter((review) => review.rating === star).length /
-            reviews.length) *
-          100
-        : 0,
-  }));
-  const recentReviews = [...reviews].slice(0, 6);
-
-  const recentOrders = (recentOrdersResult.data ?? []) as OrderRow[];
-
-  let recentBookings: RecentBookingRow[] = [];
-
-  if (recentOrders.length > 0) {
-    const orderIds = recentOrders.map((order) => order.order_id);
-
-    const { data: orderItemsData } = await supabase
-      .from("order_items")
-      .select("order_id, location_id, booking_start, booking_end")
-      .in("order_id", orderIds);
-
-    const orderItems = (orderItemsData ?? []) as OrderItemRow[];
-    const locationIds = [
-      ...new Set(orderItems.map((item) => item.location_id)),
-    ];
-
-    const { data: locationsData } = await supabase
-      .from("shooting_locations")
-      .select("shooting_location_id, shooting_location_name")
-      .in("shooting_location_id", locationIds);
-
-    const locations = (locationsData ?? []) as LocationRow[];
-    const locationMap = new Map(
-      locations.map((loc) => [
-        loc.shooting_location_id,
-        loc.shooting_location_name,
-      ]),
-    );
-
-    recentBookings = recentOrders.map((order) => {
-      const itemsForOrder = orderItems.filter(
-        (item) => item.order_id === order.order_id,
-      );
-
-      const locationNames = itemsForOrder
-        .map(
-          (item) =>
-            locationMap.get(item.location_id) ?? "Lokasi tidak ditemukan",
-        )
-        .filter((name, index, arr) => arr.indexOf(name) === index);
-
-      const sortedByStart = [...itemsForOrder].sort((a, b) =>
-        a.booking_start.localeCompare(b.booking_start),
-      );
-      const firstItem = sortedByStart[0];
-      const lastItem = sortedByStart[sortedByStart.length - 1];
-
-      const dateRange =
-        firstItem && lastItem
-          ? formatDateRange(firstItem.booking_start, lastItem.booking_end)
-          : "-";
-
-      return {
-        orderId: order.order_id,
-        userLabel: order.user_id,
-        locationNames:
-          locationNames.length > 0 ? locationNames.join(", ") : "-",
-        dateRange,
-      };
-    });
-  }
+  const dashboardData = await getAdminDashboardData();
+  const { totals, bookingSummary, avgRating, ratingDist, recentReviews, recentBookings, reviewCount } =
+    dashboardData;
 
   const stats = [
     {
       title: "Total Lokasi",
-      value: String(totalLocations),
+      value: String(totals.locations),
       icon: MapPin,
       description: "Lokasi aktif",
       href: "/admin/locations",
     },
     {
       title: "Total Tag",
-      value: String(totalTags),
+      value: String(totals.tags),
       icon: Tag,
       description: "Tag tersedia",
       href: "/admin/tags",
     },
     {
       title: "Total Booking",
-      value: String(totalBookings),
+      value: String(totals.bookings),
       icon: TrendingUp,
       description: "Dari tabel orders",
       href: "#",
     },
     {
       title: "Total Users",
-      value: String(totalUsers),
+      value: String(totals.users),
       icon: Users,
       description: "Pengguna terdaftar",
       href: "#",
@@ -344,7 +216,7 @@ export default async function AdminPage() {
           <CardContent className="px-4">
             <p className="text-xs text-muted-foreground">Total Order</p>
             <p className="mt-1 text-2xl font-semibold text-foreground">
-              {bookingSummary.totalOrder}
+              {bookingSummary.totalOrder ?? 0}
             </p>
           </CardContent>
         </Card>
@@ -352,7 +224,7 @@ export default async function AdminPage() {
           <CardContent className="px-4">
             <p className="text-xs text-muted-foreground">Order Lunas</p>
             <p className="mt-1 text-2xl font-semibold text-foreground">
-              {bookingSummary.paidOrders}
+              {bookingSummary.paidOrders ?? 0}
             </p>
           </CardContent>
         </Card>
@@ -360,7 +232,7 @@ export default async function AdminPage() {
           <CardContent className="px-4">
             <p className="text-xs text-muted-foreground">Lokasi Dibooking</p>
             <p className="mt-1 text-2xl font-semibold text-foreground">
-              {bookingSummary.totalLocations}
+              {bookingSummary.totalLocations ?? 0}
             </p>
           </CardContent>
         </Card>
@@ -370,7 +242,7 @@ export default async function AdminPage() {
               Total Nilai Transaksi
             </p>
             <p className="mt-1 text-2xl font-semibold text-foreground">
-              {formatRupiah(bookingSummary.totalRevenue)}
+              {formatRupiah(bookingSummary.totalRevenue ?? 0)}
             </p>
           </CardContent>
         </Card>
@@ -386,7 +258,7 @@ export default async function AdminPage() {
             <div className="pb-1">
               <StarRating rating={Math.round(Number(avgRating))} />
               <p className="text-[10px] text-muted-foreground mt-1">
-                {reviews.length} total ulasan
+                {reviewCount} total ulasan
               </p>
             </div>
           </div>
