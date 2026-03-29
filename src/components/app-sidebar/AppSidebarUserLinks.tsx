@@ -2,11 +2,14 @@
 
 import Link from "next/link";
 import {
+  Camera,
   CalendarCheck,
   CreditCard,
   House,
+  MapPin,
   ShoppingBag,
   Sparkles,
+  Users,
 } from "lucide-react";
 
 import {
@@ -54,7 +57,49 @@ export default function AppSidebarUserLinks({
           <Link href="/" className={itemClassName}>
             <House className={iconClassName} />
             <span className={labelClassName}>
-              Home
+              Dashboard
+            </span>
+          </Link>
+        </SidebarMenuButton>
+      </SidebarMenuItem>
+      <SidebarMenuItem className={itemWrapperClassName}>
+        <SidebarMenuButton
+          asChild
+          className={buttonClassName}
+          isActive={isPathActive(pathname, "/locations")}
+        >
+          <Link href="/locations" className={itemClassName}>
+            <MapPin className={iconClassName} />
+            <span className={labelClassName}>
+              Locations
+            </span>
+          </Link>
+        </SidebarMenuButton>
+      </SidebarMenuItem>
+      <SidebarMenuItem className={itemWrapperClassName}>
+        <SidebarMenuButton
+          asChild
+          className={buttonClassName}
+          isActive={isPathActive(pathname, "/crew")}
+        >
+          <Link href="/crew" className={itemClassName}>
+            <Users className={iconClassName} />
+            <span className={labelClassName}>
+              Crew
+            </span>
+          </Link>
+        </SidebarMenuButton>
+      </SidebarMenuItem>
+      <SidebarMenuItem className={itemWrapperClassName}>
+        <SidebarMenuButton
+          asChild
+          className={buttonClassName}
+          isActive={isPathActive(pathname, "/equipment")}
+        >
+          <Link href="/equipment" className={itemClassName}>
+            <Camera className={iconClassName} />
+            <span className={labelClassName}>
+              Equipment
             </span>
           </Link>
         </SidebarMenuButton>

@@ -2,6 +2,7 @@
 
 import Image from "next/image";
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import {
   Users,
   Check,
@@ -83,16 +84,35 @@ export default function LocationCard({
   pax,
   rate,
   tags,
+  redirectToCartOnAdd = false,
 }: LocationCardProps) {
+  const router = useRouter();
   const { addItem, isInCart } = useCart();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [reviews, setReviews] = useState<LocationReview[]>([]);
   const [isLoadingReviews, setIsLoadingReviews] = useState(false);
   const [reviewsError, setReviewsError] = useState<string | null>(null);
-  const isAdded = isInCart(id);
+  const isAdded = isInCart(id, "location");
   const images = imageUrl && imageUrl.length > 0 ? imageUrl : ["/hero.webp"];
   const hasReview = rate !== null && Number.isFinite(rate);
   const ratingLabel = formatLocationRating(rate);
+
+  const handleAddToCart = () => {
+    addItem({
+      id,
+      itemType: "location",
+      name,
+      subtitle: city,
+      price,
+      imageUrl: images[0],
+      tags,
+      requiresDateRange: true,
+    });
+
+    if (redirectToCartOnAdd) {
+      router.push("/cart");
+    }
+  };
 
   useEffect(() => {
     if (!isDialogOpen) {
@@ -214,16 +234,7 @@ export default function LocationCard({
           type="button"
           className="mt-3 w-full sm:mt-4"
           variant={isAdded ? "secondary" : "default"}
-          onClick={() =>
-            addItem({
-              id,
-              name,
-              city,
-              price,
-              imageUrl: images[0],
-              tags,
-            })
-          }
+          onClick={handleAddToCart}
         >
           {isAdded ? (
             <>
@@ -239,8 +250,8 @@ export default function LocationCard({
         </Button>
       </div>
 
-      <DialogContent className="h-[92vh] w-[96vw] max-w-[2000px] overflow-hidden p-0">
-        <div className="grid h-full grid-cols-1 lg:grid-cols-[minmax(0,1fr)_380px]">
+      <DialogContent className="h-[94vh] w-[98vw] max-w-[2400px] overflow-hidden p-0">
+        <div className="grid h-full grid-cols-1 lg:grid-cols-[minmax(0,1fr)_420px]">
           <section className="flex min-h-0 flex-col border-b border-border/40 lg:border-r lg:border-b-0">
             <div className="relative bg-muted/20">
               <Carousel className="w-full">
@@ -339,16 +350,7 @@ export default function LocationCard({
                 type="button"
                 className="mt-5 w-full"
                 variant={isAdded ? "secondary" : "default"}
-                onClick={() =>
-                  addItem({
-                    id,
-                    name,
-                    city,
-                    price,
-                    imageUrl: images[0],
-                    tags,
-                  })
-                }
+                onClick={handleAddToCart}
               >
                 {isAdded ? (
                   <>

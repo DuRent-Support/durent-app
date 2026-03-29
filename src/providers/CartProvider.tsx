@@ -12,6 +12,7 @@ import {
   type CartDateRange,
   type CartItem,
   type CartItemInput,
+  type CartItemType,
 } from "@/types/cart";
 
 const CART_STORAGE_KEY = "durent-cart";
@@ -50,6 +51,24 @@ function normalizeDateRange(
   };
 }
 
+function normalizeItemType(value: unknown): CartItemType {
+  if (value === "crew" || value === "equipment" || value === "location") {
+    return value;
+  }
+
+  return "location";
+}
+
+function buildCartId(itemType: CartItemType, sourceId: string) {
+  return `${itemType}:${sourceId}`;
+}
+
+function getDefaultSubtitle(itemType: CartItemType) {
+  if (itemType === "crew") return "Crew";
+  if (itemType === "equipment") return "Equipment";
+  return "Location";
+}
+
 function parseStoredCart(value: string | null): CartItem[] {
   if (!value) {
     return [];
@@ -63,26 +82,59 @@ function parseStoredCart(value: string | null): CartItem[] {
     }
 
     return parsed
-      .filter((item): item is CartItem => {
-        return (
-          typeof item?.id === "string" &&
-          typeof item?.name === "string" &&
-          typeof item?.city === "string" &&
-          (typeof item?.price === "string" || typeof item?.price === "number")
-        );
+      .map((item): CartItem | null => {
+        if (
+          typeof item?.id !== "string" ||
+          typeof item?.name !== "string" ||
+          (typeof item?.price !== "string" && typeof item?.price !== "number")
+        ) {
+          return null;
+        }
+
+        const itemType = normalizeItemType(item.itemType);
+        const sourceId =
+          typeof item.sourceId === "string" && item.sourceId.length > 0
+            ? item.sourceId
+            : item.id.includes(":")
+              ? item.id.split(":").slice(1).join(":")
+              : item.id;
+
+        if (!sourceId) {
+          return null;
+        }
+
+        const requiresDateRange = true;
+
+        const subtitleCandidate =
+          typeof item.subtitle === "string"
+            ? item.subtitle
+            : typeof item.city === "string"
+              ? item.city
+              : getDefaultSubtitle(itemType);
+
+        return {
+          id: buildCartId(itemType, sourceId),
+          sourceId,
+          itemType,
+          subtitle: subtitleCandidate,
+          requiresDateRange,
+          name: item.name,
+          price: String(item.price),
+          imageUrl:
+            typeof item.imageUrl === "string" && item.imageUrl.length > 0
+              ? item.imageUrl
+              : "/hero.webp",
+          tags: Array.isArray(item.tags)
+            ? item.tags.filter(
+                (tag: unknown): tag is string => typeof tag === "string",
+              )
+            : [],
+          dateRange: requiresDateRange
+            ? normalizeDateRange(item.dateRange ?? null)
+            : null,
+        };
       })
-      .map((item) => ({
-        ...item,
-        price: String(item.price),
-        imageUrl:
-          typeof item.imageUrl === "string" && item.imageUrl.length > 0
-            ? item.imageUrl
-            : "/hero.webp",
-        tags: Array.isArray(item.tags)
-          ? item.tags.filter((tag) => typeof tag === "string")
-          : [],
-        dateRange: normalizeDateRange(item.dateRange ?? null),
-      }));
+      .filter((item): item is CartItem => item !== null);
   } catch {
     return [];
   }
@@ -147,7 +199,13 @@ function persistCart(items: CartItem[]) {
   }
 }
 
-export function getCartItemDays(item: Pick<CartItem, "dateRange">) {
+export function getCartItemDays(
+  item: Pick<CartItem, "dateRange" | "requiresDateRange">,
+) {
+  if (!item.requiresDateRange) {
+    return 1;
+  }
+
   if (!item.dateRange?.from || !item.dateRange?.to) {
     return 0;
   }
@@ -168,17 +226,30 @@ export function CartProvider({ children }: { children: ReactNode }) {
   const value = useMemo<CartContextValue>(() => {
     const addItem = (item: CartItemInput) => {
       const currentItems = readCartSnapshot();
+      const itemType = item.itemType ?? "location";
+      const sourceId = item.id;
+      const cartId = buildCartId(itemType, sourceId);
 
-      if (currentItems.some((currentItem) => currentItem.id === item.id)) {
+      if (currentItems.some((currentItem) => currentItem.id === cartId)) {
         return;
       }
+
+      const requiresDateRange = true;
+
+      const subtitle =
+        item.subtitle && item.subtitle.trim().length > 0
+          ? item.subtitle.trim()
+          : getDefaultSubtitle(itemType);
 
       persistCart([
         ...currentItems,
         {
-          id: item.id,
+          id: cartId,
+          sourceId,
+          itemType,
+          subtitle,
+          requiresDateRange,
           name: item.name,
-          city: item.city,
           price: String(item.price),
           imageUrl:
             item.imageUrl && item.imageUrl.length > 0
@@ -198,14 +269,16 @@ export function CartProvider({ children }: { children: ReactNode }) {
 
     const updateDateRange = (id: string, dateRange: CartDateRange) => {
       persistCart(
-        readCartSnapshot().map((currentItem) =>
-          currentItem.id === id
-            ? {
-                ...currentItem,
-                dateRange: normalizeDateRange(dateRange),
-              }
-            : currentItem,
-        ),
+        readCartSnapshot().map((currentItem) => {
+          if (currentItem.id !== id || !currentItem.requiresDateRange) {
+            return currentItem;
+          }
+
+          return {
+            ...currentItem,
+            dateRange: normalizeDateRange(dateRange),
+          };
+        }),
       );
     };
 
@@ -213,8 +286,9 @@ export function CartProvider({ children }: { children: ReactNode }) {
       persistCart([]);
     };
 
-    const isInCart = (id: string) => {
-      return items.some((item) => item.id === id);
+    const isInCart = (id: string, itemType: CartItemType = "location") => {
+      const cartId = buildCartId(itemType, id);
+      return items.some((item) => item.id === cartId);
     };
 
     const getDays = (item: CartItem) => {

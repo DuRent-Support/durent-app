@@ -10,6 +10,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
+import { Input } from "@/components/ui/input";
 import {
   Popover,
   PopoverContent,
@@ -21,9 +22,7 @@ import {
   buildWhatsappLink,
   buildWhatsappMessage,
 } from "@/lib/whatsappMessageHelper";
-import { type CartDateRange } from "@/types/cart";
-
-import {logger} from "@/lib/logger";
+import { type CartDateRange, type CartItem } from "@/types/cart";
 
 function parsePrice(price: string | number | null | undefined) {
   const numericValue = String(price ?? "").replace(/[^0-9]/g, "");
@@ -89,6 +88,18 @@ type BookedRange = {
   from: Date;
   to: Date;
 };
+
+const REFERRAL_DISCOUNTS: Record<string, number> = {
+  DURENT10: 10,
+  CREW5: 5,
+  EQUIP8: 8,
+};
+
+function getItemTypeLabel(itemType: CartItem["itemType"]) {
+  if (itemType === "location") return "Location";
+  if (itemType === "crew") return "Crew";
+  return "Equipment";
+}
 
 async function ensureSnapLoaded(snapUrl: string, clientKey: string) {
   const win = window as Window & { snap?: Snap };
@@ -193,19 +204,40 @@ export default function CartPage() {
   const router = useRouter();
   const [isSnapReady, setIsSnapReady] = useState(false);
   const [isCheckingOut, setIsCheckingOut] = useState(false);
+  const [referralInput, setReferralInput] = useState("");
+  const [appliedReferral, setAppliedReferral] = useState<{
+    code: string;
+    percent: number;
+  } | null>(null);
+  const [referralError, setReferralError] = useState<string | null>(null);
   const [bookedRangesByLocation, setBookedRangesByLocation] = useState<
     Record<string, BookedRange[]>
   >({});
   const { items, removeItem, updateDateRange, clearCart, totalItems, getDays } =
     useCart();
   const hasUnselectedDateRange = items.some(
-    (item) => !hasSelectedDateRange(item.dateRange),
+    (item) => item.requiresDateRange && !hasSelectedDateRange(item.dateRange),
   );
+  const hasNonLocationItems = items.some((item) => item.itemType !== "location");
+  const hasLocationItems = items.some((item) => item.itemType === "location");
+
+  const sectionedItems = useMemo(
+    () => ({
+      location: items.filter((item) => item.itemType === "location"),
+      crew: items.filter((item) => item.itemType === "crew"),
+      equipment: items.filter((item) => item.itemType === "equipment"),
+    }),
+    [items],
+  );
+
   const whatsappHref = useMemo(() => {
-    const message = buildWhatsappMessage(items);
-    logger.info("Generated WhatsApp message:", message); 
+    const baseMessage = buildWhatsappMessage(items);
+    const message = appliedReferral
+      ? `${baseMessage}\nKode referral: ${appliedReferral.code} (${appliedReferral.percent}% diskon)`
+      : baseMessage;
+
     return buildWhatsappLink("628111029064", message);
-  }, [items]);
+  }, [items, appliedReferral]);
   const todayTimestamp = useMemo(() => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
@@ -240,9 +272,49 @@ export default function CartPage() {
     void ensureSnap();
   }, [ensureSnap]);
 
+  const handleApplyReferral = () => {
+    const normalizedCode = referralInput.trim().toUpperCase();
+
+    if (!normalizedCode) {
+      setReferralError("Masukkan kode referral dulu.");
+      return;
+    }
+
+    const discountPercent = REFERRAL_DISCOUNTS[normalizedCode];
+
+    if (!discountPercent) {
+      setAppliedReferral(null);
+      setReferralError("Kode referral tidak valid.");
+      return;
+    }
+
+    setAppliedReferral({
+      code: normalizedCode,
+      percent: discountPercent,
+    });
+    setReferralError(null);
+  };
+
+  const handleClearReferral = () => {
+    setReferralInput("");
+    setAppliedReferral(null);
+    setReferralError(null);
+  };
+
+  const handleClearCart = () => {
+    clearCart();
+    handleClearReferral();
+  };
+
   useEffect(() => {
     const loadBookedRanges = async () => {
-      const locationIds = [...new Set(items.map((item) => item.id))];
+      const locationIds = [
+        ...new Set(
+          items
+            .filter((item) => item.itemType === "location")
+            .map((item) => item.sourceId),
+        ),
+      ];
 
       if (locationIds.length === 0) {
         setBookedRangesByLocation({});
@@ -308,6 +380,13 @@ export default function CartPage() {
       return;
     }
 
+    if (hasNonLocationItems || !hasLocationItems) {
+      console.error(
+        "Checkout Midtrans saat ini hanya mendukung item lokasi. Gunakan WhatsApp untuk crew/equipment.",
+      );
+      return;
+    }
+
     if (isCheckingOut) {
       return;
     }
@@ -327,12 +406,14 @@ export default function CartPage() {
       const days = getDays(item);
       const unitPrice = parsePrice(item.price);
       const fromDateOnly = formatDateOnlyLocal(item.dateRange?.from);
-      const toDateOnly = formatDateOnlyLocal(item.dateRange?.to ?? item.dateRange?.from);
-      // console.log("Processing item for checkout: item", item);
+      const toDateOnly = formatDateOnlyLocal(
+        item.dateRange?.to ?? item.dateRange?.from,
+      );
+
       return {
-        id: item.id,
+        id: item.sourceId,
         name: item.name,
-        city: item.city,
+        city: item.subtitle,
         dateRange: {
           from: fromDateOnly,
           to: toDateOnly,
@@ -342,8 +423,6 @@ export default function CartPage() {
         subtotal: unitPrice * days,
       };
     });
-
-    // console.log("Checkout items:", purchasedItems);
 
     const response = await fetch("/api/midtrans/tokenizer", {
       method: "POST",
@@ -372,15 +451,15 @@ export default function CartPage() {
       return;
     }
 
-    clearCart();
+    handleClearCart();
 
     snap.pay(tokenizerResult.token, {
-      onSuccess: (result) => {
+      onSuccess: () => {
         // console.log("Midtrans success:", result);
         router.push("/payments");
         router.refresh();
       },
-      onPending: (result) => {
+      onPending: () => {
         // console.log("Midtrans pending:", result);
         router.push("/payments");
         router.refresh();
@@ -404,6 +483,157 @@ export default function CartPage() {
   const subtotal = items.reduce((sum, item) => {
     return sum + parsePrice(item.price) * getDays(item);
   }, 0);
+
+  const discountAmount = appliedReferral
+    ? Math.floor((subtotal * appliedReferral.percent) / 100)
+    : 0;
+
+  const totalAfterDiscount = Math.max(0, subtotal - discountAmount);
+
+  const renderCartItem = (item: CartItem) => {
+    const days = getDays(item);
+    const itemSubtotal = parsePrice(item.price) * days;
+    const bookedRanges = bookedRangesByLocation[item.sourceId] ?? [];
+
+    const isBookedDate = (date: Date) => {
+      return bookedRanges.some((range) => isDateWithinRange(date, range));
+    };
+
+    return (
+      <article
+        key={item.id}
+        className="rounded-3xl border border-border/40 bg-card/40 p-4 shadow-sm backdrop-blur-sm"
+      >
+        <div className="flex flex-col gap-4 sm:flex-row">
+          <div className="relative h-44 w-full overflow-hidden rounded-2xl sm:h-36 sm:w-28">
+            <Image
+              src={item.imageUrl}
+              alt={item.name}
+              fill
+              sizes="(max-width: 640px) 100vw, 112px"
+              className="object-cover"
+            />
+          </div>
+          <div className="flex min-w-0 flex-1 flex-col justify-between gap-4">
+            <div className="flex items-start justify-between gap-4">
+              <div className="min-w-0">
+                <h2 className="truncate text-lg font-semibold text-foreground">
+                  {item.name}
+                </h2>
+                <p className="mt-1 text-sm text-muted-foreground">{item.subtitle}</p>
+                {item.tags.length > 0 ? (
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {item.tags.slice(0, 3).map((tag) => (
+                      <span
+                        key={tag}
+                        className="rounded-full bg-secondary px-2.5 py-1 text-xs font-medium text-secondary-foreground"
+                      >
+                        {tag}
+                      </span>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="text-muted-foreground hover:text-destructive"
+                onClick={() => removeItem(item.id)}
+              >
+                <Trash2 className="h-4 w-4" />
+              </Button>
+            </div>
+
+            <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end">
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="h-auto w-full justify-start rounded-2xl border-border/50 px-4 py-3 text-left"
+                  >
+                    <CalendarIcon className="mr-3 h-4 w-4 shrink-0 text-muted-foreground" />
+                    <div className="min-w-0">
+                      <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
+                        Tanggal sewa
+                      </p>
+                      <p
+                        className={cn(
+                          "truncate text-sm font-medium",
+                          hasSelectedDateRange(item.dateRange)
+                            ? "text-foreground"
+                            : "text-muted-foreground",
+                        )}
+                      >
+                        {formatRange(item.dateRange)}
+                      </p>
+                    </div>
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="start">
+                  <Calendar
+                    mode="range"
+                    selected={item.dateRange ?? undefined}
+                    modifiers={{
+                      booked: isBookedDate,
+                    }}
+                    modifiersClassNames={{
+                      booked:
+                        "bg-destructive/20 text-destructive opacity-100 line-through",
+                    }}
+                    onSelect={(range) => {
+                      if (!range?.from) {
+                        return;
+                      }
+
+                      updateDateRange(item.id, {
+                        from: range.from,
+                        to: range.to ?? range.from,
+                      });
+                    }}
+                    disabled={(date) => {
+                      const normalizedDate = normalizeToStartOfDay(date);
+
+                      if (!normalizedDate) {
+                        return true;
+                      }
+
+                      const target = normalizedDate.getTime();
+
+                      if (target < todayTimestamp) {
+                        return true;
+                      }
+
+                      if (item.itemType === "location" && isBookedDate(normalizedDate)) {
+                        return true;
+                      }
+
+                      return false;
+                    }}
+                    numberOfMonths={1}
+                    className={cn("p-3 pointer-events-auto")}
+                  />
+                </PopoverContent>
+              </Popover>
+
+              <div className="rounded-2xl border border-border/40 bg-background/70 px-4 py-3 lg:min-w-44">
+                <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
+                  Subtotal
+                </p>
+                <p className="mt-1 text-base font-semibold text-primary">
+                  {formatPrice(itemSubtotal)}
+                </p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {days > 0 ? `${days} hari x ${item.price}` : "Pilih tanggal dulu"}
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </article>
+    );
+  };
 
   return (
     <div className="mx-auto flex w-full max-w-6xl flex-col gap-8 px-6 py-8">
@@ -441,7 +671,7 @@ export default function CartPage() {
               type="button"
               variant="ghost"
               className="text-muted-foreground"
-              onClick={clearCart}
+              onClick={handleClearCart}
             >
               Hapus semua
             </Button>
@@ -458,227 +688,128 @@ export default function CartPage() {
             Keranjang masih kosong
           </h2>
           <p className="mt-2 max-w-md text-sm text-muted-foreground">
-            Tambahkan lokasi dari halaman utama dulu, lalu atur rentang
-            tanggalnya di sini.
+            Tambahkan lokasi, crew, atau equipment ke keranjang lalu lanjutkan
+            checkout dari sini.
           </p>
           <Button asChild className="mt-6">
-            <Link href="/">Jelajahi lokasi</Link>
+            <Link href="/locations">Jelajahi katalog</Link>
           </Button>
         </div>
       ) : (
         <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
-          <div className="space-y-4">
-            {items.map((item) => {
-              const days = getDays(item);
-              const itemSubtotal = parsePrice(item.price) * days;
-              const bookedRanges = bookedRangesByLocation[item.id] ?? [];
+          <div className="space-y-6">
+            {sectionedItems.location.length > 0 ? (
+              <section className="space-y-3">
+                <p className="text-xs uppercase tracking-[0.25em] text-muted-foreground">
+                  Location
+                </p>
+                <div className="space-y-4">
+                  {sectionedItems.location.map((item) => renderCartItem(item))}
+                </div>
+              </section>
+            ) : null}
 
-              const isBookedDate = (date: Date) => {
-                return bookedRanges.some((range) =>
-                  isDateWithinRange(date, range),
-                );
-              };
+            {sectionedItems.crew.length > 0 ? (
+              <section className="space-y-3">
+                <p className="text-xs uppercase tracking-[0.25em] text-muted-foreground">
+                  Crew
+                </p>
+                <div className="space-y-4">
+                  {sectionedItems.crew.map((item) => renderCartItem(item))}
+                </div>
+              </section>
+            ) : null}
 
-              return (
-                <article
-                  key={item.id}
-                  className="rounded-3xl border border-border/40 bg-card/40 p-4 shadow-sm backdrop-blur-sm"
-                >
-                  <div className="flex flex-col gap-4 sm:flex-row">
-                    <div className="relative h-44 w-full overflow-hidden rounded-2xl sm:h-36 sm:w-28">
-                      <Image
-                        src={item.imageUrl}
-                        alt={item.name}
-                        fill
-                        sizes="(max-width: 640px) 100vw, 112px"
-                        className="object-cover"
-                      />
-                    </div>
-                    <div className="flex min-w-0 flex-1 flex-col justify-between gap-4">
-                      <div className="flex items-start justify-between gap-4">
-                        <div className="min-w-0">
-                          <h2 className="truncate text-lg font-semibold text-foreground">
-                            {item.name}
-                          </h2>
-                          <p className="mt-1 text-sm text-muted-foreground">
-                            {item.city}
-                          </p>
-                          {item.tags.length > 0 ? (
-                            <div className="mt-3 flex flex-wrap gap-2">
-                              {item.tags.slice(0, 3).map((tag) => (
-                                <span
-                                  key={tag}
-                                  className="rounded-full bg-secondary px-2.5 py-1 text-xs font-medium text-secondary-foreground"
-                                >
-                                  {tag}
-                                </span>
-                              ))}
-                            </div>
-                          ) : null}
-                        </div>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon"
-                          className="text-muted-foreground hover:text-destructive"
-                          onClick={() => removeItem(item.id)}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </div>
-
-                      <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end">
-                        <Popover>
-                          <PopoverTrigger asChild>
-                            <Button
-                              type="button"
-                              variant="outline"
-                              className="h-auto w-full justify-start rounded-2xl border-border/50 px-4 py-3 text-left"
-                            >
-                              <CalendarIcon className="mr-3 h-4 w-4 shrink-0 text-muted-foreground" />
-                              <div className="min-w-0">
-                                <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
-                                  Tanggal sewa
-                                </p>
-                                <p
-                                  className={cn(
-                                    "truncate text-sm font-medium",
-                                    hasSelectedDateRange(item.dateRange)
-                                      ? "text-foreground"
-                                      : "text-muted-foreground",
-                                  )}
-                                >
-                                  {formatRange(item.dateRange)}
-                                </p>
-                              </div>
-                            </Button>
-                          </PopoverTrigger>
-                          <PopoverContent className="w-auto p-0" align="start">
-                            <Calendar
-                              mode="range"
-                              selected={item.dateRange ?? undefined}
-                              modifiers={{
-                                booked: isBookedDate,
-                              }}
-                              modifiersClassNames={{
-                                booked:
-                                  "bg-destructive/20 text-destructive opacity-100 line-through",
-                              }}
-                              onSelect={(range) => {
-                                console.log("[Cart Calendar] onSelect raw range:", {
-                                  itemId: item.id,
-                                  from: range?.from,
-                                  to: range?.to,
-                                  fromISO: range?.from?.toISOString?.(),
-                                  toISO: range?.to?.toISOString?.(),
-                                  fromLocalDateOnly: formatDateOnlyLocal(range?.from),
-                                  toLocalDateOnly: formatDateOnlyLocal(
-                                    range?.to ?? range?.from,
-                                  ),
-                                });
-
-                                if (!range?.from) {
-                                  console.log(
-                                    "[Cart Calendar] onSelect ignored because from is empty",
-                                    { itemId: item.id },
-                                  );
-                                  return;
-                                }
-
-                                const nextRange = {
-                                  from: range.from,
-                                  to: range.to ?? range.from,
-                                };
-
-                                console.log("[Cart Calendar] updateDateRange payload:", {
-                                  itemId: item.id,
-                                  from: nextRange.from,
-                                  to: nextRange.to,
-                                  fromISO: nextRange.from.toISOString(),
-                                  toISO: nextRange.to.toISOString(),
-                                  fromLocalDateOnly: formatDateOnlyLocal(nextRange.from),
-                                  toLocalDateOnly: formatDateOnlyLocal(nextRange.to),
-                                });
-
-                                updateDateRange(item.id, {
-                                  from: nextRange.from,
-                                  to: nextRange.to,
-                                });
-                              }}
-                              disabled={(date) => {
-                                const normalizedDate =
-                                  normalizeToStartOfDay(date);
-
-                                if (!normalizedDate) {
-                                  return true;
-                                }
-
-                                const target = normalizedDate.getTime();
-
-                                if (target < todayTimestamp) {
-                                  return true;
-                                }
-
-                                if (isBookedDate(normalizedDate)) {
-                                  return true;
-                                }
-
-                                return false;
-                              }}
-                              numberOfMonths={1}
-                              className={cn("p-3 pointer-events-auto")}
-                            />
-                          </PopoverContent>
-                        </Popover>
-                        <div className="rounded-2xl border border-border/40 bg-background/70 px-4 py-3 lg:min-w-44">
-                          <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
-                            Subtotal
-                          </p>
-                          <p className="mt-1 text-base font-semibold text-primary">
-                            {formatPrice(itemSubtotal)}
-                          </p>
-                          <p className="mt-1 text-xs text-muted-foreground">
-                            {days > 0
-                              ? `${days} hari x ${item.price}`
-                              : "Pilih tanggal dulu"}
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </article>
-              );
-            })}
+            {sectionedItems.equipment.length > 0 ? (
+              <section className="space-y-3">
+                <p className="text-xs uppercase tracking-[0.25em] text-muted-foreground">
+                  Equipment
+                </p>
+                <div className="space-y-4">
+                  {sectionedItems.equipment.map((item) => renderCartItem(item))}
+                </div>
+              </section>
+            ) : null}
           </div>
 
           <aside className="h-fit rounded-3xl border border-border/40 bg-card/60 p-6 shadow-sm backdrop-blur-sm xl:sticky xl:top-8">
             <h2 className="font-display text-xl font-semibold text-foreground">
               Ringkasan pesanan
             </h2>
-            <div className="mt-5 space-y-4">
-              {items.map((item) => {
-                const days = getDays(item);
+            <div className="mt-5 space-y-5">
+              {([sectionedItems.location, sectionedItems.crew, sectionedItems.equipment] as const)
+                .filter((group) => group.length > 0)
+                .map((group) => (
+                  <div key={group[0].itemType} className="space-y-3">
+                    <p className="text-[11px] uppercase tracking-[0.2em] text-muted-foreground">
+                      {getItemTypeLabel(group[0].itemType)}
+                    </p>
+                    <div className="space-y-3">
+                      {group.map((item) => {
+                        const days = getDays(item);
 
-                return (
-                  <div key={item.id} className="text-sm">
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <p className="truncate font-medium text-foreground">
-                          {item.name}
-                        </p>
-                        <p className="mt-1 text-xs text-muted-foreground">
-                          {days > 0
-                            ? `${days} hari x ${item.price}`
-                            : "Pilih tanggal dulu"}
-                        </p>
-                      </div>
-                      <span className="shrink-0 font-semibold text-foreground">
-                        {formatPrice(parsePrice(item.price) * days)}
-                      </span>
+                        return (
+                          <div key={item.id} className="text-sm">
+                            <div className="flex items-start justify-between gap-3">
+                              <div className="min-w-0">
+                                <p className="truncate font-medium text-foreground">
+                                  {item.name}
+                                </p>
+                                <p className="mt-1 text-xs text-muted-foreground">
+                                  {days > 0
+                                    ? `${days} hari x ${item.price}`
+                                    : "Pilih tanggal dulu"}
+                                </p>
+                              </div>
+                              <span className="shrink-0 font-semibold text-foreground">
+                                {formatPrice(parsePrice(item.price) * days)}
+                              </span>
+                            </div>
+                          </div>
+                        );
+                      })}
                     </div>
                   </div>
-                );
-              })}
+                ))}
+            </div>
+
+            <div className="my-5 border-t border-border/40" />
+
+            <div className="space-y-2">
+              <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
+                Referral code
+              </p>
+              <div className="flex items-center gap-2">
+                <Input
+                  value={referralInput}
+                  onChange={(event) => {
+                    setReferralInput(event.target.value);
+                    setReferralError(null);
+                  }}
+                  placeholder="Contoh: DURENT10"
+                  className="h-10"
+                />
+                <Button type="button" variant="outline" onClick={handleApplyReferral}>
+                  Apply
+                </Button>
+              </div>
+              {appliedReferral ? (
+                <div className="flex items-center justify-between rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-700">
+                  <span>
+                    Kode aktif: {appliedReferral.code} ({appliedReferral.percent}%)
+                  </span>
+                  <button
+                    type="button"
+                    className="font-semibold underline"
+                    onClick={handleClearReferral}
+                  >
+                    Hapus
+                  </button>
+                </div>
+              ) : null}
+              {referralError ? (
+                <p className="text-xs text-destructive">{referralError}</p>
+              ) : null}
             </div>
 
             <div className="my-5 border-t border-border/40" />
@@ -687,22 +818,51 @@ export default function CartPage() {
               <span>Total item</span>
               <span>{totalItems}</span>
             </div>
+            <div className="mt-2 flex items-center justify-between text-sm text-muted-foreground">
+              <span>Subtotal</span>
+              <span>{formatPrice(subtotal)}</span>
+            </div>
+            <div className="mt-2 flex items-center justify-between text-sm text-muted-foreground">
+              <span>Diskon</span>
+              <span>
+                {discountAmount > 0
+                  ? `- ${formatPrice(discountAmount)}`
+                  : formatPrice(0)}
+              </span>
+            </div>
             <div className="mt-3 flex items-center justify-between text-lg font-semibold text-foreground">
               <span>Total</span>
-              <span className="text-primary">{formatPrice(subtotal)}</span>
+              <span className="text-primary">{formatPrice(totalAfterDiscount)}</span>
             </div>
 
             <Button
               className="mt-6 w-full"
               size="lg"
               onClick={handleCheckout}
-              disabled={hasUnselectedDateRange || !isSnapReady || isCheckingOut}
+              disabled={
+                hasUnselectedDateRange ||
+                !isSnapReady ||
+                isCheckingOut ||
+                hasNonLocationItems ||
+                !hasLocationItems
+              }
             >
               {isCheckingOut ? "Memproses..." : "Checkout"}
             </Button>
             {hasUnselectedDateRange ? (
               <p className="mt-2 text-xs text-destructive">
                 Pilih tanggal sewa untuk semua item sebelum checkout.
+              </p>
+            ) : null}
+            {hasNonLocationItems ? (
+              <p className="mt-2 text-xs text-muted-foreground">
+                Checkout Midtrans saat ini hanya untuk item lokasi. Gunakan
+                WhatsApp untuk proses gabungan crew dan equipment.
+              </p>
+            ) : null}
+            {!hasLocationItems ? (
+              <p className="mt-2 text-xs text-muted-foreground">
+                Tambahkan minimal satu lokasi untuk menggunakan checkout Midtrans.
               </p>
             ) : null}
             <Button

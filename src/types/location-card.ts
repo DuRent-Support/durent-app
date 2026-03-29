@@ -10,4 +10,5 @@ export interface LocationCardProps {
   pax: number;
   rate: number | null;
   tags: string[];
+  redirectToCartOnAdd?: boolean;
 }

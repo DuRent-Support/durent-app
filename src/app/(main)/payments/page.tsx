@@ -222,7 +222,7 @@ export default function PaymentsPage() {
               Tidak ada pembayaran pending.
             </p>
             <Button asChild className="mt-4">
-              <Link href="/">Kembali jelajahi lokasi</Link>
+              <Link href="/locations">Kembali jelajahi lokasi</Link>
             </Button>
           </CardContent>
         </Card>

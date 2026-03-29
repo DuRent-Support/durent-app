@@ -8,11 +8,13 @@ import {
 } from "@/components/ui/sidebar";
 import { useCart } from "@/hooks/use-cart";
 import {
+  Camera,
   FileText,
   LayoutDashboard,
   MapPin,
   MessageSquare,
   Tag,
+  Users,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -71,6 +73,34 @@ export default function AppSidebarAdminContent({
               <MapPin className={iconClassName} />
               <span className={labelClassName}>
                 Locations
+              </span>
+            </Link>
+          </SidebarMenuButton>
+        </SidebarMenuItem>
+        <SidebarMenuItem className={itemWrapperClassName}>
+          <SidebarMenuButton
+            asChild
+            className={buttonClassName}
+            isActive={isPathActive(pathname, "/admin/crews")}
+          >
+            <Link href="/admin/crews" className={itemClassName}>
+              <Users className={iconClassName} />
+              <span className={labelClassName}>
+                Crews
+              </span>
+            </Link>
+          </SidebarMenuButton>
+        </SidebarMenuItem>
+        <SidebarMenuItem className={itemWrapperClassName}>
+          <SidebarMenuButton
+            asChild
+            className={buttonClassName}
+            isActive={isPathActive(pathname, "/admin/equipments")}
+          >
+            <Link href="/admin/equipments" className={itemClassName}>
+              <Camera className={iconClassName} />
+              <span className={labelClassName}>
+                Equipments
               </span>
             </Link>
           </SidebarMenuButton>

@@ -235,7 +235,7 @@ export default function ReservationsPage() {
           <p className="mb-6 mt-2 text-sm text-muted-foreground">
             Anda belum memiliki booking lokasi apapun.
           </p>
-          <Button onClick={() => router.push("/")}>Jelajahi Lokasi</Button>
+          <Button onClick={() => router.push("/locations")}>Jelajahi Lokasi</Button>
         </div>
       ) : (
         <div className="space-y-4">
