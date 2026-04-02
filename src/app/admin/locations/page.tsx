@@ -47,7 +47,7 @@ const emptyLocation: Omit<LocationWithTags, "shooting_location_id"> = {
   tags: [],
 };
 
-export default function LocationsPage() {
+export default function AdminLocationsPage() {
   const [locations, setLocations] = useState<LocationWithTags[]>([]);
   const [availableTags, setAvailableTags] = useState<string[]>([]);
   const [dialogOpen, setDialogOpen] = useState(false);

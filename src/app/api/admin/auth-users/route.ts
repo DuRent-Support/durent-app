@@ -8,8 +8,8 @@ type RequestBody = {
 };
 
 type ProfileImageRow = {
-  user_id: string;
-  profile_image_url: string | null;
+  user_uuid: string;
+  avatar_url: string | null;
 };
 
 export async function POST(request: Request) {
@@ -46,7 +46,7 @@ export async function POST(request: Request) {
     const { data: profile, error: profileError } = await supabase
       .from("profiles")
       .select("role")
-      .eq("user_id", user.id)
+      .eq("user_uuid", user.id)
       .single<Pick<Profile, "role">>();
 
     if (profileError || profile?.role !== "admin") {
@@ -58,8 +58,8 @@ export async function POST(request: Request) {
     const { data: profileImagesData, error: profileImagesError } =
       await serviceRoleClient
         .from("profiles")
-        .select("user_id, profile_image_url")
-        .in("user_id", sanitizedUserIds);
+        .select("user_uuid, avatar_url")
+        .in("user_uuid", sanitizedUserIds);
 
     if (profileImagesError) {
       console.error("Profile images lookup error:", profileImagesError);
@@ -67,8 +67,8 @@ export async function POST(request: Request) {
 
     const profileImageMap = new Map(
       ((profileImagesData ?? []) as ProfileImageRow[]).map((profile) => [
-        profile.user_id,
-        profile.profile_image_url,
+        profile.user_uuid,
+        profile.avatar_url,
       ]),
     );
 

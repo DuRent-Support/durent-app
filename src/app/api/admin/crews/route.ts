@@ -167,7 +167,7 @@ async function requireAdmin() {
   const { data: profile, error: profileError } = await supabase
     .from("profiles")
     .select("role")
-    .eq("user_id", user.id)
+    .eq("user_uuid", user.id)
     .single<Pick<Profile, "role">>();
 
   if (profileError || profile?.role !== "admin") {
@@ -288,7 +288,10 @@ export async function POST(request: Request) {
     const uploadResult = await uploadImageFiles(serviceRoleClient, imageFiles);
 
     if (!uploadResult.ok) {
-      return NextResponse.json({ message: uploadResult.message }, { status: 400 });
+      return NextResponse.json(
+        { message: uploadResult.message },
+        { status: 400 },
+      );
     }
 
     const { data, error } = await serviceRoleClient

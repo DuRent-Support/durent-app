@@ -52,7 +52,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const { data, error } = await supabase
           .from("profiles")
           .select("role")
-          .eq("user_id", userId)
+          .eq("user_uuid", userId)
           .maybeSingle<Pick<Profile, "role">>();
 
         if (error) {

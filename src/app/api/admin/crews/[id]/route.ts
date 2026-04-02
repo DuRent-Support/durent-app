@@ -206,7 +206,7 @@ async function requireAdmin() {
   const { data: profile, error: profileError } = await supabase
     .from("profiles")
     .select("role")
-    .eq("user_id", user.id)
+    .eq("user_uuid", user.id)
     .single<Pick<Profile, "role">>();
 
   if (profileError || profile?.role !== "admin") {
@@ -286,7 +286,10 @@ async function updateCrewById(
   return { updated: null, errorMessage: latestErrorMessage };
 }
 
-async function deleteCrewById(serviceRoleClient: ServiceRoleClient, id: string) {
+async function deleteCrewById(
+  serviceRoleClient: ServiceRoleClient,
+  id: string,
+) {
   const idColumns = ["crew_id", "id"];
   let latestErrorMessage = "";
 
@@ -398,7 +401,9 @@ export async function PUT(
 
     const existingImageUrlsEntry = formData.get("existingImageUrls");
     if (existingImageUrlsEntry !== null) {
-      const parsedExistingImageUrls = parseExistingImageUrls(existingImageUrlsEntry);
+      const parsedExistingImageUrls = parseExistingImageUrls(
+        existingImageUrlsEntry,
+      );
 
       if (!parsedExistingImageUrls.ok) {
         return NextResponse.json(
@@ -414,7 +419,10 @@ export async function PUT(
     const uploadResult = await uploadImageFiles(serviceRoleClient, imageFiles);
 
     if (!uploadResult.ok) {
-      return NextResponse.json({ message: uploadResult.message }, { status: 400 });
+      return NextResponse.json(
+        { message: uploadResult.message },
+        { status: 400 },
+      );
     }
 
     const finalImages = [...existingImageUrls, ...uploadResult.urls];
@@ -427,13 +435,17 @@ export async function PUT(
       );
     }
 
-    const { updated, errorMessage } = await updateCrewById(serviceRoleClient, id, {
-      name,
-      description,
-      images: finalImages,
-      price,
-      skills: skillsResult.value,
-    });
+    const { updated, errorMessage } = await updateCrewById(
+      serviceRoleClient,
+      id,
+      {
+        name,
+        description,
+        images: finalImages,
+        price,
+        skills: skillsResult.value,
+      },
+    );
 
     if (errorMessage) {
       await removeStoredImages(serviceRoleClient, uploadResult.urls);
@@ -506,7 +518,10 @@ export async function DELETE(
       );
     }
 
-    const { deleted, errorMessage } = await deleteCrewById(serviceRoleClient, id);
+    const { deleted, errorMessage } = await deleteCrewById(
+      serviceRoleClient,
+      id,
+    );
 
     if (errorMessage) {
       return NextResponse.json({ message: errorMessage }, { status: 400 });

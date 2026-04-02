@@ -21,7 +21,7 @@ export async function middleware(request: NextRequest) {
     const { data: profile } = await supabase
       .from("profiles")
       .select("*")
-      .eq("user_id", user.id)
+      .eq("user_uuid", user.id)
       .single<Profile>();
 
     // Redirect berdasarkan role
@@ -46,7 +46,7 @@ export async function middleware(request: NextRequest) {
     const { data: profile } = await supabase
       .from("profiles")
       .select("*")
-      .eq("user_id", user.id)
+      .eq("user_uuid", user.id)
       .single<Profile>();
 
     // Jika bukan admin, redirect ke home

@@ -1,0 +1,740 @@
+// Use DBML to define your database structure
+// Docs: https://dbml.dbdiagram.io/docs
+
+Table users{
+  id uuid
+}
+
+Table profiles {
+  Note: "Menyimpan informasi detail user; terhubung ke auth.users via uuid"
+
+  user_uuid uuid [pk, not null, unique, note: "Primary key, reference ke auth.users.id"]
+  role text [not null, default: 'user', note: "Role user: user/admin"]
+  avatar_url text [null, note: "URL avatar user"]
+  full_name text [not null, note: "Nama lengkap user"]
+  phone varchar [not null, unique, note: "Nomor telepon user"]
+  created_at timestampz [not null, default: `now()`, note: "Waktu dibuat"]
+  updated_at timestampz [not null, default: `now()`, note: "Waktu diperbarui"]
+
+  indexes {
+    (role)
+    (phone)
+    (created_at)
+  }
+}
+
+Table location_tags {
+  Note: "Master tag untuk location"
+
+  id integer [pk, increment, not null, note: "Primary key tag"]
+  name string [not null, unique, note: "Nama tag location"]
+  created_at timestampz [not null, default: `now()`, note: "Waktu dibuat"]
+
+  indexes {
+    (name)
+  }
+}
+
+Table location_tag {
+  Note: "Table pivot many-to-many antara location_tags dan locations"
+  // jadikan ini composite key dari location_tag_id + location_id
+  location_tag_id integer [pk, not null, note: "FK ke location_tags.id"]
+  location_id integer [pk, not null, note: "FK ke locations.id"]
+  created_at timestampz [not null, default: `now()`, note: "Waktu asosiasi dibuat"]
+
+  indexes {
+    (location_tag_id)
+    (location_id)
+    (location_tag_id, location_id) [unique]
+  }
+}
+
+Table location_images {
+  Note: "Menampung gambar location"
+
+  id integer [pk, increment, not null, note: "Primary key gambar"]
+  location_id integer [not null, note: "FK ke locations.id"]
+  url text [not null, note: "URL gambar"]
+  position integer [not null, default: 0, note: "Urutan gambar"]
+
+  indexes {
+    (location_id)
+    (location_id, position)
+  }
+}
+
+Table locations {
+  Note: "Master data shooting location"
+
+  id int [pk, increment, not null, note: "Primary key location"]
+  uuid uuid [not null, unique, note: "ID publik location"]
+  code string [not null, unique, note: "Kode location"]
+  name string [not null, note: "Nama location"]
+  description text [null, note: "Deskripsi location"]
+  city string [null, note: "Kota location"]
+  price integer [not null, default: 0, note: "Harga dasar location"]
+  area integer [null, note: "Luas area"]
+  pax integer [null, note: "Kapasitas orang"]
+  is_available boolean [not null, default: true, note: "Status ketersediaan"]
+  updated_at timestampz [not null, default: `now()`, note: "Waktu diperbarui"]
+  rating integer [null, note: "Rating agregat"]
+
+  indexes {
+    (uuid)
+    (code)
+    (name)
+    (city)
+    (price)
+  }
+}
+
+Table crews {
+  Note: "Master data kru produksi"
+
+  id integer [pk, increment, not null, note: "Primary key crew"]
+  uuid uuid [not null, unique, note: "ID publik crew"]
+  code string [not null, unique, note: "Kode crew"]
+  name string [not null, note: "Nama crew"]
+  description text [null, note: "Deskripsi crew"]
+  price integer [not null, default: 0, note: "Harga per crew"]
+  skills string[] [null, note: "Daftar skill crew"]
+  images string[] [null, note: "Legacy kolom gambar; pertimbangkan pakai crew_images"]
+  is_available boolean [not null, default: true, note: "Status ketersediaan"]
+  updated_at timestampz [not null, default: `now()`, note: "Waktu diperbarui"]
+  created_at timestampz [not null, default: `now()`, note: "Waktu dibuat"]
+
+  indexes {
+    (uuid)
+    (code)
+    (name)
+    (is_available)
+    (price)
+  }
+}
+
+Table rentals {
+  Note: "Master data item rental/peralatan"
+
+  id integer [pk, increment, not null, note: "Primary key rental"]
+  uuid uuid [not null, unique, note: "ID publik rental"]
+  code string [not null, unique, note: "Kode rental"]
+  name string [not null, note: "Nama item rental"]
+  description text [null, note: "Deskripsi rental"]
+  price integer [not null, default: 0, note: "Harga rental"]
+  specs jsonb [null, note: "Spesifikasi item"]
+  images string[] [null, note: "Legacy kolom gambar; pertimbangkan pakai rental_images"]
+  is_available boolean [not null, default: true, note: "Status ketersediaan"]
+  updated_at timestampz [not null, default: `now()`, note: "Waktu diperbarui"]
+  created_at timestampz [not null, default: `now()`, note: "Waktu dibuat"]
+
+  indexes {
+    (uuid)
+    (code)
+    (name)
+    (is_available)
+    (price)
+  }
+}
+
+Table expendables {
+  Note: "Master data expendables/habis pakai"
+
+  id integer [pk, increment, not null, note: "Primary key expendable"]
+  uuid uuid [not null, unique, note: "ID publik expendable"]
+  code string [not null, unique, note: "Kode expendable"]
+  name string [not null, note: "Nama expendable"]
+  description text [null, note: "Deskripsi expendable"]
+  price integer [not null, default: 0, note: "Harga expendable"]
+  images string[] [null, note: "Legacy kolom gambar; pertimbangkan pakai expendable_images"]
+  is_available boolean [not null, default: true, note: "Status ketersediaan"]
+  updated_at timestampz [not null, default: `now()`, note: "Waktu diperbarui"]
+  created_at timestampz [not null, default: `now()`, note: "Waktu dibuat"]
+
+  indexes {
+    (uuid)
+    (code)
+    (name)
+    (is_available)
+    (price)
+  }
+}
+
+Table food_and_beverage {
+  Note: "Master data food and beverage"
+
+  id integer [pk, increment, not null, note: "Primary key F&B"]
+  uuid uuid [not null, unique, note: "ID publik F&B"]
+  code string [not null, unique, note: "Kode F&B"]
+  name string [not null, note: "Nama F&B"]
+  description text [null, note: "Deskripsi F&B"]
+  price integer [not null, default: 0, note: "Harga F&B"]
+  images string[] [null, note: "Legacy kolom gambar; pertimbangkan pakai food_and_beverage_images"]
+  is_available boolean [not null, default: true, note: "Status ketersediaan"]
+  updated_at timestampz [not null, default: `now()`, note: "Waktu diperbarui"]
+  created_at timestampz [not null, default: `now()`, note: "Waktu dibuat"]
+
+  indexes {
+    (uuid)
+    (code)
+    (name)
+    (is_available)
+    (price)
+  }
+}
+
+Table food_and_beverage_tags {
+  Note: "Master tag untuk F&B"
+
+  id integer [pk, increment, not null, note: "Primary key tag F&B"]
+  name text [not null, unique, note: "Nama tag F&B"]
+  created_at timestampz [not null, default: `now()`, note: "Waktu dibuat"]
+
+  indexes {
+    (name)
+  }
+}
+
+Table food_and_beverage_tag {
+  Note: "Pivot many-to-many antara food_and_beverage_tags dan food_and_beverage"
+
+  //jadikan composite key dari food_and_beverage_tag_id + food_and_beverage_id
+  food_and_beverage_tag_id integer [pk, not null, note: "FK ke food_and_beverage_tags.id"]
+  food_and_beverage_id integer [pk, not null, note: "FK ke food_and_beverage.id"]
+  created_at timestampz [not null, default: `now()`, note: "Waktu asosiasi dibuat"]
+
+  indexes {
+    (food_and_beverage_tag_id)
+    (food_and_beverage_id)
+    (food_and_beverage_tag_id, food_and_beverage_id) [unique]
+  }
+}
+
+Table location_embeddings {
+  Note: "Penyimpanan embedding vector untuk semantic search location"
+
+  id integer [pk, increment, not null, note: "Primary key embedding"]
+  location_id integer [not null, note: "FK ke locations.id"]
+  content jsonb [not null, note: "Payload konten yang di-embed"]
+  embedding vector [not null, note: "Vector embedding"]
+  created_at timestampz [not null, default: `now()`, note: "Waktu dibuat"]
+
+  indexes {
+    (location_id)
+    (created_at)
+  }
+}
+
+Table location_reviews {
+  Note: "Review user untuk location, terkait transaksi order"
+
+  id integer [pk, increment, not null, note: "Primary key review"]
+  uuid uuid [not null, unique, note: "ID publik review"]
+  user_uuid uuid [not null, note: "FK ke profiles.uuid"]
+  location_id integer [not null, note: "FK ke locations.id"]
+  rating integer [not null, note: "Nilai rating"]
+  comment text [null, note: "Komentar review"]
+  order_id integer [not null, note: "FK ke orders.id"]
+  created_at timestampz [not null, default: `now()`, note: "Waktu dibuat"]
+
+  indexes {
+    (user_uuid)
+    (location_id)
+    (order_id)
+    (rating)
+  }
+}
+
+Table promo_codes {
+  Note: "Master promo code untuk potongan harga saat checkout"
+
+  id integer [pk, increment, not null, note: "Primary key promo"]
+  code text [not null, unique, note: "Kode promo"]
+  discount_type text [not null, note: "Jenis diskon: percent/fixed"]
+  discount_value integer [not null, default: 0, note: "Nilai diskon"]
+  max_usage integer [null, note: "Maks penggunaan total"]
+  usage_count integer [not null, default: 0, note: "Jumlah penggunaan saat ini"]
+  max_usage_per_user integer [null, note: "Maks penggunaan per user"]
+  min_order_amount integer [not null, default: 0, note: "Minimum belanja"]
+  starts_at timestampz [null, note: "Mulai berlaku"]
+  expires_at timestampz [null, note: "Akhir berlaku"]
+  is_active boolean [not null, default: true, note: "Status aktif promo"]
+  created_at timestampz [not null, default: `now()`, note: "Waktu dibuat"]
+  updated_at timestampz [not null, default: `now()`, note: "Waktu diperbarui"]
+
+  indexes {
+    (code)
+    (is_active)
+    (starts_at)
+    (expires_at)
+  }
+}
+
+Table packages {
+  Note: "Master bundling/paketan; final_price adalah harga jual paket"
+
+  id integer [pk, increment, not null, note: "Primary key package"]
+  uuid uuid [not null, unique, note: "ID publik package"]
+  name text [not null, note: "Nama package"]
+  description text [null, note: "Deskripsi package"]
+  is_active boolean [not null, default: true, note: "Status aktif package"]
+  base_price integer [not null, default: 0, note: "Harga normal total item package"]
+  discount_type text [null, note: "Jenis diskon package: percent/fixed"]
+  discount_value integer [not null, default: 0, note: "Nilai diskon package"]
+  final_price integer [not null, default: 0, note: "Harga akhir package"]
+  created_at timestampz [not null, default: `now()`, note: "Waktu dibuat"]
+  updated_at timestampz [not null, default: `now()`, note: "Waktu diperbarui"]
+
+  indexes {
+    (uuid)
+    (name)
+    (is_active)
+    (final_price)
+  }
+}
+
+Table package_crews {
+  Note: "Detail crew dalam package"
+
+  id integer [pk, increment, not null, note: "Primary key"]
+  uuid uuid [not null, unique, note: "ID publik baris detail"]
+  package_id integer [not null, note: "FK ke packages.id"]
+  crew_id integer [not null, note: "FK ke crews.id"]
+  quantity integer [not null, default: 1, note: "Jumlah crew di package"]
+  notes string [null, note: "Catatan tambahan"]
+  created_at timestampz [not null, default: `now()`, note: "Waktu dibuat"]
+
+  indexes {
+    (package_id)
+    (crew_id)
+    (package_id, crew_id) [unique]
+  }
+}
+
+Table package_rentals {
+  Note: "Detail rental dalam package"
+
+  id integer [pk, increment, not null, note: "Primary key"]
+  uuid uuid [not null, unique, note: "ID publik baris detail"]
+  package_id integer [not null, note: "FK ke packages.id"]
+  rental_id integer [not null, note: "FK ke rentals.id"]
+  quantity integer [not null, default: 1, note: "Jumlah rental di package"]
+  notes string [null, note: "Catatan tambahan"]
+  created_at timestampz [not null, default: `now()`, note: "Waktu dibuat"]
+
+  indexes {
+    (package_id)
+    (rental_id)
+    (package_id, rental_id) [unique]
+  }
+}
+
+Table package_food_and_beverages {
+  Note: "Detail food and beverage dalam package"
+
+  id integer [pk, increment, not null, note: "Primary key"]
+  uuid uuid [not null, unique, note: "ID publik baris detail"]
+  package_id integer [not null, note: "FK ke packages.id"]
+  food_and_beverage_id integer [not null, note: "FK ke food_and_beverage.id"]
+  quantity integer [not null, default: 1, note: "Jumlah F&B di package"]
+  notes string [null, note: "Catatan tambahan"]
+  created_at timestampz [not null, default: `now()`, note: "Waktu dibuat"]
+
+  indexes {
+    (package_id)
+    (food_and_beverage_id)
+    (package_id, food_and_beverage_id) [unique]
+  }
+}
+
+Table package_expendables {
+  Note: "Detail expendable dalam package"
+
+  id integer [pk, increment, not null, note: "Primary key"]
+  uuid uuid [not null, unique, note: "ID publik baris detail"]
+  package_id integer [not null, note: "FK ke packages.id"]
+  expendable_id integer [not null, note: "FK ke expendables.id"]
+  quantity integer [not null, default: 1, note: "Jumlah expendable di package"]
+  notes string [null, note: "Catatan tambahan"]
+  created_at timestampz [not null, default: `now()`, note: "Waktu dibuat"]
+
+  indexes {
+    (package_id)
+    (expendable_id)
+    (package_id, expendable_id) [unique]
+  }
+}
+
+Table crew_skills {
+  Note: "Master skill per crew"
+
+  id integer [pk, increment, not null, note: "Primary key skill"]
+  crew_id integer [not null, note: "FK ke crews.id"]
+  name string [not null, note: "Nama skill"]
+  description string [null, note: "Deskripsi skill; ini fungsinya apa ya ?"]
+  created_at timestampz [not null, default: `now()`, note: "Waktu dibuat"]
+
+  indexes {
+    (crew_id)
+    (name)
+    (crew_id, name)
+  }
+}
+
+Table orders {
+  Note: "Header transaksi order"
+
+  id integer [pk, increment, not null, note: "Primary key order"]
+  uuid uuid [not null, unique, note: "ID publik order"]
+  code string [not null, unique, note: "Kode order human-readable"]
+  user_uuid uuid [not null, note: "FK ke profiles.uuid"]
+
+  purpose text [not null, note: "Tujuan pemotretan"]
+  shooting_address text [not null, note: "Alamat lokasi shooting"]
+
+  payment_status text [not null, default: 'pending', note: "Status pembayaran: pending/paid/failed/expired/canceled/refunded"]
+
+  subtotal_amount integer [not null, default: 0, note: "Total sebelum diskon"]
+  bundle_discount_amount integer [not null, default: 0, note: "Total diskon bundling"]
+  promo_discount_amount integer [not null, default: 0, note: "Total diskon promo"]
+  total_discount_amount integer [not null, default: 0, note: "Bundle + promo"]
+  grand_total_amount integer [not null, default: 0, note: "Total akhir dibayar"]
+
+  promo_code_id integer [null, note: "FK ke promo_codes.id; null jika tanpa promo"]
+  promo_code_snapshot text [null, note: "Kode promo saat checkout"]
+  promo_discount_type_snapshot text [null, note: "Snapshot jenis diskon promo: percent/fixed"]
+  promo_discount_value_snapshot integer [null, note: "Snapshot nilai diskon promo"]
+
+  midtrans_token text [null, note: "Token transaksi dari Midtrans"]
+  midtrans_expired_at timestampz [null, note: "Waktu token Midtrans kadaluarsa"]
+
+  created_at timestampz [not null, default: `now()`, note: "Waktu dibuat"]
+  updated_at timestampz [not null, default: `now()`, note: "Waktu diperbarui"]
+
+  indexes {
+    (uuid)
+    (code)
+    (user_uuid)
+    (payment_status)
+    (created_at)
+    (promo_code_id)
+  }
+}
+
+Table order_items {
+  Note: "Detail item transaksi; dapat item satuan atau item hasil bundling"
+
+  id integer [pk, increment, not null, note: "Primary key order item"]
+  uuid uuid [not null, unique, note: "ID publik order item"]
+  order_id integer [not null, note: "FK ke orders.id"]
+
+  item_type text [not null, note: "Jenis item: location/crew/rental/food_and_beverage/expendable"]
+  item_id integer [not null, note: "ID item sesuai item_type"]
+  item_name_snapshot text [null, note: "Nama item saat checkout"]
+
+  quantity integer [not null, default: 1, note: "Jumlah item"]
+  unit_price_snapshot integer [not null, default: 0, note: "Harga per unit saat checkout"]
+  line_total integer [not null, default: 0, note: "Total baris = unit_price_snapshot * quantity"]
+
+  is_from_bundle boolean [not null, default: false, note: "Penanda item berasal dari package"]
+  bundle_id integer [null, note: "FK ke packages.id jika dari bundling"]
+
+  booking_start date [null, note: "Mulai booking; khusus item yang butuh waktu"]
+  booking_end date [null, note: "Selesai booking; khusus item yang butuh waktu"]
+
+  created_at timestampz [not null, default: `now()`, note: "Waktu dibuat"]
+  updated_at timestampz [not null, default: `now()`, note: "Waktu diperbarui"]
+
+  indexes {
+    (order_id)
+    (item_type, item_id)
+    (bundle_id)
+    (is_from_bundle)
+    (booking_start, booking_end)
+  }
+}
+
+Table crew_images {
+  Note: "Gambar untuk crew"
+
+  id integer [pk, increment, not null, note: "Primary key gambar"]
+  crew_id integer [not null, note: "FK ke crews.id"]
+  url text [not null, note: "URL gambar"]
+  position integer [not null, default: 0, note: "Urutan gambar"]
+
+  indexes {
+    (crew_id)
+    (crew_id, position)
+  }
+}
+
+Table expendable_images {
+  Note: "Gambar untuk expendables"
+
+  id integer [pk, increment, not null, note: "Primary key gambar"]
+  expendable_id integer [not null, note: "FK ke expendables.id"]
+  url text [not null, note: "URL gambar"]
+  position integer [not null, default: 0, note: "Urutan gambar"]
+
+  indexes {
+    (expendable_id)
+    (expendable_id, position)
+  }
+}
+
+Table food_and_beverage_images {
+  Note: "Gambar untuk food_and_beverage"
+
+  id integer [pk, increment, not null, note: "Primary key gambar"]
+  food_and_beverage_id integer [not null, note: "FK ke food_and_beverage.id"]
+  url text [not null, note: "URL gambar"]
+  position integer [not null, default: 0, note: "Urutan gambar"]
+
+  indexes {
+    (food_and_beverage_id)
+    (food_and_beverage_id, position)
+  }
+}
+
+Table rental_images {
+  Note: "Gambar untuk rentals"
+
+  id integer [pk, increment, not null, note: "Primary key gambar"]
+  rental_id integer [not null, note: "FK ke rentals.id"]
+  url text [not null, note: "URL gambar"]
+  position integer [not null, default: 0, note: "Urutan gambar"]
+
+  indexes {
+    (rental_id)
+    (rental_id, position)
+  }
+}
+
+Table item_categories{
+  id integer 
+  name text
+  short_code text
+  created_at timestampz
+}
+
+Table item_sub_categories{
+  id integer
+  name text
+  short_code text
+  created_at timestampz
+}
+
+Table bundle_types{
+  id integer
+  name text
+  short_code text
+  created_at timestampz
+}
+
+Table bundle_categories{
+  id integer
+  name text
+  short_code text
+  created_at timestampz
+}
+
+Table location_item_categories {
+  location_id integer [pk, not null, note: "FK ke locations.id"]
+  item_category_id integer [pk, not null, note: "FK ke item_categories.id"]
+  created_at timestampz [not null, default: `now()`]
+
+  indexes {
+    (item_category_id)
+    (location_id, item_category_id) [unique]
+  }
+}
+
+Table rental_item_categories {
+  rental_id integer [pk, not null, note: "FK ke rentals.id"]
+  item_category_id integer [pk, not null, note: "FK ke item_categories.id"]
+  created_at timestampz [not null, default: `now()`]
+
+  indexes {
+    (item_category_id)
+    (rental_id, item_category_id) [unique]
+  }
+}
+
+Table expendable_item_categories {
+  expendable_id integer [pk, not null, note: "FK ke expendables.id"]
+  item_category_id integer [pk, not null, note: "FK ke item_categories.id"]
+  created_at timestampz [not null, default: `now()`]
+
+  indexes {
+    (item_category_id)
+    (expendable_id, item_category_id) [unique]
+  }
+}
+
+Table food_and_beverage_item_categories {
+  food_and_beverage_id integer [pk, not null, note: "FK ke food_and_beverage.id"]
+  item_category_id integer [pk, not null, note: "FK ke item_categories.id"]
+  created_at timestampz [not null, default: `now()`]
+
+  indexes {
+    (item_category_id)
+    (food_and_beverage_id, item_category_id) [unique]
+  }
+}
+
+Table crew_item_categories {
+  crew_id integer [pk, not null, note: "FK ke crews.id"]
+  item_category_id integer [pk, not null, note: "FK ke item_categories.id"]
+  created_at timestampz [not null, default: `now()`]
+
+  indexes {
+    (item_category_id)
+    (crew_id, item_category_id) [unique]
+  }
+}
+
+Table location_item_sub_categories {
+  location_id integer [pk, not null, note: "FK ke locations.id"]
+  item_sub_category_id integer [pk, not null, note: "FK ke item_sub_categories.id"]
+  created_at timestampz [not null, default: `now()`]
+
+  indexes {
+    (item_sub_category_id)
+    (location_id, item_sub_category_id) [unique]
+  }
+}
+
+Table rental_item_sub_categories {
+  rental_id integer [pk, not null, note: "FK ke rentals.id"]
+  item_sub_category_id integer [pk, not null, note: "FK ke item_sub_categories.id"]
+  created_at timestampz [not null, default: `now()`]
+
+  indexes {
+    (item_sub_category_id)
+    (rental_id, item_sub_category_id) [unique]
+  }
+}
+
+Table expendable_item_sub_categories {
+  expendable_id integer [pk, not null, note: "FK ke expendables.id"]
+  item_sub_category_id integer [pk, not null, note: "FK ke item_sub_categories.id"]
+  created_at timestampz [not null, default: `now()`]
+
+  indexes {
+    (item_sub_category_id)
+    (expendable_id, item_sub_category_id) [unique]
+  }
+}
+
+Table food_and_beverage_item_sub_categories {
+  food_and_beverage_id integer [pk, not null, note: "FK ke food_and_beverage.id"]
+  item_sub_category_id integer [pk, not null, note: "FK ke item_sub_categories.id"]
+  created_at timestampz [not null, default: `now()`]
+
+  indexes {
+    (item_sub_category_id)
+    (food_and_beverage_id, item_sub_category_id) [unique]
+  }
+}
+
+Table crew_item_sub_categories {
+  crew_id integer [pk, not null, note: "FK ke crews.id"]
+  item_sub_category_id integer [pk, not null, note: "FK ke item_sub_categories.id"]
+  created_at timestampz [not null, default: `now()`]
+
+  indexes {
+    (item_sub_category_id)
+    (crew_id, item_sub_category_id) [unique]
+  }
+}
+
+Table package_bundle_types {
+  package_id integer [pk, not null, note: "FK ke packages.id"]
+  bundle_type_id integer [pk, not null, note: "FK ke bundle_types.id"]
+  created_at timestampz [not null, default: `now()`]
+
+  indexes {
+    (bundle_type_id)
+    (package_id, bundle_type_id) [unique]
+  }
+}
+
+Table package_bundle_categories {
+  package_id integer [pk, not null, note: "FK ke packages.id"]
+  bundle_category_id integer [pk, not null, note: "FK ke bundle_categories.id"]
+  created_at timestampz [not null, default: `now()`]
+
+  indexes {
+    (bundle_category_id)
+    (package_id, bundle_category_id) [unique]
+  }
+}
+
+Ref: "location_embeddings"."location_id" > "locations"."id"
+Ref: "location_tag"."location_tag_id" > "location_tags"."id"
+Ref: "location_tag"."location_id" > "locations"."id"
+Ref: "location_images"."location_id" > "locations"."id"
+
+Ref: "expendable_images"."expendable_id" > "expendables"."id"
+Ref: "rental_images"."rental_id" > "rentals"."id"
+Ref: "food_and_beverage_images"."food_and_beverage_id" > "food_and_beverage"."id"
+Ref: "crew_skills"."crew_id" > "crews"."id"
+Ref: "crew_images"."crew_id" > "crews"."id"
+
+Ref: "package_crews"."package_id" > "packages"."id"
+Ref: "package_crews"."crew_id" > "crews"."id"
+Ref: "package_food_and_beverages"."package_id" > "packages"."id"
+Ref: "package_food_and_beverages"."food_and_beverage_id" > "food_and_beverage"."id"
+Ref: "package_expendables"."package_id" > "packages"."id"
+Ref: "package_expendables"."expendable_id" > "expendables"."id"
+Ref: "package_rentals"."package_id" > "packages"."id"
+Ref: "package_rentals"."rental_id" > "rentals"."id"
+
+Ref: "food_and_beverage_tag"."food_and_beverage_tag_id" > "food_and_beverage_tags"."id"
+Ref: "food_and_beverage_tag"."food_and_beverage_id" > "food_and_beverage"."id"
+
+Ref: "orders"."user_uuid" > "profiles"."uuid"
+Ref: "orders"."promo_code_id" > "promo_codes"."id"
+Ref: "order_items"."order_id" > "orders"."id"
+Ref: "order_items"."bundle_id" > "packages"."id"
+
+Ref: "location_reviews"."user_uuid" > "profiles"."uuid"
+Ref: "location_reviews"."location_id" > "locations"."id"
+Ref: "location_reviews"."order_id" > "orders"."id"
+
+Ref: "location_item_categories"."location_id" > "locations"."id"
+Ref: "location_item_categories"."item_category_id" > "item_categories"."id"
+
+Ref: "rental_item_categories"."rental_id" > "rentals"."id"
+Ref: "rental_item_categories"."item_category_id" > "item_categories"."id"
+
+Ref: "expendable_item_categories"."expendable_id" > "expendables"."id"
+Ref: "expendable_item_categories"."item_category_id" > "item_categories"."id"
+
+Ref: "food_and_beverage_item_categories"."food_and_beverage_id" > "food_and_beverage"."id"
+Ref: "food_and_beverage_item_categories"."item_category_id" > "item_categories"."id"
+
+Ref: "crew_item_categories"."crew_id" > "crews"."id"
+Ref: "crew_item_categories"."item_category_id" > "item_categories"."id"
+
+Ref: "location_item_sub_categories"."location_id" > "locations"."id"
+Ref: "location_item_sub_categories"."item_sub_category_id" > "item_sub_categories"."id"
+
+Ref: "rental_item_sub_categories"."rental_id" > "rentals"."id"
+Ref: "rental_item_sub_categories"."item_sub_category_id" > "item_sub_categories"."id"
+
+Ref: "expendable_item_sub_categories"."expendable_id" > "expendables"."id"
+Ref: "expendable_item_sub_categories"."item_sub_category_id" > "item_sub_categories"."id"
+
+Ref: "food_and_beverage_item_sub_categories"."food_and_beverage_id" > "food_and_beverage"."id"
+Ref: "food_and_beverage_item_sub_categories"."item_sub_category_id" > "item_sub_categories"."id"
+
+Ref: "crew_item_sub_categories"."crew_id" > "crews"."id"
+Ref: "crew_item_sub_categories"."item_sub_category_id" > "item_sub_categories"."id"
+
+Ref: "package_bundle_types"."package_id" > "packages"."id"
+Ref: "package_bundle_types"."bundle_type_id" > "bundle_types"."id"
+
+Ref: "package_bundle_categories"."package_id" > "packages"."id"
+Ref: "package_bundle_categories"."bundle_category_id" > "bundle_categories"."id"
+
+Ref: "profiles"."user_uuid" - "users"."id"

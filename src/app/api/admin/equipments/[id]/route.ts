@@ -206,7 +206,7 @@ async function requireAdmin() {
   const { data: profile, error: profileError } = await supabase
     .from("profiles")
     .select("role")
-    .eq("user_id", user.id)
+    .eq("user_uuid", user.id)
     .single<Pick<Profile, "role">>();
 
   if (profileError || profile?.role !== "admin") {
@@ -219,7 +219,10 @@ async function requireAdmin() {
   return { ok: true as const };
 }
 
-async function findEquipmentById(serviceRoleClient: ServiceRoleClient, id: string) {
+async function findEquipmentById(
+  serviceRoleClient: ServiceRoleClient,
+  id: string,
+) {
   const idColumns = ["equipment_id", "id"];
   let latestErrorMessage = "";
 
@@ -377,7 +380,10 @@ export async function PUT(
 
     const serviceRoleClient = createServiceRoleClient();
 
-    const existingEquipmentResult = await findEquipmentById(serviceRoleClient, id);
+    const existingEquipmentResult = await findEquipmentById(
+      serviceRoleClient,
+      id,
+    );
 
     if (existingEquipmentResult.errorMessage) {
       return NextResponse.json(
@@ -394,14 +400,18 @@ export async function PUT(
     }
 
     const oldImageUrls = Array.isArray(existingEquipmentResult.row.images)
-      ? existingEquipmentResult.row.images.filter((img) => typeof img === "string")
+      ? existingEquipmentResult.row.images.filter(
+          (img) => typeof img === "string",
+        )
       : [];
 
     let existingImageUrls = oldImageUrls;
 
     const existingImageUrlsEntry = formData.get("existingImageUrls");
     if (existingImageUrlsEntry !== null) {
-      const parsedExistingImageUrls = parseExistingImageUrls(existingImageUrlsEntry);
+      const parsedExistingImageUrls = parseExistingImageUrls(
+        existingImageUrlsEntry,
+      );
 
       if (!parsedExistingImageUrls.ok) {
         return NextResponse.json(
@@ -417,7 +427,10 @@ export async function PUT(
     const uploadResult = await uploadImageFiles(serviceRoleClient, imageFiles);
 
     if (!uploadResult.ok) {
-      return NextResponse.json({ message: uploadResult.message }, { status: 400 });
+      return NextResponse.json(
+        { message: uploadResult.message },
+        { status: 400 },
+      );
     }
 
     const finalImages = [...existingImageUrls, ...uploadResult.urls];
@@ -497,7 +510,10 @@ export async function DELETE(
 
     const serviceRoleClient = createServiceRoleClient();
 
-    const existingEquipmentResult = await findEquipmentById(serviceRoleClient, id);
+    const existingEquipmentResult = await findEquipmentById(
+      serviceRoleClient,
+      id,
+    );
 
     if (existingEquipmentResult.errorMessage) {
       return NextResponse.json(
@@ -530,7 +546,9 @@ export async function DELETE(
     }
 
     const oldImageUrls = Array.isArray(existingEquipmentResult.row.images)
-      ? existingEquipmentResult.row.images.filter((img) => typeof img === "string")
+      ? existingEquipmentResult.row.images.filter(
+          (img) => typeof img === "string",
+        )
       : [];
 
     await removeStoredImages(serviceRoleClient, oldImageUrls);

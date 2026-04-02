@@ -11,8 +11,8 @@ type ReviewRow = {
 };
 
 type ProfileRow = {
-  user_id: string;
-  profile_image_url: string | null;
+  user_uuid: string;
+  avatar_url: string | null;
 };
 
 export async function GET(
@@ -77,8 +77,8 @@ export async function GET(
 
     const { data: profileRows, error: profilesError } = await serviceRoleClient
       .from("profiles")
-      .select("user_id, profile_image_url")
-      .in("user_id", userIds);
+      .select("user_uuid, avatar_url")
+      .in("user_uuid", userIds);
 
     if (profilesError) {
       console.error("Fetch profile images error:", profilesError);
@@ -86,8 +86,8 @@ export async function GET(
 
     const profileImageMap = new Map(
       ((profileRows ?? []) as ProfileRow[]).map((profile) => [
-        profile.user_id,
-        profile.profile_image_url,
+        profile.user_uuid,
+        profile.avatar_url,
       ]),
     );
 

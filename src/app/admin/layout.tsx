@@ -1,6 +1,8 @@
-import { AppSidebarAdmin } from "@/components/app-sidebar/AppSidebarAdmin";
+import { AppSidebar } from "@/components/app-sidebar/AppSidebar";
+import AppHeader from "@/components/app-header/AppHeader";
 import { SidebarProvider } from "@/components/ui/sidebar";
 import { createClient } from "@/lib/supabase/server";
+import { AuthProvider } from "@/providers/AuthProvider";
 import { redirect } from "next/navigation";
 import type { Profile } from "@/types";
 
@@ -24,7 +26,7 @@ export default async function AdminLayout({
   const { data: profile, error } = await supabase
     .from("profiles")
     .select("*")
-    .eq("user_id", user.id)
+    .eq("user_uuid", user.id)
     .single<Profile>();
 
   if (error || !profile) {
@@ -39,10 +41,13 @@ export default async function AdminLayout({
 
   return (
     <SidebarProvider>
-      <AppSidebarAdmin />
-      <main className="relative z-10 min-h-screen w-full pt-16 md:ml-24 md:w-[calc(100%-6rem)] md:pt-0">
-        {children}
-      </main>
+      <AuthProvider>
+        <AppHeader />
+        <AppSidebar />
+        <main className="relative z-10 min-h-screen w-full pt-16 md:pl-24">
+          {children}
+        </main>
+      </AuthProvider>
     </SidebarProvider>
   );
 }

@@ -253,7 +253,7 @@ export default function CartPage() {
   const ensureSnap = useCallback(async () => {
     if (!midtransClientKey) {
       setIsSnapReady(false);
-      console.error("NEXT_PUBLIC_MIDTRANS_CLIENT_KEY belum diatur.");
+      // console.error("NEXT_PUBLIC_MIDTRANS_CLIENT_KEY belum diatur.");
       return null;
     }
 
@@ -263,7 +263,7 @@ export default function CartPage() {
       return snap;
     } catch (error) {
       setIsSnapReady(false);
-      console.error("Snap.js belum siap:", error);
+      // console.error("Snap.js belum siap:", error);
       return null;
     }
   }, [midtransClientKey, snapUrl]);

@@ -81,7 +81,9 @@ function parseNumber(value: string | number | null | undefined) {
 }
 
 function isPaidStatus(value: string | null | undefined) {
-  const status = String(value || "").trim().toLowerCase();
+  const status = String(value || "")
+    .trim()
+    .toLowerCase();
   return status === "paid" || status === "settlement";
 }
 
@@ -101,7 +103,7 @@ export async function GET() {
     const { data: profile, error: profileError } = await supabase
       .from("profiles")
       .select("role")
-      .eq("user_id", user.id)
+      .eq("user_uuid", user.id)
       .single<Pick<Profile, "role">>();
 
     if (profileError || profile?.role !== "admin") {
@@ -120,20 +122,30 @@ export async function GET() {
       recentOrdersResult,
       reviewsResult,
     ] = await Promise.all([
-      serviceRoleClient.from("profiles").select("user_id", { count: "exact", head: true }),
+      serviceRoleClient
+        .from("profiles")
+        .select("user_uuid", { count: "exact", head: true }),
       serviceRoleClient
         .from("shooting_locations")
         .select("shooting_location_id", { count: "exact", head: true }),
-      serviceRoleClient.from("tags").select("tag_id", { count: "exact", head: true }),
-      serviceRoleClient.from("orders").select("order_id", { count: "exact", head: true }),
+      serviceRoleClient
+        .from("tags")
+        .select("tag_id", { count: "exact", head: true }),
+      serviceRoleClient
+        .from("orders")
+        .select("order_id", { count: "exact", head: true }),
       serviceRoleClient.from("orders").select("payment_status, total_price"),
-      serviceRoleClient.from("order_items").select("order_id", { count: "exact", head: true }),
+      serviceRoleClient
+        .from("order_items")
+        .select("order_id", { count: "exact", head: true }),
       serviceRoleClient
         .from("orders")
         .select("order_id, user_id, created_at")
         .order("created_at", { ascending: false })
         .limit(5),
-      serviceRoleClient.from("reviews").select("review_id, user_id, location_id, rating, comment"),
+      serviceRoleClient
+        .from("reviews")
+        .select("review_id, user_id, location_id, rating, comment"),
     ]);
 
     const totalUsers = profilesCountResult.count ?? 0;
@@ -141,11 +153,14 @@ export async function GET() {
     const totalTags = tagsCountResult.count ?? 0;
     const totalBookings = ordersCountResult.count ?? 0;
 
-    const orderSummaryRows = (ordersSummaryResult.data ?? []) as OrderSummaryRow[];
+    const orderSummaryRows = (ordersSummaryResult.data ??
+      []) as OrderSummaryRow[];
 
     const bookingSummary = {
       totalOrder: orderSummaryRows.length,
-      paidOrders: orderSummaryRows.filter((order) => isPaidStatus(order.payment_status)).length,
+      paidOrders: orderSummaryRows.filter((order) =>
+        isPaidStatus(order.payment_status),
+      ).length,
       totalLocations: orderItemsCountResult.count ?? 0,
       totalRevenue: orderSummaryRows.reduce(
         (acc, order) => acc + parseNumber(order.total_price),
@@ -154,14 +169,18 @@ export async function GET() {
     };
 
     const reviewRows = (reviewsResult.data ?? []) as ReviewRow[];
-    const reviewLocationIds = [...new Set(reviewRows.map((review) => review.location_id))];
+    const reviewLocationIds = [
+      ...new Set(reviewRows.map((review) => review.location_id)),
+    ];
 
     let reviewLocationsMap = new Map<string, ReviewLocationRow>();
 
     if (reviewLocationIds.length > 0) {
       const { data: reviewLocationsData } = await serviceRoleClient
         .from("shooting_locations")
-        .select("shooting_location_id, shooting_location_name, shooting_location_city")
+        .select(
+          "shooting_location_id, shooting_location_name, shooting_location_city",
+        )
         .in("shooting_location_id", reviewLocationIds);
 
       reviewLocationsMap = new Map(
@@ -178,7 +197,8 @@ export async function GET() {
       return {
         id: review.review_id,
         userName: `User ${review.user_id.slice(0, 8)}`,
-        locationTitle: location?.shooting_location_name ?? "Lokasi tidak ditemukan",
+        locationTitle:
+          location?.shooting_location_name ?? "Lokasi tidak ditemukan",
         location: location?.shooting_location_city ?? "-",
         rating: Number(review.rating) || 0,
         comment: review.comment?.trim() || "-",
@@ -187,7 +207,10 @@ export async function GET() {
 
     const avgRating =
       reviews.length > 0
-        ? (reviews.reduce((acc, review) => acc + review.rating, 0) / reviews.length).toFixed(1)
+        ? (
+            reviews.reduce((acc, review) => acc + review.rating, 0) /
+            reviews.length
+          ).toFixed(1)
         : "0.0";
 
     const ratingDist = [5, 4, 3, 2, 1].map((star) => ({
@@ -195,7 +218,9 @@ export async function GET() {
       count: reviews.filter((review) => review.rating === star).length,
       pct:
         reviews.length > 0
-          ? (reviews.filter((review) => review.rating === star).length / reviews.length) * 100
+          ? (reviews.filter((review) => review.rating === star).length /
+              reviews.length) *
+            100
           : 0,
     }));
 
@@ -213,7 +238,9 @@ export async function GET() {
         .in("order_id", orderIds);
 
       const orderItems = (orderItemsData ?? []) as OrderItemRow[];
-      const locationIds = [...new Set(orderItems.map((item) => item.location_id))];
+      const locationIds = [
+        ...new Set(orderItems.map((item) => item.location_id)),
+      ];
 
       const { data: locationsData } = await serviceRoleClient
         .from("shooting_locations")
@@ -222,14 +249,22 @@ export async function GET() {
 
       const locations = (locationsData ?? []) as LocationRow[];
       const locationMap = new Map(
-        locations.map((location) => [location.shooting_location_id, location.shooting_location_name]),
+        locations.map((location) => [
+          location.shooting_location_id,
+          location.shooting_location_name,
+        ]),
       );
 
       recentBookings = recentOrders.map((order) => {
-        const itemsForOrder = orderItems.filter((item) => item.order_id === order.order_id);
+        const itemsForOrder = orderItems.filter(
+          (item) => item.order_id === order.order_id,
+        );
 
         const locationNames = itemsForOrder
-          .map((item) => locationMap.get(item.location_id) ?? "Lokasi tidak ditemukan")
+          .map(
+            (item) =>
+              locationMap.get(item.location_id) ?? "Lokasi tidak ditemukan",
+          )
           .filter((name, index, array) => array.indexOf(name) === index);
 
         const sortedByStart = [...itemsForOrder].sort((a, b) =>
@@ -247,7 +282,8 @@ export async function GET() {
         return {
           orderId: order.order_id,
           userLabel: order.user_id,
-          locationNames: locationNames.length > 0 ? locationNames.join(", ") : "-",
+          locationNames:
+            locationNames.length > 0 ? locationNames.join(", ") : "-",
           dateRange,
         };
       });

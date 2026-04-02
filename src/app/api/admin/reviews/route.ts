@@ -19,8 +19,8 @@ type LocationRow = {
 };
 
 type ProfileImageRow = {
-  user_id: string;
-  profile_image_url: string | null;
+  user_uuid: string;
+  avatar_url: string | null;
 };
 
 export async function GET() {
@@ -39,7 +39,7 @@ export async function GET() {
     const { data: profile, error: profileError } = await supabase
       .from("profiles")
       .select("role")
-      .eq("user_id", user.id)
+      .eq("user_uuid", user.id)
       .single<Pick<Profile, "role">>();
 
     if (profileError || profile?.role !== "admin") {
@@ -48,18 +48,20 @@ export async function GET() {
 
     const serviceRoleClient = createServiceRoleClient();
 
-    const [{ data: reviewsData, error: reviewsError }, { data: locationsData, error: locationsError }] =
-      await Promise.all([
-        serviceRoleClient
-          .from("reviews")
-          .select("review_id, user_id, location_id, rating, comment"),
-        serviceRoleClient
-          .from("shooting_locations")
-          .select(
-            "shooting_location_id, shooting_location_name, shooting_location_city, shooting_location_image_url",
-          )
-          .order("shooting_location_name", { ascending: true }),
-      ]);
+    const [
+      { data: reviewsData, error: reviewsError },
+      { data: locationsData, error: locationsError },
+    ] = await Promise.all([
+      serviceRoleClient
+        .from("reviews")
+        .select("review_id, user_id, location_id, rating, comment"),
+      serviceRoleClient
+        .from("shooting_locations")
+        .select(
+          "shooting_location_id, shooting_location_name, shooting_location_city, shooting_location_image_url",
+        )
+        .order("shooting_location_name", { ascending: true }),
+    ]);
 
     if (reviewsError) {
       console.error("Fetch reviews error:", reviewsError);
@@ -102,16 +104,16 @@ export async function GET() {
       const { data: profileImagesData, error: profileImagesError } =
         await serviceRoleClient
           .from("profiles")
-          .select("user_id, profile_image_url")
-          .in("user_id", userIds);
+          .select("user_uuid, avatar_url")
+          .in("user_uuid", userIds);
 
       if (profileImagesError) {
         console.error("Profile images lookup error:", profileImagesError);
       } else {
         profileImageMap = new Map(
           ((profileImagesData ?? []) as ProfileImageRow[]).map((profileRow) => [
-            profileRow.user_id,
-            profileRow.profile_image_url,
+            profileRow.user_uuid,
+            profileRow.avatar_url,
           ]),
         );
       }
@@ -119,7 +121,8 @@ export async function GET() {
 
     const authUsers = await Promise.all(
       userIds.map(async (userId) => {
-        const { data, error } = await serviceRoleClient.auth.admin.getUserById(userId);
+        const { data, error } =
+          await serviceRoleClient.auth.admin.getUserById(userId);
 
         if (error || !data?.user) {
           return {
@@ -129,8 +132,12 @@ export async function GET() {
           };
         }
 
-        const metadata = (data.user.user_metadata ?? {}) as Record<string, unknown>;
-        const fullNameCandidate = metadata.full_name ?? metadata.name ?? metadata.display_name;
+        const metadata = (data.user.user_metadata ?? {}) as Record<
+          string,
+          unknown
+        >;
+        const fullNameCandidate =
+          metadata.full_name ?? metadata.name ?? metadata.display_name;
 
         return {
           user_id: userId,
@@ -156,12 +163,15 @@ export async function GET() {
       const userName = authUser?.full_name || authUser?.email || review.user_id;
 
       return {
-        id: review.review_id ?? `${review.user_id}-${review.location_id}-${index}`,
+        id:
+          review.review_id ??
+          `${review.user_id}-${review.location_id}-${index}`,
         userId: review.user_id,
         locationId: review.location_id,
         userName,
         avatarUrl: profileImageMap.get(review.user_id) ?? null,
-        locationTitle: location?.shooting_location_name ?? "Lokasi tidak ditemukan",
+        locationTitle:
+          location?.shooting_location_name ?? "Lokasi tidak ditemukan",
         locationImage:
           location?.shooting_location_image_url?.[0] ||
           "https://picsum.photos/seed/location-review/400/300",

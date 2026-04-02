@@ -65,7 +65,9 @@ function parseNumber(value: string | number | null | undefined) {
   return 0;
 }
 
-function normalizePaymentStatus(value: string | null | undefined): PaymentStatus {
+function normalizePaymentStatus(
+  value: string | null | undefined,
+): PaymentStatus {
   const status = String(value || "")
     .trim()
     .toLowerCase();
@@ -97,7 +99,7 @@ export async function GET() {
     const { data: profile, error: profileError } = await supabase
       .from("profiles")
       .select("role")
-      .eq("user_id", user.id)
+      .eq("user_uuid", user.id)
       .single<Pick<Profile, "role">>();
 
     if (profileError || profile?.role !== "admin") {
@@ -127,11 +129,14 @@ export async function GET() {
 
     const orderIds = fetchedOrders.map((order) => order.order_id);
 
-    const { data: orderItemRows, error: orderItemsError } = await serviceRoleClient
-      .from("order_items")
-      .select("order_id, location_id, booking_start, booking_end, price, quantity")
-      .in("order_id", orderIds)
-      .order("booking_start", { ascending: true });
+    const { data: orderItemRows, error: orderItemsError } =
+      await serviceRoleClient
+        .from("order_items")
+        .select(
+          "order_id, location_id, booking_start, booking_end, price, quantity",
+        )
+        .in("order_id", orderIds)
+        .order("booking_start", { ascending: true });
 
     if (orderItemsError) {
       console.error("Fetch order_items error:", orderItemsError);
@@ -143,15 +148,21 @@ export async function GET() {
 
     const fetchedOrderItems = (orderItemRows ?? []) as OrderItemRow[];
     const userIds = [...new Set(fetchedOrders.map((order) => order.user_id))];
-    const locationIds = [...new Set(fetchedOrderItems.map((item) => item.location_id))];
+    const locationIds = [
+      ...new Set(fetchedOrderItems.map((item) => item.location_id)),
+    ];
 
     let locationMap = new Map<string, LocationRow>();
-    let authUserMap = new Map<string, { fullName: string | null; email: string | null }>();
+    let authUserMap = new Map<
+      string,
+      { fullName: string | null; email: string | null }
+    >();
 
     if (userIds.length > 0) {
       const users = await Promise.all(
         userIds.map(async (userId) => {
-          const { data, error } = await serviceRoleClient.auth.admin.getUserById(userId);
+          const { data, error } =
+            await serviceRoleClient.auth.admin.getUserById(userId);
 
           if (error || !data?.user) {
             return {
@@ -161,7 +172,10 @@ export async function GET() {
             };
           }
 
-          const metadata = (data.user.user_metadata ?? {}) as Record<string, unknown>;
+          const metadata = (data.user.user_metadata ?? {}) as Record<
+            string,
+            unknown
+          >;
           const fullNameCandidate =
             metadata.full_name ?? metadata.name ?? metadata.display_name;
 
@@ -188,17 +202,23 @@ export async function GET() {
     }
 
     if (locationIds.length > 0) {
-      const { data: locationRows, error: locationError } = await serviceRoleClient
-        .from("shooting_locations")
-        .select("shooting_location_id, shooting_location_name, shooting_location_image_url")
-        .in("shooting_location_id", locationIds);
+      const { data: locationRows, error: locationError } =
+        await serviceRoleClient
+          .from("shooting_locations")
+          .select(
+            "shooting_location_id, shooting_location_name, shooting_location_image_url",
+          )
+          .in("shooting_location_id", locationIds);
 
       if (locationError) {
         console.error("Fetch shooting_locations error:", locationError);
       } else {
         const locations = (locationRows ?? []) as LocationRow[];
         locationMap = new Map(
-          locations.map((location) => [location.shooting_location_id, location]),
+          locations.map((location) => [
+            location.shooting_location_id,
+            location,
+          ]),
         );
       }
     }
@@ -234,10 +254,14 @@ export async function GET() {
         };
       });
 
-      const calculatedTotal = places.reduce((acc, place) => acc + place.subtotal, 0);
+      const calculatedTotal = places.reduce(
+        (acc, place) => acc + place.subtotal,
+        0,
+      );
       const totalPrice = parseNumber(order.total_price) || calculatedTotal;
       const authUser = authUserMap.get(order.user_id);
-      const customerName = authUser?.fullName || authUser?.email || order.user_id;
+      const customerName =
+        authUser?.fullName || authUser?.email || order.user_id;
 
       return {
         orderId: order.order_id,

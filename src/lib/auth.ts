@@ -19,7 +19,7 @@ export async function getCurrentUserProfile(): Promise<Profile | null> {
   const { data: profile, error } = await supabase
     .from("profiles")
     .select("*")
-    .eq("user_id", user.id)
+    .eq("user_uuid", user.id)
     .single<Profile>();
 
   if (error || !profile) {
