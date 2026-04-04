@@ -1,12 +1,12 @@
-export default function subCategoriesPage() {
+import { MasterDataCrudPage } from "@/components/admin/MasterDataCrudPage";
+
+export default function AdminSubCategoriesPage() {
   return (
-    <div className="flex flex-col items-center justify-center gap-4 py-10">
-      <h1 className="text-2xl font-bold">Sub Categories</h1>
-      <p className="text-center text-muted-foreground">
-        Halaman ini sedang dalam pengembangan. Nantikan informasi menarik
-        seputar sub kategori yang akan memudahkan pencarian kebutuhan syuting
-        Anda!
-      </p>
-    </div>
+    <MasterDataCrudPage
+      title="Kelola Sub Categories"
+      description="Tambah, edit, atau hapus sub kategori untuk klasifikasi item yang lebih detail."
+      endpoint="/api/admin/sub-categories"
+      entityLabel="Sub Category"
+    />
   );
 }

@@ -1,7 +1,6 @@
 "use client";
 
-import Image from "next/image";
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -23,57 +22,126 @@ import {
   DialogFooter,
   DialogClose,
 } from "@/components/ui/dialog";
-import {
-  Plus,
-  Pencil,
-  Trash2,
-  ImageIcon,
-  Upload,
-  X,
-  Loader2,
-} from "lucide-react";
+import { Plus, Pencil, Trash2, Loader2, X } from "lucide-react";
 import { toast } from "sonner";
-import { LocationWithTags } from "@/types/location";
+import formatPrice from "@/lib/formatPrice";
 
-const emptyLocation: Omit<LocationWithTags, "shooting_location_id"> = {
-  shooting_location_name: "",
-  shooting_location_city: "",
-  shooting_location_price: "",
-  shooting_location_description: "",
-  shooting_location_area: 0,
-  shooting_location_pax: 0,
-  shooting_location_rate: 0,
-  shooting_location_image_url: [],
-  tags: [],
+type RelationItem = {
+  id: number;
+  name: string;
+  short_code?: string;
 };
 
+type LocationImageItem = {
+  id?: number;
+  url: string;
+  preview_url?: string | null;
+  position: number;
+};
+
+type LocationItem = {
+  id: number;
+  uuid: string;
+  code: string;
+  name: string;
+  description: string;
+  city: string;
+  price: number;
+  area: number;
+  pax: number;
+  is_available: boolean;
+  rating: number;
+  updated_at?: string;
+  tags: RelationItem[];
+  item_categories: RelationItem[];
+  item_sub_categories: RelationItem[];
+  tag_ids: number[];
+  item_category_ids: number[];
+  item_sub_category_ids: number[];
+  images: LocationImageItem[];
+};
+
+type LocationFormData = {
+  name: string;
+  description: string;
+  city: string;
+  price: number;
+  area: number;
+  pax: number;
+  is_available: boolean;
+  tag_ids: number[];
+  item_category_ids: number[];
+  item_sub_category_ids: number[];
+  images: LocationImageItem[];
+};
+
+const emptyLocation: LocationFormData = {
+  name: "",
+  description: "",
+  city: "",
+  price: 0,
+  area: 0,
+  pax: 0,
+  is_available: true,
+  tag_ids: [],
+  item_category_ids: [],
+  item_sub_category_ids: [],
+  images: [],
+};
+
+const normalizeImages = (images?: LocationImageItem[]) =>
+  (Array.isArray(images) ? images : [])
+    .filter((image) => String(image.url ?? "").trim().length > 0)
+    .map((image) => ({
+      ...image,
+      url: String(image.url ?? "").trim(),
+      position: Math.max(1, Math.trunc(Number(image.position) || 1)),
+    }))
+    .sort((a, b) => a.position - b.position)
+    .map((image, index) => ({
+      ...image,
+      position: index + 1,
+    }));
+
 export default function AdminLocationsPage() {
-  const [locations, setLocations] = useState<LocationWithTags[]>([]);
-  const [availableTags, setAvailableTags] = useState<string[]>([]);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const [pendingImageIndex, setPendingImageIndex] = useState<number | null>(
+    null,
+  );
+  const [locations, setLocations] = useState<LocationItem[]>([]);
+  const [availableTags, setAvailableTags] = useState<RelationItem[]>([]);
+  const [availableItemCategories, setAvailableItemCategories] = useState<
+    RelationItem[]
+  >([]);
+  const [availableItemSubCategories, setAvailableItemSubCategories] = useState<
+    RelationItem[]
+  >([]);
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [editingLocation, setEditingLocation] =
-    useState<LocationWithTags | null>(null);
-  const [formData, setFormData] =
-    useState<Omit<LocationWithTags, "shooting_location_id">>(emptyLocation);
-  const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
+  const [editingLocation, setEditingLocation] = useState<LocationItem | null>(
+    null,
+  );
+  const [formData, setFormData] = useState<LocationFormData>(emptyLocation);
+  const [deleteConfirm, setDeleteConfirm] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [imageFiles, setImageFiles] = useState<File[]>([]);
-  const [imagePreviews, setImagePreviews] = useState<string[]>([]);
-  const [existingImageUrls, setExistingImageUrls] = useState<string[]>([]);
+  const [uploadingImage, setUploadingImage] = useState(false);
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
+  const formImages = Array.isArray(formData.images) ? formData.images : [];
 
   // Fetch locations from API
   const fetchLocations = useCallback(async () => {
     try {
       setLoading(true);
-      const response = await fetch("/api/locations");
+      const response = await fetch("/api/admin/locations", {
+        method: "GET",
+        cache: "no-store",
+      });
       const data = await response.json();
 
       if (response.ok) {
-        setLocations(data.locations || []);
+        setLocations((data.items || []) as LocationItem[]);
       } else {
-        toast.error(data.error || "Gagal mengambil data lokasi");
+        toast.error(data.message || "Gagal mengambil data lokasi");
       }
     } catch (error) {
       console.error("Fetch locations error:", error);
@@ -83,85 +151,106 @@ export default function AdminLocationsPage() {
     }
   }, []);
 
-  // Fetch tags from API
-  const fetchTags = useCallback(async () => {
+  // Fetch relation options from API
+  const fetchOptions = useCallback(async () => {
     try {
-      const response = await fetch("/api/tags");
-      const data = await response.json();
+      const [tagResponse, categoryResponse, subCategoryResponse] =
+        await Promise.all([
+          fetch("/api/admin/locations/tags", {
+            method: "GET",
+            cache: "no-store",
+          }),
+          fetch("/api/admin/categories", {
+            method: "GET",
+            cache: "no-store",
+          }),
+          fetch("/api/admin/sub-categories", {
+            method: "GET",
+            cache: "no-store",
+          }),
+        ]);
 
-      if (response.ok) {
+      const [tagData, categoryData, subCategoryData] = await Promise.all([
+        tagResponse.json(),
+        categoryResponse.json(),
+        subCategoryResponse.json(),
+      ]);
+
+      if (tagResponse.ok) {
         setAvailableTags(
-          data.tags?.map((t: { tag_id: string; tag: string }) => t.tag) || [],
+          ((tagData.items ?? []) as Array<{ id: string; name: string }>).map(
+            (item) => ({ id: Number(item.id), name: item.name }),
+          ),
+        );
+      }
+
+      if (categoryResponse.ok) {
+        setAvailableItemCategories(
+          (
+            (categoryData.items ?? []) as Array<{
+              id: string;
+              name: string;
+              short_code: string;
+            }>
+          ).map((item) => ({
+            id: Number(item.id),
+            name: item.name,
+            short_code: item.short_code,
+          })),
+        );
+      }
+
+      if (subCategoryResponse.ok) {
+        setAvailableItemSubCategories(
+          (
+            (subCategoryData.items ?? []) as Array<{
+              id: string;
+              name: string;
+              short_code: string;
+            }>
+          ).map((item) => ({
+            id: Number(item.id),
+            name: item.name,
+            short_code: item.short_code,
+          })),
         );
       }
     } catch (error) {
-      console.error("Fetch tags error:", error);
+      console.error("Fetch location options error:", error);
     }
   }, []);
 
   useEffect(() => {
-    fetchLocations();
-    fetchTags();
-  }, [fetchLocations, fetchTags]);
-
-  // Handle multiple image file selection
-  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(e.target.files || []);
-    if (files.length === 0) return;
-
-    setImageFiles((prev) => [...prev, ...files]);
-
-    // Create previews for new files
-    files.forEach((file) => {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setImagePreviews((prev) => [...prev, reader.result as string]);
-      };
-      reader.readAsDataURL(file);
-    });
-  };
-
-  // Remove image from list
-  const removeImage = (index: number, isExisting: boolean) => {
-    if (isExisting) {
-      // Remove from existing URLs
-      setExistingImageUrls((prev) => prev.filter((_, i) => i !== index));
-    } else {
-      // Remove from new uploads
-      const newFileIndex = index - existingImageUrls.length;
-      setImageFiles((prev) => prev.filter((_, i) => i !== newFileIndex));
-      setImagePreviews((prev) => prev.filter((_, i) => i !== newFileIndex));
-    }
-  };
+    void fetchLocations();
+    void fetchOptions();
+  }, [fetchLocations, fetchOptions]);
 
   // Open dialog for adding new location
   const openAddDialog = () => {
     setEditingLocation(null);
-    setFormData(emptyLocation);
-    setImageFiles([]);
-    setImagePreviews([]);
-    setExistingImageUrls([]);
+    setFormData({ ...emptyLocation, images: [] });
+    setPendingImageIndex(null);
     setFormErrors({});
     setDialogOpen(true);
   };
 
   // Open dialog for editing location
-  const openEditDialog = (location: LocationWithTags) => {
+  const openEditDialog = (location: LocationItem) => {
     setEditingLocation(location);
     setFormData({
-      shooting_location_name: location.shooting_location_name,
-      shooting_location_city: location.shooting_location_city,
-      shooting_location_price: location.shooting_location_price,
-      shooting_location_description: location.shooting_location_description,
-      shooting_location_area: location.shooting_location_area,
-      shooting_location_pax: location.shooting_location_pax,
-      shooting_location_rate: location.shooting_location_rate,
-      shooting_location_image_url: location.shooting_location_image_url,
-      tags: location.tags,
+      name: location.name,
+      description: location.description,
+      city: location.city,
+      price: location.price,
+      area: location.area,
+      pax: location.pax,
+      is_available: location.is_available,
+      tag_ids: location.tag_ids,
+      item_category_ids: location.item_category_ids,
+      item_sub_category_ids: location.item_sub_category_ids,
+      images: normalizeImages(location.images ?? []),
     });
-    setImageFiles([]);
-    setImagePreviews([]);
-    setExistingImageUrls(location.shooting_location_image_url || []);
+    setPendingImageIndex(null);
     setFormErrors({});
     setDialogOpen(true);
   };
@@ -169,28 +258,13 @@ export default function AdminLocationsPage() {
   // Validate all required fields
   const validateForm = (): boolean => {
     const errors: Record<string, string> = {};
-    if (!String(formData.shooting_location_name ?? "").trim())
-      errors.name = "Wajib diisi";
-    if (!String(formData.shooting_location_description ?? "").trim())
+    if (!String(formData.name ?? "").trim()) errors.name = "Wajib diisi";
+    if (!String(formData.description ?? "").trim())
       errors.description = "Wajib diisi";
-    if (!String(formData.shooting_location_city ?? "").trim())
-      errors.city = "Wajib diisi";
-    if (!String(formData.shooting_location_price ?? "").trim())
-      errors.price = "Wajib diisi";
-    if (
-      !formData.shooting_location_area ||
-      formData.shooting_location_area <= 0
-    )
-      errors.area = "Wajib diisi";
-    if (!formData.shooting_location_pax || formData.shooting_location_pax <= 0)
-      errors.pax = "Wajib diisi";
-    if (
-      !formData.shooting_location_rate ||
-      formData.shooting_location_rate <= 0
-    )
-      errors.rate = "Wajib diisi";
-    else if (formData.shooting_location_rate > 5)
-      errors.rate = "Rating maksimal 5";
+    if (!String(formData.city ?? "").trim()) errors.city = "Wajib diisi";
+    if (Number(formData.price) < 0) errors.price = "Wajib diisi";
+    if (Number(formData.area) < 0) errors.area = "Wajib diisi";
+    if (Number(formData.pax) < 0) errors.pax = "Wajib diisi";
     setFormErrors(errors);
     if (Object.keys(errors).length > 0) {
       const fieldOrder = [
@@ -200,7 +274,6 @@ export default function AdminLocationsPage() {
         "price",
         "area",
         "pax",
-        "rate",
       ];
       const firstError = fieldOrder.find((f) => errors[f]);
       if (firstError) {
@@ -234,39 +307,31 @@ export default function AdminLocationsPage() {
 
     try {
       setSaving(true);
-      const formDataToSend = new FormData();
-      formDataToSend.append("name", formData.shooting_location_name);
-      formDataToSend.append("city", formData.shooting_location_city);
-      formDataToSend.append("price", formData.shooting_location_price);
-      formDataToSend.append(
-        "description",
-        formData.shooting_location_description,
-      );
-      formDataToSend.append("area", formData.shooting_location_area.toString());
-      formDataToSend.append("pax", formData.shooting_location_pax.toString());
-      formDataToSend.append("rate", formData.shooting_location_rate.toString());
-      formDataToSend.append("tags", JSON.stringify(formData.tags));
 
-      // Add existing image URLs (for edit mode)
-      if (editingLocation) {
-        formDataToSend.append(
-          "existingImageUrls",
-          JSON.stringify(existingImageUrls),
-        );
-      }
-
-      // Add new image files
-      imageFiles.forEach((file, index) => {
-        formDataToSend.append(`image_${index}`, file);
-      });
+      const payload = {
+        name: formData.name,
+        description: formData.description,
+        city: formData.city,
+        price: Number(formData.price) || 0,
+        area: Number(formData.area) || 0,
+        pax: Number(formData.pax) || 0,
+        is_available: formData.is_available,
+        tag_ids: formData.tag_ids,
+        item_category_ids: formData.item_category_ids,
+        item_sub_category_ids: formData.item_sub_category_ids,
+        images: normalizeImages(formData.images ?? []).map((image) => ({
+          url: image.url,
+          position: image.position,
+        })),
+      };
 
       if (editingLocation) {
-        // Update existing location
         const response = await fetch(
-          `/api/locations/${editingLocation.shooting_location_id}`,
+          `/api/admin/locations/${editingLocation.id}`,
           {
             method: "PUT",
-            body: formDataToSend,
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
           },
         );
 
@@ -277,13 +342,13 @@ export default function AdminLocationsPage() {
           await fetchLocations();
           setDialogOpen(false);
         } else {
-          toast.error(data.error || "Gagal mengupdate lokasi");
+          toast.error(data.message || "Gagal mengupdate lokasi");
         }
       } else {
-        // Add new location
-        const response = await fetch("/api/locations", {
+        const response = await fetch("/api/admin/locations", {
           method: "POST",
-          body: formDataToSend,
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
         });
 
         const data = await response.json();
@@ -293,7 +358,7 @@ export default function AdminLocationsPage() {
           await fetchLocations();
           setDialogOpen(false);
         } else {
-          toast.error(data.error || "Gagal menambahkan lokasi");
+          toast.error(data.message || "Gagal menambahkan lokasi");
         }
       }
     } catch (error) {
@@ -305,9 +370,9 @@ export default function AdminLocationsPage() {
   };
 
   // Delete location
-  const deleteLocation = async (id: string) => {
+  const deleteLocation = async (id: number) => {
     try {
-      const response = await fetch(`/api/locations/${id}`, {
+      const response = await fetch(`/api/admin/locations/${id}`, {
         method: "DELETE",
       });
 
@@ -318,7 +383,7 @@ export default function AdminLocationsPage() {
         await fetchLocations();
         setDeleteConfirm(null);
       } else {
-        toast.error(data.error || "Gagal menghapus lokasi");
+        toast.error(data.message || "Gagal menghapus lokasi");
       }
     } catch (error) {
       console.error("Delete location error:", error);
@@ -326,14 +391,159 @@ export default function AdminLocationsPage() {
     }
   };
 
-  // Toggle tag selection
-  const toggleTag = (tag: string) => {
+  const toggleMultiSelect = (key: "tag_ids", value: number) => {
     setFormData((prev) => ({
       ...prev,
-      tags: prev.tags.includes(tag)
-        ? prev.tags.filter((t) => t !== tag)
-        : [...prev.tags, tag],
+      [key]: prev[key].includes(value)
+        ? prev[key].filter((item) => item !== value)
+        : [...prev[key], value],
     }));
+  };
+
+  const selectSingleRelation = (
+    key: "item_category_ids" | "item_sub_category_ids",
+    value: number,
+  ) => {
+    setFormData((prev) => ({
+      ...prev,
+      [key]: [value],
+    }));
+  };
+
+  const openImagePicker = (index: number | null) => {
+    setPendingImageIndex(index);
+    fileInputRef.current?.click();
+  };
+
+  const handleImageFileChange = async (
+    e: React.ChangeEvent<HTMLInputElement>,
+  ) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+
+    try {
+      setUploadingImage(true);
+      const uploadForm = new FormData();
+      uploadForm.append("file", file);
+
+      const response = await fetch("/api/admin/locations/images/upload", {
+        method: "POST",
+        body: uploadForm,
+      });
+      const data = await response.json();
+
+      if (!response.ok) {
+        toast.error(data.message || "Gagal upload gambar");
+        return;
+      }
+
+      const imagePath = String(data.path ?? "");
+      const signedUrl = String(data.signed_url ?? "");
+      if (!imagePath) {
+        toast.error("Path gambar tidak valid");
+        return;
+      }
+
+      setFormData((prev) => {
+        const currentImages = Array.isArray(prev.images)
+          ? [...prev.images]
+          : [];
+
+        if (pendingImageIndex === null) {
+          currentImages.push({
+            url: imagePath,
+            preview_url: signedUrl || null,
+            position: currentImages.length + 1,
+          });
+        } else {
+          const safeIndex = Math.max(
+            0,
+            Math.min(pendingImageIndex, Math.max(currentImages.length - 1, 0)),
+          );
+
+          if (currentImages.length === 0) {
+            currentImages.push({
+              url: imagePath,
+              preview_url: signedUrl || null,
+              position: 1,
+            });
+          } else {
+            currentImages[safeIndex] = {
+              ...currentImages[safeIndex],
+              url: imagePath,
+              preview_url: signedUrl || null,
+            };
+          }
+        }
+
+        return {
+          ...prev,
+          images: currentImages.map((image, index) => ({
+            ...image,
+            position: index + 1,
+          })),
+        };
+      });
+
+      toast.success("Gambar berhasil diupload");
+    } catch (error) {
+      console.error("Upload image error:", error);
+      toast.error("Terjadi kesalahan saat upload gambar");
+    } finally {
+      setUploadingImage(false);
+      setPendingImageIndex(null);
+    }
+  };
+
+  const removeImageCard = (index: number) => {
+    setFormData((prev) => {
+      const currentImages = Array.isArray(prev.images) ? prev.images : [];
+      const nextImages = currentImages.filter(
+        (_, current) => current !== index,
+      );
+      return {
+        ...prev,
+        images: nextImages.map((image, imageIndex) => ({
+          ...image,
+          position: imageIndex + 1,
+        })),
+      };
+    });
+  };
+
+  const updateImageOrder = (index: number, nextPosition: number) => {
+    setFormData((prev) => {
+      const currentImages = Array.isArray(prev.images) ? prev.images : [];
+      if (currentImages.length <= 1) return { ...prev, images: currentImages };
+
+      const boundedPosition = Math.min(
+        Math.max(1, Math.trunc(nextPosition || 1)),
+        currentImages.length,
+      );
+      const targetIndex = boundedPosition - 1;
+      if (targetIndex === index) {
+        return {
+          ...prev,
+          images: currentImages.map((image, imageIndex) => ({
+            ...image,
+            position: imageIndex + 1,
+          })),
+        };
+      }
+
+      const nextImages = [...currentImages];
+      const [moved] = nextImages.splice(index, 1);
+      nextImages.splice(targetIndex, 0, moved);
+
+      return {
+        ...prev,
+        images: nextImages.map((image, imageIndex) => ({
+          ...image,
+          position: imageIndex + 1,
+        })),
+      };
+    });
   };
 
   return (
@@ -344,7 +554,8 @@ export default function AdminLocationsPage() {
             Kelola Lokasi
           </h1>
           <p className="text-muted-foreground text-sm">
-            Tambah, edit, atau hapus lokasi untuk katalog.
+            Tambah, edit, atau hapus lokasi beserta relasi tag, kategori, dan
+            sub kategori.
           </p>
         </div>
 
@@ -361,25 +572,26 @@ export default function AdminLocationsPage() {
           <Table>
             <TableHeader>
               <TableRow className="border-border hover:bg-transparent">
-                <TableHead className="w-16">Foto</TableHead>
+                <TableHead>Code</TableHead>
                 <TableHead>Nama</TableHead>
-                <TableHead className="hidden md:table-cell">Lokasi</TableHead>
+                <TableHead className="hidden md:table-cell">Kota</TableHead>
                 <TableHead className="hidden sm:table-cell">Harga</TableHead>
                 <TableHead className="hidden lg:table-cell">Tag</TableHead>
+                <TableHead className="hidden lg:table-cell">Status</TableHead>
                 <TableHead className="w-24 text-right">Aksi</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {loading ? (
                 <TableRow>
-                  <TableCell colSpan={6} className="text-center py-12">
+                  <TableCell colSpan={7} className="text-center py-12">
                     <Loader2 className="h-6 w-6 animate-spin text-muted-foreground mx-auto" />
                   </TableCell>
                 </TableRow>
               ) : locations.length === 0 ? (
                 <TableRow>
                   <TableCell
-                    colSpan={6}
+                    colSpan={7}
                     className="text-center py-12 text-sm text-muted-foreground"
                   >
                     Belum ada lokasi. Klik &quot;Tambah Lokasi&quot; untuk
@@ -388,47 +600,34 @@ export default function AdminLocationsPage() {
                 </TableRow>
               ) : (
                 locations.map((loc) => (
-                  <TableRow
-                    key={loc.shooting_location_id}
-                    className="border-border/50"
-                  >
-                    <TableCell>
-                      {loc.shooting_location_image_url &&
-                      loc.shooting_location_image_url.length > 0 ? (
-                        <Image
-                          src={loc.shooting_location_image_url[0]}
-                          alt={loc.shooting_location_name}
-                          width={40}
-                          height={40}
-                          className="h-10 w-10 rounded-lg object-cover"
-                        />
-                      ) : (
-                        <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-secondary">
-                          <ImageIcon className="h-4 w-4 text-muted-foreground" />
-                        </div>
-                      )}
+                  <TableRow key={loc.id} className="border-border/50">
+                    <TableCell className="font-mono text-xs text-muted-foreground">
+                      {loc.code}
                     </TableCell>
                     <TableCell className="font-medium text-foreground">
-                      {loc.shooting_location_name}
+                      {loc.name}
                     </TableCell>
                     <TableCell className="hidden md:table-cell text-muted-foreground">
-                      {loc.shooting_location_city}
+                      {loc.city}
                     </TableCell>
                     <TableCell className="hidden sm:table-cell text-muted-foreground">
-                      {loc.shooting_location_price}
+                      {formatPrice(loc.price)}
                     </TableCell>
                     <TableCell className="hidden lg:table-cell">
                       <div className="flex flex-wrap gap-1">
                         {loc.tags.map((tag) => (
                           <Badge
-                            key={tag}
+                            key={`${loc.id}-${tag.id}`}
                             variant="secondary"
                             className="text-[10px]"
                           >
-                            {tag}
+                            {tag.name}
                           </Badge>
                         ))}
                       </div>
+                    </TableCell>
+                    <TableCell className="hidden lg:table-cell text-muted-foreground">
+                      {loc.is_available ? "Available" : "Unavailable"}
                     </TableCell>
                     <TableCell className="text-right">
                       <div className="flex justify-end gap-1">
@@ -444,9 +643,7 @@ export default function AdminLocationsPage() {
                           variant="ghost"
                           size="icon"
                           className="h-8 w-8 text-destructive hover:text-destructive"
-                          onClick={() =>
-                            setDeleteConfirm(loc.shooting_location_id)
-                          }
+                          onClick={() => setDeleteConfirm(loc.id)}
                         >
                           <Trash2 className="h-3.5 w-3.5" />
                         </Button>
@@ -480,11 +677,11 @@ export default function AdminLocationsPage() {
               )}
               <Input
                 id="field-name"
-                value={formData.shooting_location_name}
+                value={formData.name}
                 onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
                   setFormData((p) => ({
                     ...p,
-                    shooting_location_name: e.target.value,
+                    name: e.target.value,
                   }));
                   setFormErrors((prev) => ({ ...prev, name: "" }));
                 }}
@@ -503,11 +700,11 @@ export default function AdminLocationsPage() {
               )}
               <Textarea
                 id="field-description"
-                value={formData.shooting_location_description}
+                value={formData.description}
                 onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => {
                   setFormData((p) => ({
                     ...p,
-                    shooting_location_description: e.target.value,
+                    description: e.target.value,
                   }));
                   setFormErrors((prev) => ({ ...prev, description: "" }));
                 }}
@@ -528,11 +725,11 @@ export default function AdminLocationsPage() {
                 )}
                 <Input
                   id="field-city"
-                  value={formData.shooting_location_city}
+                  value={formData.city}
                   onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
                     setFormData((p) => ({
                       ...p,
-                      shooting_location_city: e.target.value,
+                      city: e.target.value,
                     }));
                     setFormErrors((prev) => ({ ...prev, city: "" }));
                   }}
@@ -550,20 +747,22 @@ export default function AdminLocationsPage() {
                 )}
                 <Input
                   id="field-price"
-                  value={formData.shooting_location_price}
+                  type="number"
+                  min={0}
+                  value={formData.price}
                   onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
                     setFormData((p) => ({
                       ...p,
-                      shooting_location_price: e.target.value,
+                      price: Number(e.target.value) || 0,
                     }));
                     setFormErrors((prev) => ({ ...prev, price: "" }));
                   }}
-                  placeholder="Rp 5.000.000/hari"
+                  placeholder="5000000"
                 />
               </div>
             </div>
 
-            <div className="grid grid-cols-3 gap-4">
+            <div className="grid grid-cols-2 gap-4">
               <div className="grid gap-1.5">
                 <Label>
                   Area (m²) <span className="text-destructive">*</span>
@@ -575,11 +774,13 @@ export default function AdminLocationsPage() {
                 )}
                 <Input
                   id="field-area"
-                  value={formData.shooting_location_area || ""}
+                  type="number"
+                  min={0}
+                  value={formData.area || ""}
                   onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
                     setFormData((p) => ({
                       ...p,
-                      shooting_location_area: parseFloat(e.target.value) || 0,
+                      area: Number(e.target.value) || 0,
                     }));
                     setFormErrors((prev) => ({ ...prev, area: "" }));
                   }}
@@ -597,113 +798,42 @@ export default function AdminLocationsPage() {
                 )}
                 <Input
                   id="field-pax"
-                  value={formData.shooting_location_pax || ""}
+                  type="number"
+                  min={0}
+                  value={formData.pax || ""}
                   onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
                     setFormData((p) => ({
                       ...p,
-                      shooting_location_pax: parseInt(e.target.value) || 0,
+                      pax: Number(e.target.value) || 0,
                     }));
                     setFormErrors((prev) => ({ ...prev, pax: "" }));
                   }}
                   placeholder="50"
                 />
               </div>
-              <div className="grid gap-1.5">
-                <Label>
-                  Rating (0-5) <span className="text-destructive">*</span>
-                </Label>
-                {formErrors.rate && (
-                  <p className="text-xs text-destructive -mb-1">
-                    {formErrors.rate}
-                  </p>
-                )}
-                <Input
-                  id="field-rate"
-                  value={formData.shooting_location_rate || ""}
-                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
-                    const val = parseFloat(e.target.value) || 0;
-                    setFormData((p) => ({
-                      ...p,
-                      shooting_location_rate: val,
-                    }));
-                    if (val > 5) {
-                      setFormErrors((prev) => ({
-                        ...prev,
-                        rate: "Rating maksimal 5",
-                      }));
-                    } else {
-                      setFormErrors((prev) => ({ ...prev, rate: "" }));
-                    }
-                  }}
-                  placeholder="4.5"
-                />
-              </div>
             </div>
 
             <div className="grid gap-1.5">
-              <Label>Upload Gambar (Multiple)</Label>
-              <div className="grid grid-cols-3 gap-2">
-                {/* Display existing images */}
-                {existingImageUrls.map((url, index) => (
-                  <div key={`existing-${index}`} className="relative h-24">
-                    <Image
-                      src={url}
-                      alt={`Existing ${index + 1}`}
-                      fill
-                      sizes="(max-width: 768px) 33vw, 180px"
-                      className="h-24 w-full rounded-lg object-cover"
-                    />
-                    <Button
-                      type="button"
-                      variant="destructive"
-                      size="icon"
-                      className="absolute top-1 right-1 h-6 w-6"
-                      onClick={() => removeImage(index, true)}
-                    >
-                      <X className="h-3 w-3" />
-                    </Button>
-                  </div>
-                ))}
-
-                {/* Display new image previews */}
-                {imagePreviews.map((preview, index) => (
-                  <div key={`preview-${index}`} className="relative h-24">
-                    <Image
-                      src={preview}
-                      alt={`Preview ${index + 1}`}
-                      fill
-                      sizes="(max-width: 768px) 33vw, 180px"
-                      unoptimized
-                      className="h-24 w-full rounded-lg object-cover"
-                    />
-                    <Button
-                      type="button"
-                      variant="destructive"
-                      size="icon"
-                      className="absolute top-1 right-1 h-6 w-6"
-                      onClick={() =>
-                        removeImage(existingImageUrls.length + index, false)
-                      }
-                    >
-                      <X className="h-3 w-3" />
-                    </Button>
-                  </div>
-                ))}
-
-                {/* Upload button placeholder */}
-                <label className="relative flex flex-col items-center justify-center h-24 border-2 border-dashed border-border rounded-lg hover:border-primary/50 hover:bg-accent/50 transition-colors cursor-pointer group">
-                  <Plus className="h-6 w-6 text-muted-foreground group-hover:text-primary transition-colors" />
-                  <span className="text-xs text-muted-foreground mt-1 group-hover:text-primary transition-colors">
-                    Tambah
-                  </span>
-                  <Input
-                    type="file"
-                    accept="image/*"
-                    multiple
-                    onChange={handleImageChange}
-                    className="hidden"
-                  />
-                </label>
+              <Label>Status Ketersediaan</Label>
+              <div className="flex gap-2">
+                <Button
+                  type="button"
+                  variant={formData.is_available ? "default" : "outline"}
+                  onClick={() =>
+                    setFormData((prev) => ({ ...prev, is_available: true }))
+                  }
+                >
+                  Available
+                </Button>
+                <Button
+                  type="button"
+                  variant={!formData.is_available ? "default" : "outline"}
+                  onClick={() =>
+                    setFormData((prev) => ({ ...prev, is_available: false }))
+                  }
+                >
+                  Unavailable
+                </Button>
               </div>
             </div>
 
@@ -712,18 +842,160 @@ export default function AdminLocationsPage() {
               <div className="flex flex-wrap gap-2">
                 {availableTags.map((tag) => (
                   <button
-                    key={tag}
+                    key={tag.id}
                     type="button"
-                    onClick={() => toggleTag(tag)}
+                    onClick={() => toggleMultiSelect("tag_ids", Number(tag.id))}
                     className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
-                      formData.tags.includes(tag)
+                      formData.tag_ids.includes(Number(tag.id))
                         ? "bg-primary text-primary-foreground"
                         : "bg-secondary text-secondary-foreground hover:bg-secondary/80"
                     }`}
                   >
-                    {tag}
+                    {tag.name}
                   </button>
                 ))}
+              </div>
+            </div>
+
+            <div className="grid gap-1.5">
+              <Label>Item Categories</Label>
+              <div className="flex flex-wrap gap-2">
+                {availableItemCategories.map((item) => (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() =>
+                      selectSingleRelation("item_category_ids", Number(item.id))
+                    }
+                    className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
+                      formData.item_category_ids.includes(Number(item.id))
+                        ? "bg-primary text-primary-foreground"
+                        : "bg-secondary text-secondary-foreground hover:bg-secondary/80"
+                    }`}
+                  >
+                    {item.name}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="grid gap-1.5">
+              <Label>Item Sub Categories</Label>
+              <div className="flex flex-wrap gap-2">
+                {availableItemSubCategories.map((item) => (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() =>
+                      selectSingleRelation(
+                        "item_sub_category_ids",
+                        Number(item.id),
+                      )
+                    }
+                    className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
+                      formData.item_sub_category_ids.includes(Number(item.id))
+                        ? "bg-primary text-primary-foreground"
+                        : "bg-secondary text-secondary-foreground hover:bg-secondary/80"
+                    }`}
+                  >
+                    {item.name}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="grid gap-2">
+              <Label>Gambar Lokasi</Label>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={handleImageFileChange}
+              />
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                {formImages.map((image, index) => (
+                  <div
+                    key={`${image.id ?? "new"}-${index}`}
+                    className="rounded-lg border border-border bg-card p-3"
+                  >
+                    <div
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => openImagePicker(index)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          openImagePicker(index);
+                        }
+                      }}
+                      className="relative h-28 w-full rounded-md border border-border bg-muted cursor-pointer"
+                      style={
+                        image.preview_url || image.url
+                          ? {
+                              backgroundImage: `url(${image.preview_url || image.url})`,
+                              backgroundSize: "cover",
+                              backgroundPosition: "center",
+                            }
+                          : undefined
+                      }
+                    >
+                      {!image.url && (
+                        <div className="h-full w-full flex items-center justify-center text-xs text-muted-foreground">
+                          Belum ada gambar
+                        </div>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => removeImageCard(index)}
+                        className="absolute right-1 top-1 rounded-full bg-background/90 p-1 text-muted-foreground hover:text-destructive"
+                        aria-label="Hapus gambar"
+                      >
+                        <X className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+
+                    <div className="mt-3 grid gap-2">
+                      <p className="text-[11px] text-muted-foreground truncate">
+                        {image.url || "Belum ada path gambar"}
+                      </p>
+                      <div className="grid gap-1">
+                        <Label className="text-[11px] text-muted-foreground">
+                          Order
+                        </Label>
+                        <Input
+                          type="number"
+                          min={1}
+                          max={Math.max(formImages.length, 1)}
+                          value={image.position}
+                          onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                            updateImageOrder(index, Number(e.target.value) || 1)
+                          }
+                        />
+                      </div>
+                    </div>
+                  </div>
+                ))}
+
+                <button
+                  type="button"
+                  onClick={() => openImagePicker(null)}
+                  disabled={uploadingImage}
+                  className="rounded-lg border border-dashed border-border bg-muted/30 hover:bg-muted/50 transition-colors p-3 disabled:opacity-60"
+                >
+                  <div className="h-full min-h-[180px] flex items-center justify-center">
+                    <div className="flex flex-col items-center gap-1 text-muted-foreground">
+                      {uploadingImage ? (
+                        <Loader2 className="h-6 w-6 animate-spin" />
+                      ) : (
+                        <Plus className="h-6 w-6" />
+                      )}
+                      <span className="text-xs font-medium">
+                        {uploadingImage ? "Uploading..." : "Tambah gambar"}
+                      </span>
+                    </div>
+                  </div>
+                </button>
               </div>
             </div>
           </div>

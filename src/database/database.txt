@@ -269,18 +269,18 @@ Table promo_codes {
   }
 }
 
-Table packages {
+Table bundles {
   Note: "Master bundling/paketan; final_price adalah harga jual paket"
 
-  id integer [pk, increment, not null, note: "Primary key package"]
-  uuid uuid [not null, unique, note: "ID publik package"]
-  name text [not null, note: "Nama package"]
-  description text [null, note: "Deskripsi package"]
-  is_active boolean [not null, default: true, note: "Status aktif package"]
-  base_price integer [not null, default: 0, note: "Harga normal total item package"]
-  discount_type text [null, note: "Jenis diskon package: percent/fixed"]
-  discount_value integer [not null, default: 0, note: "Nilai diskon package"]
-  final_price integer [not null, default: 0, note: "Harga akhir package"]
+  id integer [pk, increment, not null, note: "Primary key bundle"]
+  uuid uuid [not null, unique, note: "ID publik bundle"]
+  name text [not null, note: "Nama bundle"]
+  description text [null, note: "Deskripsi bundle"]
+  is_active boolean [not null, default: true, note: "Status aktif bundle"]
+  base_price integer [not null, default: 0, note: "Harga normal total item bundle"]
+  discount_type text [null, note: "Jenis diskon bundle: percent/fixed"]
+  discount_value integer [not null, default: 0, note: "Nilai diskon bundle"]
+  final_price integer [not null, default: 0, note: "Harga akhir bundle"]
   created_at timestampz [not null, default: `now()`, note: "Waktu dibuat"]
   updated_at timestampz [not null, default: `now()`, note: "Waktu diperbarui"]
 
@@ -292,75 +292,75 @@ Table packages {
   }
 }
 
-Table package_crews {
-  Note: "Detail crew dalam package"
+Table bundle_crews {
+  Note: "Detail crew dalam bundle"
 
   id integer [pk, increment, not null, note: "Primary key"]
   uuid uuid [not null, unique, note: "ID publik baris detail"]
-  package_id integer [not null, note: "FK ke packages.id"]
+  bundle_id integer [not null, note: "FK ke bundles.id"]
   crew_id integer [not null, note: "FK ke crews.id"]
-  quantity integer [not null, default: 1, note: "Jumlah crew di package"]
+  quantity integer [not null, default: 1, note: "Jumlah crew di bundle"]
   notes string [null, note: "Catatan tambahan"]
   created_at timestampz [not null, default: `now()`, note: "Waktu dibuat"]
 
   indexes {
-    (package_id)
+    (bundle_id)
     (crew_id)
-    (package_id, crew_id) [unique]
+    (bundle_id, crew_id) [unique]
   }
 }
 
-Table package_rentals {
-  Note: "Detail rental dalam package"
+Table bundle_rentals {
+  Note: "Detail rental dalam bundle"
 
   id integer [pk, increment, not null, note: "Primary key"]
   uuid uuid [not null, unique, note: "ID publik baris detail"]
-  package_id integer [not null, note: "FK ke packages.id"]
+  bundle_id integer [not null, note: "FK ke bundles.id"]
   rental_id integer [not null, note: "FK ke rentals.id"]
-  quantity integer [not null, default: 1, note: "Jumlah rental di package"]
+  quantity integer [not null, default: 1, note: "Jumlah rental di bundle"]
   notes string [null, note: "Catatan tambahan"]
   created_at timestampz [not null, default: `now()`, note: "Waktu dibuat"]
 
   indexes {
-    (package_id)
+    (bundle_id)
     (rental_id)
-    (package_id, rental_id) [unique]
+    (bundle_id, rental_id) [unique]
   }
 }
 
-Table package_food_and_beverages {
-  Note: "Detail food and beverage dalam package"
+Table bundle_food_and_beverages {
+  Note: "Detail food and beverage dalam bundle"
 
   id integer [pk, increment, not null, note: "Primary key"]
   uuid uuid [not null, unique, note: "ID publik baris detail"]
-  package_id integer [not null, note: "FK ke packages.id"]
+  bundle_id integer [not null, note: "FK ke bundles.id"]
   food_and_beverage_id integer [not null, note: "FK ke food_and_beverage.id"]
-  quantity integer [not null, default: 1, note: "Jumlah F&B di package"]
+  quantity integer [not null, default: 1, note: "Jumlah F&B di bundle"]
   notes string [null, note: "Catatan tambahan"]
   created_at timestampz [not null, default: `now()`, note: "Waktu dibuat"]
 
   indexes {
-    (package_id)
+    (bundle_id)
     (food_and_beverage_id)
-    (package_id, food_and_beverage_id) [unique]
+    (bundle_id, food_and_beverage_id) [unique]
   }
 }
 
-Table package_expendables {
-  Note: "Detail expendable dalam package"
+Table bundle_expendables {
+  Note: "Detail expendable dalam bundle"
 
   id integer [pk, increment, not null, note: "Primary key"]
   uuid uuid [not null, unique, note: "ID publik baris detail"]
-  package_id integer [not null, note: "FK ke packages.id"]
+  bundle_id integer [not null, note: "FK ke bundles.id"]
   expendable_id integer [not null, note: "FK ke expendables.id"]
-  quantity integer [not null, default: 1, note: "Jumlah expendable di package"]
+  quantity integer [not null, default: 1, note: "Jumlah expendable di bundle"]
   notes string [null, note: "Catatan tambahan"]
   created_at timestampz [not null, default: `now()`, note: "Waktu dibuat"]
 
   indexes {
-    (package_id)
+    (bundle_id)
     (expendable_id)
-    (package_id, expendable_id) [unique]
+    (bundle_id, expendable_id) [unique]
   }
 }
 
@@ -435,8 +435,8 @@ Table order_items {
   unit_price_snapshot integer [not null, default: 0, note: "Harga per unit saat checkout"]
   line_total integer [not null, default: 0, note: "Total baris = unit_price_snapshot * quantity"]
 
-  is_from_bundle boolean [not null, default: false, note: "Penanda item berasal dari package"]
-  bundle_id integer [null, note: "FK ke packages.id jika dari bundling"]
+  is_from_bundle boolean [not null, default: false, note: "Penanda item berasal dari bundle"]
+  bundle_id integer [null, note: "FK ke bundles.id jika dari bundling"]
 
   booking_start date [null, note: "Mulai booking; khusus item yang butuh waktu"]
   booking_end date [null, note: "Selesai booking; khusus item yang butuh waktu"]
@@ -647,25 +647,25 @@ Table crew_item_sub_categories {
   }
 }
 
-Table package_bundle_types {
-  package_id integer [pk, not null, note: "FK ke packages.id"]
+Table bundle_bundle_types {
+  bundle_id integer [pk, not null, note: "FK ke bundles.id"]
   bundle_type_id integer [pk, not null, note: "FK ke bundle_types.id"]
   created_at timestampz [not null, default: `now()`]
 
   indexes {
     (bundle_type_id)
-    (package_id, bundle_type_id) [unique]
+    (bundle_id, bundle_type_id) [unique]
   }
 }
 
-Table package_bundle_categories {
-  package_id integer [pk, not null, note: "FK ke packages.id"]
+Table bundle_bundle_categories {
+  bundle_id integer [pk, not null, note: "FK ke bundles.id"]
   bundle_category_id integer [pk, not null, note: "FK ke bundle_categories.id"]
   created_at timestampz [not null, default: `now()`]
 
   indexes {
     (bundle_category_id)
-    (package_id, bundle_category_id) [unique]
+    (bundle_id, bundle_category_id) [unique]
   }
 }
 
@@ -680,14 +680,14 @@ Ref: "food_and_beverage_images"."food_and_beverage_id" > "food_and_beverage"."id
 Ref: "crew_skills"."crew_id" > "crews"."id"
 Ref: "crew_images"."crew_id" > "crews"."id"
 
-Ref: "package_crews"."package_id" > "packages"."id"
-Ref: "package_crews"."crew_id" > "crews"."id"
-Ref: "package_food_and_beverages"."package_id" > "packages"."id"
-Ref: "package_food_and_beverages"."food_and_beverage_id" > "food_and_beverage"."id"
-Ref: "package_expendables"."package_id" > "packages"."id"
-Ref: "package_expendables"."expendable_id" > "expendables"."id"
-Ref: "package_rentals"."package_id" > "packages"."id"
-Ref: "package_rentals"."rental_id" > "rentals"."id"
+Ref: "bundle_crews"."bundle_id" > "bundles"."id"
+Ref: "bundle_crews"."crew_id" > "crews"."id"
+Ref: "bundle_food_and_beverages"."bundle_id" > "bundles"."id"
+Ref: "bundle_food_and_beverages"."food_and_beverage_id" > "food_and_beverage"."id"
+Ref: "bundle_expendables"."bundle_id" > "bundles"."id"
+Ref: "bundle_expendables"."expendable_id" > "expendables"."id"
+Ref: "bundle_rentals"."bundle_id" > "bundles"."id"
+Ref: "bundle_rentals"."rental_id" > "rentals"."id"
 
 Ref: "food_and_beverage_tag"."food_and_beverage_tag_id" > "food_and_beverage_tags"."id"
 Ref: "food_and_beverage_tag"."food_and_beverage_id" > "food_and_beverage"."id"
@@ -695,7 +695,7 @@ Ref: "food_and_beverage_tag"."food_and_beverage_id" > "food_and_beverage"."id"
 Ref: "orders"."user_uuid" > "profiles"."uuid"
 Ref: "orders"."promo_code_id" > "promo_codes"."id"
 Ref: "order_items"."order_id" > "orders"."id"
-Ref: "order_items"."bundle_id" > "packages"."id"
+Ref: "order_items"."bundle_id" > "bundles"."id"
 
 Ref: "location_reviews"."user_uuid" > "profiles"."uuid"
 Ref: "location_reviews"."location_id" > "locations"."id"
@@ -731,10 +731,10 @@ Ref: "food_and_beverage_item_sub_categories"."item_sub_category_id" > "item_sub_
 Ref: "crew_item_sub_categories"."crew_id" > "crews"."id"
 Ref: "crew_item_sub_categories"."item_sub_category_id" > "item_sub_categories"."id"
 
-Ref: "package_bundle_types"."package_id" > "packages"."id"
-Ref: "package_bundle_types"."bundle_type_id" > "bundle_types"."id"
+Ref: "bundle_bundle_types"."bundle_id" > "bundles"."id"
+Ref: "bundle_bundle_types"."bundle_type_id" > "bundle_types"."id"
 
-Ref: "package_bundle_categories"."package_id" > "packages"."id"
-Ref: "package_bundle_categories"."bundle_category_id" > "bundle_categories"."id"
+Ref: "bundle_bundle_categories"."bundle_id" > "bundles"."id"
+Ref: "bundle_bundle_categories"."bundle_category_id" > "bundle_categories"."id"
 
 Ref: "profiles"."user_uuid" - "users"."id"

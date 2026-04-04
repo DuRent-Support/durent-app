@@ -56,12 +56,29 @@ type SidebarNavContentProps = {
   isAdmin: boolean;
 };
 
-function isPathActive(pathname: string, href: string) {
+function isPathActive(
+  pathname: string,
+  href: string,
+  options?: { exact?: boolean },
+) {
+  const exact = options?.exact ?? false;
+
+  const normalizedPathname =
+    pathname !== "/" ? pathname.replace(/\/+$/, "") : "/";
+  const normalizedHref = href !== "/" ? href.replace(/\/+$/, "") : "/";
+
   if (href === "/") {
-    return pathname === "/";
+    return normalizedPathname === "/";
   }
 
-  return pathname === href || pathname.startsWith(`${href}/`);
+  if (exact) {
+    return normalizedPathname === normalizedHref;
+  }
+
+  return (
+    normalizedPathname === normalizedHref ||
+    normalizedPathname.startsWith(`${normalizedHref}/`)
+  );
 }
 
 function SidebarNavContent({
@@ -192,11 +209,11 @@ function SidebarNavContent({
                   <SidebarMenuButton
                     asChild
                     className={buttonClassName}
-                    isActive={isPathActive(pathname, "/packages")}
+                    isActive={isPathActive(pathname, "/bundles")}
                   >
-                    <Link href="/packages" className={itemClassName}>
+                    <Link href="/bundles" className={itemClassName}>
                       <Package className={iconClassName} />
-                      <span className={labelClassName}>Packages</span>
+                      <span className={labelClassName}>Bundles</span>
                     </Link>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
@@ -260,7 +277,7 @@ function SidebarNavContent({
                   <SidebarMenuButton
                     asChild
                     className={buttonClassName}
-                    isActive={isPathActive(pathname, "/admin")}
+                    isActive={isPathActive(pathname, "/admin", { exact: true })}
                   >
                     <Link href="/admin" className={itemClassName}>
                       <LayoutDashboard className={iconClassName} />
@@ -297,18 +314,18 @@ function SidebarNavContent({
           </SidebarGroup>
 
           <SidebarGroup className="px-1 pt-1">
-            <SidebarGroupLabel>Packages CRUD</SidebarGroupLabel>
+            <SidebarGroupLabel>Bundles CRUD</SidebarGroupLabel>
             <SidebarGroupContent>
               <SidebarMenu>
                 <SidebarMenuItem className={itemWrapperClassName}>
                   <SidebarMenuButton
                     asChild
                     className={buttonClassName}
-                    isActive={isPathActive(pathname, "/admin/packages")}
+                    isActive={isPathActive(pathname, "/admin/bundles")}
                   >
-                    <Link href="/admin/packages" className={itemClassName}>
+                    <Link href="/admin/bundles" className={itemClassName}>
                       <Package className={iconClassName} />
-                      <span className={labelClassName}>Packages</span>
+                      <span className={labelClassName}>Bundles</span>
                     </Link>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
@@ -324,7 +341,9 @@ function SidebarNavContent({
                   <SidebarMenuButton
                     asChild
                     className={buttonClassName}
-                    isActive={isPathActive(pathname, "/admin/locations")}
+                    isActive={isPathActive(pathname, "/admin/locations", {
+                      exact: true,
+                    })}
                   >
                     <Link href="/admin/locations" className={itemClassName}>
                       <MapPin className={iconClassName} />
@@ -359,7 +378,9 @@ function SidebarNavContent({
                   <SidebarMenuButton
                     asChild
                     className={buttonClassName}
-                    isActive={isPathActive(pathname, "/admin/crews")}
+                    isActive={isPathActive(pathname, "/admin/crews", {
+                      exact: true,
+                    })}
                   >
                     <Link href="/admin/crews" className={itemClassName}>
                       <Users className={iconClassName} />
@@ -414,6 +435,7 @@ function SidebarNavContent({
                     isActive={isPathActive(
                       pathname,
                       "/admin/food-and-beverage",
+                      { exact: true },
                     )}
                   >
                     <Link

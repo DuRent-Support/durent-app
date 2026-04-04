@@ -1,8 +1,7 @@
 "use client";
 
-import Image from "next/image";
-import { useCallback, useEffect, useState } from "react";
-import { ImageIcon, Loader2, Pencil, Plus, Trash2, X } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { Loader2, Pencil, Plus, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -26,94 +25,101 @@ import {
 } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
 import formatPrice from "@/lib/formatPrice";
-import type { Crew } from "@/types";
 
-type DynamicField = {
-  key: string;
-  value: string;
+type RelationItem = {
+  id: number;
+  name: string;
+  short_code?: string;
 };
 
-type CrewFormState = {
+type CrewImageItem = {
+  id?: number;
+  url: string;
+  preview_url?: string | null;
+  position: number;
+};
+
+type CrewSkill = {
+  id: number;
   name: string;
   description: string;
-  price: string;
-  skills: DynamicField[];
 };
 
-type ValidationResult =
-  | {
-      ok: true;
-      payload: {
-        name: string;
-        description: string;
-        price: number;
-        skills: Record<string, string>;
-      };
-    }
-  | { ok: false };
+type CrewItem = {
+  id: number;
+  uuid: string;
+  code: string;
+  name: string;
+  description: string;
+  price: number;
+  is_available: boolean;
+  skill_ids: number[];
+  item_category_ids: number[];
+  item_sub_category_ids: number[];
+  skills: CrewSkill[];
+  item_categories: RelationItem[];
+  item_sub_categories: RelationItem[];
+  images: CrewImageItem[];
+};
 
-const emptyForm: CrewFormState = {
+type CrewFormData = {
+  name: string;
+  description: string;
+  price: number;
+  is_available: boolean;
+  skill_ids: number[];
+  item_category_ids: number[];
+  item_sub_category_ids: number[];
+  images: CrewImageItem[];
+};
+
+const emptyCrew: CrewFormData = {
   name: "",
   description: "",
-  price: "",
-  skills: [{ key: "", value: "" }],
+  price: 0,
+  is_available: true,
+  skill_ids: [],
+  item_category_ids: [],
+  item_sub_category_ids: [],
+  images: [],
 };
 
-function summarizeJson(value: unknown) {
-  if (Array.isArray(value)) {
-    return `Array (${value.length})`;
-  }
-
-  if (value && typeof value === "object") {
-    const keys = Object.keys(value as Record<string, unknown>);
-    if (keys.length === 0) return "{}";
-    return keys.slice(0, 3).join(", ");
-  }
-
-  return "-";
-}
-
-function toDynamicFields(value: unknown): DynamicField[] {
-  if (value && typeof value === "object" && !Array.isArray(value)) {
-    const entries = Object.entries(value as Record<string, unknown>);
-    if (entries.length === 0) {
-      return [{ key: "", value: "" }];
-    }
-
-    return entries.map(([key, fieldValue]) => ({
-      key,
-      value:
-        typeof fieldValue === "string"
-          ? fieldValue
-          : JSON.stringify(fieldValue ?? ""),
+const normalizeImages = (images?: CrewImageItem[]) =>
+  (Array.isArray(images) ? images : [])
+    .filter((image) => String(image.url ?? "").trim().length > 0)
+    .map((image) => ({
+      ...image,
+      url: String(image.url ?? "").trim(),
+      position: Math.max(1, Math.trunc(Number(image.position) || 1)),
+    }))
+    .sort((a, b) => a.position - b.position)
+    .map((image, index) => ({
+      ...image,
+      position: index + 1,
     }));
-  }
-
-  if (Array.isArray(value) && value.length > 0) {
-    return value.map((fieldValue, index) => ({
-      key: `item_${index + 1}`,
-      value:
-        typeof fieldValue === "string"
-          ? fieldValue
-          : JSON.stringify(fieldValue ?? ""),
-    }));
-  }
-
-  return [{ key: "", value: "" }];
-}
 
 export default function CrewsPage() {
-  const [crews, setCrews] = useState<Crew[]>([]);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const [pendingImageIndex, setPendingImageIndex] = useState<number | null>(
+    null,
+  );
+  const [crews, setCrews] = useState<CrewItem[]>([]);
+  const [availableSkills, setAvailableSkills] = useState<RelationItem[]>([]);
+  const [availableItemCategories, setAvailableItemCategories] = useState<
+    RelationItem[]
+  >([]);
+  const [availableItemSubCategories, setAvailableItemSubCategories] = useState<
+    RelationItem[]
+  >([]);
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [editingCrew, setEditingCrew] = useState<Crew | null>(null);
-  const [formData, setFormData] = useState<CrewFormState>(emptyForm);
-  const [formErrors, setFormErrors] = useState<Record<string, string>>({});
-  const [deleteConfirm, setDeleteConfirm] = useState<Crew | null>(null);
+  const [editingCrew, setEditingCrew] = useState<CrewItem | null>(null);
+  const [formData, setFormData] = useState<CrewFormData>(emptyCrew);
+  const [deleteConfirm, setDeleteConfirm] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [imageFiles, setImageFiles] = useState<File[]>([]);
-  const [imagePreviews, setImagePreviews] = useState<string[]>([]);
-  const [existingImageUrls, setExistingImageUrls] = useState<string[]>([]);
+  const [uploadingImage, setUploadingImage] = useState(false);
+  const [formErrors, setFormErrors] = useState<Record<string, string>>({});
+  const formImages = Array.isArray(formData.images) ? formData.images : [];
 
   const fetchCrews = useCallback(async () => {
     try {
@@ -122,254 +128,383 @@ export default function CrewsPage() {
         method: "GET",
         cache: "no-store",
       });
+      const data = await response.json();
 
-      const result = (await response.json()) as {
-        crews?: Crew[];
-        message?: string;
-      };
-
-      if (!response.ok) {
-        toast.error(result.message || "Gagal mengambil data crews.");
-        setCrews([]);
-        return;
+      if (response.ok) {
+        setCrews((data.crews || []) as CrewItem[]);
+      } else {
+        toast.error(data.message || "Gagal mengambil data crew");
       }
-
-      setCrews(result.crews ?? []);
     } catch (error) {
       console.error("Fetch crews error:", error);
-      toast.error("Terjadi kesalahan saat mengambil data crews.");
+      toast.error("Terjadi kesalahan saat mengambil data");
     } finally {
       setLoading(false);
     }
   }, []);
 
+  const fetchOptions = useCallback(async () => {
+    try {
+      const [skillsResponse, categoryResponse, subCategoryResponse] =
+        await Promise.all([
+          fetch("/api/admin/crews/skills", {
+            method: "GET",
+            cache: "no-store",
+          }),
+          fetch("/api/admin/categories", {
+            method: "GET",
+            cache: "no-store",
+          }),
+          fetch("/api/admin/sub-categories", {
+            method: "GET",
+            cache: "no-store",
+          }),
+        ]);
+
+      const [skillsData, categoryData, subCategoryData] = await Promise.all([
+        skillsResponse.json(),
+        categoryResponse.json(),
+        subCategoryResponse.json(),
+      ]);
+
+      if (skillsResponse.ok) {
+        setAvailableSkills(
+          (
+            (skillsData.items ?? []) as Array<{
+              id: string;
+              name: string;
+              description: string;
+            }>
+          ).map((item) => ({
+            id: Number(item.id),
+            name: item.name,
+            description: item.description,
+          })),
+        );
+      }
+
+      if (categoryResponse.ok) {
+        setAvailableItemCategories(
+          (
+            (categoryData.items ?? []) as Array<{
+              id: string;
+              name: string;
+              short_code: string;
+            }>
+          ).map((item) => ({
+            id: Number(item.id),
+            name: item.name,
+            short_code: item.short_code,
+          })),
+        );
+      }
+
+      if (subCategoryResponse.ok) {
+        setAvailableItemSubCategories(
+          (
+            (subCategoryData.items ?? []) as Array<{
+              id: string;
+              name: string;
+              short_code: string;
+            }>
+          ).map((item) => ({
+            id: Number(item.id),
+            name: item.name,
+            short_code: item.short_code,
+          })),
+        );
+      }
+    } catch (error) {
+      console.error("Fetch crew options error:", error);
+    }
+  }, []);
+
   useEffect(() => {
     void fetchCrews();
-  }, [fetchCrews]);
+    void fetchOptions();
+  }, [fetchCrews, fetchOptions]);
 
   const openAddDialog = () => {
     setEditingCrew(null);
-    setFormData(emptyForm);
-    setImageFiles([]);
-    setImagePreviews([]);
-    setExistingImageUrls([]);
+    setFormData({ ...emptyCrew, images: [] });
+    setPendingImageIndex(null);
     setFormErrors({});
     setDialogOpen(true);
   };
 
-  const openEditDialog = (crew: Crew) => {
+  const openEditDialog = (crew: CrewItem) => {
     setEditingCrew(crew);
     setFormData({
       name: crew.name,
       description: crew.description,
-      price: String(crew.price),
-      skills: toDynamicFields(crew.skills),
+      price: crew.price,
+      is_available: crew.is_available,
+      skill_ids: crew.skill_ids,
+      item_category_ids: crew.item_category_ids,
+      item_sub_category_ids: crew.item_sub_category_ids,
+      images: normalizeImages(crew.images ?? []),
     });
-    setImageFiles([]);
-    setImagePreviews([]);
-    setExistingImageUrls(crew.images ?? []);
+    setPendingImageIndex(null);
     setFormErrors({});
     setDialogOpen(true);
   };
 
-  const handleImageChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(event.target.files || []);
-    if (files.length === 0) return;
-
-    setImageFiles((prev) => [...prev, ...files]);
-
-    files.forEach((file) => {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setImagePreviews((prev) => [...prev, reader.result as string]);
-      };
-      reader.readAsDataURL(file);
-    });
-  };
-
-  const removeImage = (index: number, isExisting: boolean) => {
-    if (isExisting) {
-      setExistingImageUrls((prev) => prev.filter((_, i) => i !== index));
-      return;
-    }
-
-    const newFileIndex = index - existingImageUrls.length;
-    setImageFiles((prev) => prev.filter((_, i) => i !== newFileIndex));
-    setImagePreviews((prev) => prev.filter((_, i) => i !== newFileIndex));
-  };
-
-  const updateSkillField = (
-    index: number,
-    property: keyof DynamicField,
-    value: string,
-  ) => {
-    setFormData((prev) => ({
-      ...prev,
-      skills: prev.skills.map((field, idx) =>
-        idx === index ? { ...field, [property]: value } : field,
-      ),
-    }));
-    setFormErrors((prev) => ({ ...prev, skills: "" }));
-  };
-
-  const addSkillField = () => {
-    setFormData((prev) => ({
-      ...prev,
-      skills: [...prev.skills, { key: "", value: "" }],
-    }));
-  };
-
-  const removeSkillField = (index: number) => {
-    setFormData((prev) => {
-      if (prev.skills.length === 1) {
-        return {
-          ...prev,
-          skills: [{ key: "", value: "" }],
-        };
-      }
-
-      return {
-        ...prev,
-        skills: prev.skills.filter((_, idx) => idx !== index),
-      };
-    });
-  };
-
-  const validateForm = (): ValidationResult => {
+  const validateForm = () => {
     const errors: Record<string, string> = {};
-    const name = formData.name.trim();
-    const description = formData.description.trim();
-    const price = Number.parseInt(formData.price, 10);
-
-    if (!name) {
-      errors.name = "Nama wajib diisi.";
-    }
-
-    if (!description) {
-      errors.description = "Deskripsi wajib diisi.";
-    }
-
-    if (!Number.isInteger(price) || price < 0) {
-      errors.price = "Harga harus bilangan bulat >= 0.";
-    }
-
-    const filledSkills = formData.skills.filter(
-      (field) => field.key.trim() || field.value.trim(),
-    );
-
-    if (filledSkills.length === 0) {
-      errors.skills = "Minimal isi 1 skill.";
-    }
-
-    const hasIncompleteSkill = filledSkills.some(
-      (field) => !field.key.trim() || !field.value.trim(),
-    );
-
-    if (hasIncompleteSkill) {
-      errors.skills = "Setiap skill harus punya nama field dan value.";
-    }
-
-    if (existingImageUrls.length + imageFiles.length === 0) {
-      errors.images = "Minimal upload 1 gambar.";
-    }
-
+    if (!String(formData.name ?? "").trim()) errors.name = "Wajib diisi";
+    if (!String(formData.description ?? "").trim())
+      errors.description = "Wajib diisi";
+    if (Number(formData.price) < 0) errors.price = "Wajib diisi";
+    if (formData.skill_ids.length === 0)
+      errors.skills = "Pilih minimal 1 skill";
+    if (formData.item_category_ids.length === 0)
+      errors.item_category_ids = "Pilih 1 category";
+    if (formData.item_sub_category_ids.length === 0)
+      errors.item_sub_category_ids = "Pilih 1 sub category";
     setFormErrors(errors);
 
     if (Object.keys(errors).length > 0) {
-      return { ok: false };
+      return false;
     }
 
-    const skillsObject: Record<string, string> = {};
-    filledSkills.forEach((field) => {
-      skillsObject[field.key.trim()] = field.value.trim();
-    });
-
-    return {
-      ok: true,
-      payload: {
-        name,
-        description,
-        price,
-        skills: skillsObject,
-      },
-    };
+    return true;
   };
 
   const saveCrew = async () => {
-    const validation = validateForm();
-    if (!validation.ok) return;
+    if (!validateForm()) return;
 
     try {
       setSaving(true);
 
-      const payload = new FormData();
-      payload.append("name", validation.payload.name);
-      payload.append("description", validation.payload.description);
-      payload.append("price", validation.payload.price.toString());
-      payload.append("skills", JSON.stringify(validation.payload.skills));
+      const payload = {
+        name: formData.name,
+        description: formData.description,
+        price: Number(formData.price) || 0,
+        is_available: formData.is_available,
+        skill_ids: formData.skill_ids,
+        item_category_ids: formData.item_category_ids,
+        item_sub_category_ids: formData.item_sub_category_ids,
+        images: normalizeImages(formData.images ?? []).map((image) => ({
+          url: image.url,
+          position: image.position,
+        })),
+      };
 
       if (editingCrew) {
-        payload.append("existingImageUrls", JSON.stringify(existingImageUrls));
+        const response = await fetch(`/api/admin/crews/${editingCrew.id}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+
+        const data = await response.json();
+
+        if (response.ok) {
+          toast.success("Crew berhasil diupdate");
+          await fetchCrews();
+          setDialogOpen(false);
+        } else {
+          toast.error(data.message || "Gagal mengupdate crew");
+        }
+      } else {
+        const response = await fetch("/api/admin/crews", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+
+        const data = await response.json();
+
+        if (response.ok) {
+          toast.success("Crew berhasil ditambahkan");
+          await fetchCrews();
+          setDialogOpen(false);
+        } else {
+          toast.error(data.message || "Gagal menambahkan crew");
+        }
       }
-
-      imageFiles.forEach((file, index) => {
-        payload.append(`image_${index}`, file);
-      });
-
-      const response = await fetch(
-        editingCrew ? `/api/admin/crews/${editingCrew.crew_id}` : "/api/admin/crews",
-        {
-          method: editingCrew ? "PUT" : "POST",
-          body: payload,
-        },
-      );
-
-      const result = (await response.json()) as { message?: string };
-
-      if (!response.ok) {
-        toast.error(
-          result.message ||
-            (editingCrew
-              ? "Gagal mengupdate crew."
-              : "Gagal menambahkan crew."),
-        );
-        return;
-      }
-
-      toast.success(
-        editingCrew ? "Crew berhasil diupdate." : "Crew berhasil ditambahkan.",
-      );
-
-      await fetchCrews();
-      setDialogOpen(false);
     } catch (error) {
       console.error("Save crew error:", error);
-      toast.error("Terjadi kesalahan saat menyimpan crew.");
+      toast.error("Terjadi kesalahan saat menyimpan crew");
     } finally {
       setSaving(false);
     }
   };
 
-  const deleteCrew = async (crew: Crew) => {
+  const deleteCrew = async (id: number) => {
     try {
-      const response = await fetch(`/api/admin/crews/${crew.crew_id}`, {
+      const response = await fetch(`/api/admin/crews/${id}`, {
         method: "DELETE",
       });
 
-      const result = (await response.json()) as { message?: string };
+      const data = await response.json();
+
+      if (response.ok) {
+        toast.success("Crew berhasil dihapus");
+        await fetchCrews();
+        setDeleteConfirm(null);
+      } else {
+        toast.error(data.message || "Gagal menghapus crew");
+      }
+    } catch (error) {
+      console.error("Delete crew error:", error);
+      toast.error("Terjadi kesalahan saat menghapus crew");
+    }
+  };
+
+  const toggleSkill = (value: number) => {
+    setFormData((prev) => ({
+      ...prev,
+      skill_ids: prev.skill_ids.includes(value)
+        ? prev.skill_ids.filter((item) => item !== value)
+        : [...prev.skill_ids, value],
+    }));
+  };
+
+  const selectSingleRelation = (
+    key: "item_category_ids" | "item_sub_category_ids",
+    value: number,
+  ) => {
+    setFormData((prev) => ({
+      ...prev,
+      [key]: [value],
+    }));
+  };
+
+  const openImagePicker = (index: number | null) => {
+    setPendingImageIndex(index);
+    fileInputRef.current?.click();
+  };
+
+  const handleImageFileChange = async (
+    e: React.ChangeEvent<HTMLInputElement>,
+  ) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+
+    try {
+      setUploadingImage(true);
+      const uploadForm = new FormData();
+      uploadForm.append("file", file);
+
+      const response = await fetch("/api/admin/crews/images/upload", {
+        method: "POST",
+        body: uploadForm,
+      });
+      const data = await response.json();
 
       if (!response.ok) {
-        toast.error(result.message || "Gagal menghapus crew.");
+        toast.error(data.message || "Gagal upload gambar");
         return;
       }
 
-      toast.success("Crew berhasil dihapus.");
-      await fetchCrews();
-      setDeleteConfirm(null);
+      const imagePath = String(data.path ?? "");
+      const signedUrl = String(data.signed_url ?? "");
+      if (!imagePath) {
+        toast.error("Path gambar tidak valid");
+        return;
+      }
+
+      setFormData((prev) => {
+        const currentImages = Array.isArray(prev.images)
+          ? [...prev.images]
+          : [];
+
+        if (pendingImageIndex === null) {
+          currentImages.push({
+            url: imagePath,
+            preview_url: signedUrl || null,
+            position: currentImages.length + 1,
+          });
+        } else {
+          const safeIndex = Math.max(
+            0,
+            Math.min(pendingImageIndex, Math.max(currentImages.length - 1, 0)),
+          );
+
+          if (currentImages.length === 0) {
+            currentImages.push({
+              url: imagePath,
+              preview_url: signedUrl || null,
+              position: 1,
+            });
+          } else {
+            currentImages[safeIndex] = {
+              ...currentImages[safeIndex],
+              url: imagePath,
+              preview_url: signedUrl || null,
+            };
+          }
+        }
+
+        return {
+          ...prev,
+          images: currentImages.map((image, index) => ({
+            ...image,
+            position: index + 1,
+          })),
+        };
+      });
+
+      toast.success("Gambar berhasil diupload");
     } catch (error) {
-      console.error("Delete crew error:", error);
-      toast.error("Terjadi kesalahan saat menghapus crew.");
+      console.error("Upload crew image error:", error);
+      toast.error("Terjadi kesalahan saat upload gambar");
+    } finally {
+      setUploadingImage(false);
+      setPendingImageIndex(null);
     }
+  };
+
+  const removeImageCard = (index: number) => {
+    setFormData((prev) => {
+      const currentImages = Array.isArray(prev.images) ? prev.images : [];
+      const nextImages = currentImages.filter(
+        (_, current) => current !== index,
+      );
+      return {
+        ...prev,
+        images: nextImages.map((image, imageIndex) => ({
+          ...image,
+          position: imageIndex + 1,
+        })),
+      };
+    });
+  };
+
+  const updateImageOrder = (index: number, nextPosition: number) => {
+    setFormData((prev) => {
+      const currentImages = Array.isArray(prev.images) ? prev.images : [];
+      if (currentImages.length <= 1) return { ...prev, images: currentImages };
+
+      const boundedPosition = Math.min(
+        Math.max(1, Math.trunc(nextPosition || 1)),
+        currentImages.length,
+      );
+      const targetIndex = boundedPosition - 1;
+      if (targetIndex === index) {
+        return {
+          ...prev,
+          images: currentImages.map((image, imageIndex) => ({
+            ...image,
+            position: imageIndex + 1,
+          })),
+        };
+      }
+
+      const nextImages = [...currentImages];
+      const [moved] = nextImages.splice(index, 1);
+      nextImages.splice(targetIndex, 0, moved);
+
+      return {
+        ...prev,
+        images: nextImages.map((image, imageIndex) => ({
+          ...image,
+          position: imageIndex + 1,
+        })),
+      };
+    });
   };
 
   return (
@@ -380,12 +515,15 @@ export default function CrewsPage() {
             Kelola Crews
           </h1>
           <p className="text-muted-foreground text-sm">
-            Tambah, edit, atau hapus data crew produksi.
+            Tambah, edit, atau hapus crew beserta relasi skill, category, dan
+            sub category.
           </p>
         </div>
 
         <div className="flex items-center justify-between mb-4">
-          <span className="text-sm text-muted-foreground">{crews.length} crew</span>
+          <span className="text-sm text-muted-foreground">
+            {crews.length} crew
+          </span>
           <Button size="sm" onClick={openAddDialog} className="gap-1.5">
             <Plus className="h-4 w-4" /> Tambah Crew
           </Button>
@@ -395,53 +533,50 @@ export default function CrewsPage() {
           <Table>
             <TableHeader>
               <TableRow className="border-border hover:bg-transparent">
-                <TableHead className="w-16">Foto</TableHead>
+                <TableHead>Code</TableHead>
                 <TableHead>Nama</TableHead>
                 <TableHead className="hidden sm:table-cell">Harga</TableHead>
                 <TableHead className="hidden lg:table-cell">Skills</TableHead>
+                <TableHead className="hidden lg:table-cell">Status</TableHead>
                 <TableHead className="w-24 text-right">Aksi</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {loading ? (
                 <TableRow>
-                  <TableCell colSpan={5} className="text-center py-12">
+                  <TableCell colSpan={6} className="text-center py-12">
                     <Loader2 className="h-6 w-6 animate-spin text-muted-foreground mx-auto" />
                   </TableCell>
                 </TableRow>
               ) : crews.length === 0 ? (
                 <TableRow>
                   <TableCell
-                    colSpan={5}
+                    colSpan={6}
                     className="text-center py-12 text-sm text-muted-foreground"
                   >
-                    Belum ada data crew. Klik &quot;Tambah Crew&quot; untuk menambahkan.
+                    Belum ada data crew. Klik &quot;Tambah Crew&quot; untuk
+                    menambahkan.
                   </TableCell>
                 </TableRow>
               ) : (
                 crews.map((crew) => (
-                  <TableRow key={crew.crew_id} className="border-border/50">
-                    <TableCell>
-                      {crew.images.length > 0 ? (
-                        <Image
-                          src={crew.images[0]}
-                          alt={crew.name}
-                          width={40}
-                          height={40}
-                          className="h-10 w-10 rounded-lg object-cover"
-                        />
-                      ) : (
-                        <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-secondary">
-                          <ImageIcon className="h-4 w-4 text-muted-foreground" />
-                        </div>
-                      )}
+                  <TableRow key={crew.id} className="border-border/50">
+                    <TableCell className="font-mono text-xs text-muted-foreground">
+                      {crew.code}
                     </TableCell>
-                    <TableCell className="font-medium text-foreground">{crew.name}</TableCell>
+                    <TableCell className="font-medium text-foreground">
+                      {crew.name}
+                    </TableCell>
                     <TableCell className="hidden sm:table-cell text-muted-foreground">
                       {formatPrice(crew.price)}
                     </TableCell>
                     <TableCell className="hidden lg:table-cell text-muted-foreground text-xs">
-                      {summarizeJson(crew.skills)}
+                      {crew.skills.length > 0
+                        ? crew.skills.map((skill) => skill.name).join(", ")
+                        : "-"}
+                    </TableCell>
+                    <TableCell className="hidden lg:table-cell text-muted-foreground">
+                      {crew.is_available ? "Available" : "Unavailable"}
                     </TableCell>
                     <TableCell className="text-right">
                       <div className="flex justify-end gap-1">
@@ -457,7 +592,7 @@ export default function CrewsPage() {
                           variant="ghost"
                           size="icon"
                           className="h-8 w-8 text-destructive hover:text-destructive"
-                          onClick={() => setDeleteConfirm(crew)}
+                          onClick={() => setDeleteConfirm(crew.id)}
                         >
                           <Trash2 className="h-3.5 w-3.5" />
                         </Button>
@@ -485,12 +620,17 @@ export default function CrewsPage() {
                 Nama <span className="text-destructive">*</span>
               </Label>
               {formErrors.name && (
-                <p className="text-xs text-destructive -mb-1">{formErrors.name}</p>
+                <p className="text-xs text-destructive -mb-1">
+                  {formErrors.name}
+                </p>
               )}
               <Input
                 value={formData.name}
                 onChange={(event) => {
-                  setFormData((prev) => ({ ...prev, name: event.target.value }));
+                  setFormData((prev) => ({
+                    ...prev,
+                    name: event.target.value,
+                  }));
                   setFormErrors((prev) => ({ ...prev, name: "" }));
                 }}
                 placeholder="Contoh: Camera Crew A"
@@ -502,7 +642,9 @@ export default function CrewsPage() {
                 Deskripsi <span className="text-destructive">*</span>
               </Label>
               {formErrors.description && (
-                <p className="text-xs text-destructive -mb-1">{formErrors.description}</p>
+                <p className="text-xs text-destructive -mb-1">
+                  {formErrors.description}
+                </p>
               )}
               <Textarea
                 rows={3}
@@ -523,7 +665,9 @@ export default function CrewsPage() {
                 Harga <span className="text-destructive">*</span>
               </Label>
               {formErrors.price && (
-                <p className="text-xs text-destructive -mb-1">{formErrors.price}</p>
+                <p className="text-xs text-destructive -mb-1">
+                  {formErrors.price}
+                </p>
               )}
               <Input
                 type="number"
@@ -531,124 +675,218 @@ export default function CrewsPage() {
                 step={1}
                 value={formData.price}
                 onChange={(event) => {
-                  setFormData((prev) => ({ ...prev, price: event.target.value }));
+                  setFormData((prev) => ({
+                    ...prev,
+                    price: Number(event.target.value) || 0,
+                  }));
                   setFormErrors((prev) => ({ ...prev, price: "" }));
                 }}
                 placeholder="1500000"
               />
             </div>
 
-            <div className="grid gap-2">
-              <div className="flex items-center justify-between">
-                <Label>
-                  Skills <span className="text-destructive">*</span>
-                </Label>
-                <Button type="button" variant="outline" size="sm" onClick={addSkillField}>
-                  <Plus className="mr-1 h-3.5 w-3.5" /> Tambah Field
+            <div className="grid gap-1.5">
+              <Label>Status</Label>
+              <div className="flex gap-2">
+                <Button
+                  type="button"
+                  variant={formData.is_available ? "default" : "outline"}
+                  onClick={() =>
+                    setFormData((prev) => ({ ...prev, is_available: true }))
+                  }
+                >
+                  Available
+                </Button>
+                <Button
+                  type="button"
+                  variant={!formData.is_available ? "default" : "outline"}
+                  onClick={() =>
+                    setFormData((prev) => ({ ...prev, is_available: false }))
+                  }
+                >
+                  Unavailable
                 </Button>
               </div>
+            </div>
 
+            <div className="grid gap-2">
+              <Label>
+                Skills <span className="text-destructive">*</span>
+              </Label>
               {formErrors.skills && (
                 <p className="text-xs text-destructive">{formErrors.skills}</p>
               )}
-
-              <div className="space-y-2">
-                {formData.skills.map((field, index) => (
-                  <div key={index} className="grid grid-cols-[1fr_1fr_auto] gap-2">
-                    <Input
-                      value={field.key}
-                      onChange={(event) =>
-                        updateSkillField(index, "key", event.target.value)
-                      }
-                      placeholder="Field (contoh: camera)"
-                    />
-                    <Input
-                      value={field.value}
-                      onChange={(event) =>
-                        updateSkillField(index, "value", event.target.value)
-                      }
-                      placeholder="Value (contoh: advanced)"
-                    />
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon"
-                      className="h-10 w-10 text-destructive"
-                      onClick={() => removeSkillField(index)}
-                    >
-                      <X className="h-4 w-4" />
-                    </Button>
-                  </div>
+              <div className="flex flex-wrap gap-2">
+                {availableSkills.map((skill) => (
+                  <button
+                    key={skill.id}
+                    type="button"
+                    onClick={() => toggleSkill(skill.id)}
+                    className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
+                      formData.skill_ids.includes(Number(skill.id))
+                        ? "bg-primary text-primary-foreground"
+                        : "bg-secondary text-secondary-foreground hover:bg-secondary/80"
+                    }`}
+                  >
+                    {skill.name}
+                  </button>
                 ))}
               </div>
             </div>
 
             <div className="grid gap-1.5">
               <Label>
-                Upload Gambar (Multiple) <span className="text-destructive">*</span>
+                Item Category <span className="text-destructive">*</span>
               </Label>
-              {formErrors.images && (
-                <p className="text-xs text-destructive">{formErrors.images}</p>
+              {formErrors.item_category_ids && (
+                <p className="text-xs text-destructive">
+                  {formErrors.item_category_ids}
+                </p>
               )}
-              <div className="grid grid-cols-3 gap-2">
-                {existingImageUrls.map((url, index) => (
-                  <div key={`existing-${index}`} className="relative h-24">
-                    <Image
-                      src={url}
-                      alt={`Existing ${index + 1}`}
-                      fill
-                      sizes="(max-width: 768px) 33vw, 180px"
-                      className="h-24 w-full rounded-lg object-cover"
-                    />
-                    <Button
-                      type="button"
-                      variant="destructive"
-                      size="icon"
-                      className="absolute top-1 right-1 h-6 w-6"
-                      onClick={() => removeImage(index, true)}
-                    >
-                      <X className="h-3 w-3" />
-                    </Button>
-                  </div>
+              <div className="flex flex-wrap gap-2">
+                {availableItemCategories.map((item) => (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() =>
+                      selectSingleRelation("item_category_ids", Number(item.id))
+                    }
+                    className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
+                      formData.item_category_ids.includes(Number(item.id))
+                        ? "bg-primary text-primary-foreground"
+                        : "bg-secondary text-secondary-foreground hover:bg-secondary/80"
+                    }`}
+                  >
+                    {item.name}
+                  </button>
                 ))}
+              </div>
+            </div>
 
-                {imagePreviews.map((preview, index) => (
-                  <div key={`preview-${index}`} className="relative h-24">
-                    <Image
-                      src={preview}
-                      alt={`Preview ${index + 1}`}
-                      fill
-                      sizes="(max-width: 768px) 33vw, 180px"
-                      unoptimized
-                      className="h-24 w-full rounded-lg object-cover"
-                    />
-                    <Button
-                      type="button"
-                      variant="destructive"
-                      size="icon"
-                      className="absolute top-1 right-1 h-6 w-6"
-                      onClick={() =>
-                        removeImage(existingImageUrls.length + index, false)
+            <div className="grid gap-1.5">
+              <Label>
+                Item Sub Category <span className="text-destructive">*</span>
+              </Label>
+              {formErrors.item_sub_category_ids && (
+                <p className="text-xs text-destructive">
+                  {formErrors.item_sub_category_ids}
+                </p>
+              )}
+              <div className="flex flex-wrap gap-2">
+                {availableItemSubCategories.map((item) => (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() =>
+                      selectSingleRelation(
+                        "item_sub_category_ids",
+                        Number(item.id),
+                      )
+                    }
+                    className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
+                      formData.item_sub_category_ids.includes(Number(item.id))
+                        ? "bg-primary text-primary-foreground"
+                        : "bg-secondary text-secondary-foreground hover:bg-secondary/80"
+                    }`}
+                  >
+                    {item.name}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="grid gap-2">
+              <Label>Gambar Crew</Label>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={handleImageFileChange}
+              />
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                {formImages.map((image, index) => (
+                  <div
+                    key={`${image.id ?? "new"}-${index}`}
+                    className="rounded-lg border border-border bg-card p-3"
+                  >
+                    <div
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => openImagePicker(index)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          openImagePicker(index);
+                        }
+                      }}
+                      className="relative h-28 w-full rounded-md border border-border bg-muted cursor-pointer"
+                      style={
+                        image.preview_url || image.url
+                          ? {
+                              backgroundImage: `url(${image.preview_url || image.url})`,
+                              backgroundSize: "cover",
+                              backgroundPosition: "center",
+                            }
+                          : undefined
                       }
                     >
-                      <X className="h-3 w-3" />
-                    </Button>
+                      {!image.url && (
+                        <div className="h-full w-full flex items-center justify-center text-xs text-muted-foreground">
+                          Belum ada gambar
+                        </div>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => removeImageCard(index)}
+                        className="absolute right-1 top-1 rounded-full bg-background/90 p-1 text-muted-foreground hover:text-destructive"
+                        aria-label="Hapus gambar"
+                      >
+                        <X className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+
+                    <div className="mt-3 grid gap-2">
+                      <p className="text-[11px] text-muted-foreground truncate">
+                        {image.url || "Belum ada path gambar"}
+                      </p>
+                      <div className="grid gap-1">
+                        <Label className="text-[11px] text-muted-foreground">
+                          Order
+                        </Label>
+                        <Input
+                          type="number"
+                          min={1}
+                          max={Math.max(formImages.length, 1)}
+                          value={image.position}
+                          onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                            updateImageOrder(index, Number(e.target.value) || 1)
+                          }
+                        />
+                      </div>
+                    </div>
                   </div>
                 ))}
 
-                <label className="relative flex flex-col items-center justify-center h-24 border-2 border-dashed border-border rounded-lg hover:border-primary/50 hover:bg-accent/50 transition-colors cursor-pointer group">
-                  <Plus className="h-6 w-6 text-muted-foreground group-hover:text-primary transition-colors" />
-                  <span className="text-xs text-muted-foreground mt-1 group-hover:text-primary transition-colors">
-                    Tambah
-                  </span>
-                  <Input
-                    type="file"
-                    accept="image/*"
-                    multiple
-                    onChange={handleImageChange}
-                    className="hidden"
-                  />
-                </label>
+                <button
+                  type="button"
+                  onClick={() => openImagePicker(null)}
+                  disabled={uploadingImage}
+                  className="rounded-lg border border-dashed border-border bg-muted/30 hover:bg-muted/50 transition-colors p-3 disabled:opacity-60"
+                >
+                  <div className="h-full min-h-[180px] flex items-center justify-center">
+                    <div className="flex flex-col items-center gap-1 text-muted-foreground">
+                      {uploadingImage ? (
+                        <Loader2 className="h-6 w-6 animate-spin" />
+                      ) : (
+                        <Plus className="h-6 w-6" />
+                      )}
+                      <span className="text-xs font-medium">
+                        {uploadingImage ? "Uploading..." : "Tambah gambar"}
+                      </span>
+                    </div>
+                  </div>
+                </button>
               </div>
             </div>
           </div>
@@ -675,13 +913,17 @@ export default function CrewsPage() {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={!!deleteConfirm} onOpenChange={() => setDeleteConfirm(null)}>
+      <Dialog
+        open={!!deleteConfirm}
+        onOpenChange={() => setDeleteConfirm(null)}
+      >
         <DialogContent className="border-border sm:max-w-sm">
           <DialogHeader>
             <DialogTitle className="font-display">Hapus Crew?</DialogTitle>
           </DialogHeader>
           <p className="text-sm text-muted-foreground">
-            Data crew akan dihapus permanen. Perubahan ini tidak dapat dibatalkan.
+            Data crew akan dihapus permanen. Perubahan ini tidak dapat
+            dibatalkan.
           </p>
           <DialogFooter>
             <DialogClose asChild>

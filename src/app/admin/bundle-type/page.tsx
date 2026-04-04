@@ -1,5 +1,12 @@
-import { redirect } from "next/navigation";
+import { MasterDataCrudPage } from "@/components/admin/MasterDataCrudPage";
 
 export default function AdminBundleTypePage() {
-  redirect("/admin/package-type");
+  return (
+    <MasterDataCrudPage
+      title="Kelola Bundle Type"
+      description="Tambah, edit, atau hapus tipe bundle untuk kebutuhan pengelompokan paket."
+      endpoint="/api/admin/bundle-types"
+      entityLabel="Bundle Type"
+    />
+  );
 }
