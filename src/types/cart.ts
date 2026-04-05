@@ -3,7 +3,14 @@ export interface CartDateRange {
   to: Date;
 }
 
-export type CartItemType = "location" | "crew" | "equipment";
+export type CartItemType =
+  | "location"
+  | "crew"
+  | "equipment"
+  | "rental"
+  | "food_and_beverage"
+  | "expendable"
+  | "bundle";
 
 export interface CartItem {
   id: string;

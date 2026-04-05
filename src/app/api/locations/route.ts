@@ -1,38 +1,110 @@
 import { createClient } from "@/lib/supabase/server";
+import { createServiceRoleClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
 import { upsertLocationEmbedding } from "@/lib/embedding";
 
 // GET all locations
 export async function GET() {
   try {
-    const supabase = await createClient();
+    const serviceRoleClient = createServiceRoleClient();
 
-    const { data: locations, error } = await supabase
-      .from("shooting_locations")
+    const { data: locations, error } = await serviceRoleClient
+      .from("locations")
       .select(
-        `
-        *,
-        shooting_location_tag (
-          tags (
-            tag_id,
-            tag
-          )
-        )
-      `,
+        "id, name, city, price, description, area, pax, rating, updated_at",
       )
-      .order("created_at", { ascending: false });
+      .order("updated_at", { ascending: false });
 
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 400 });
     }
 
-    // Transform data to include tags array
+    const locationIds = (locations ?? []).map((loc) => Number(loc.id));
+    if (locationIds.length === 0) {
+      return NextResponse.json({ locations: [] }, { status: 200 });
+    }
+
+    const [tagPivotResult, tagsResult, imagesResult] = await Promise.all([
+      serviceRoleClient
+        .from("location_tag")
+        .select("location_id, location_tag_id")
+        .in("location_id", locationIds),
+      serviceRoleClient.from("location_tags").select("id, name"),
+      serviceRoleClient
+        .from("location_images")
+        .select("location_id, url, position")
+        .in("location_id", locationIds)
+        .order("position", { ascending: true }),
+    ]);
+
+    if (tagPivotResult.error) {
+      return NextResponse.json(
+        { error: tagPivotResult.error.message },
+        { status: 400 },
+      );
+    }
+    if (tagsResult.error) {
+      return NextResponse.json(
+        { error: tagsResult.error.message },
+        { status: 400 },
+      );
+    }
+    if (imagesResult.error) {
+      return NextResponse.json(
+        { error: imagesResult.error.message },
+        { status: 400 },
+      );
+    }
+
+    const tagsById = new Map<number, string>();
+    (tagsResult.data ?? []).forEach((row) => {
+      tagsById.set(Number(row.id), String(row.name ?? ""));
+    });
+
+    const imagePaths = Array.from(
+      new Set(
+        (imagesResult.data ?? [])
+          .map((row) => String(row.url ?? "").trim())
+          .filter((url) => url.length > 0),
+      ),
+    );
+
+    const signedMap = new Map<string, string>();
+    if (imagePaths.length > 0) {
+      const signedResult = await serviceRoleClient.storage
+        .from("media")
+        .createSignedUrls(imagePaths, 60 * 60);
+
+      if (!signedResult.error) {
+        (signedResult.data ?? []).forEach((item, index) => {
+          if (!item.error && item.signedUrl) {
+            signedMap.set(imagePaths[index], item.signedUrl);
+          }
+        });
+      }
+    }
+
     const locationsWithTags = locations?.map((loc) => ({
-      ...loc,
-      tags:
-        loc.shooting_location_tag?.map(
-          (lt: { tags: { tag_id: string; tag: string } }) => lt.tags.tag,
-        ) || [],
+      shooting_location_id: String(loc.id),
+      shooting_location_name: String(loc.name ?? ""),
+      shooting_location_city: String(loc.city ?? ""),
+      shooting_location_price: String(loc.price ?? 0),
+      shooting_location_description: String(loc.description ?? ""),
+      shooting_location_area: Number(loc.area ?? 0),
+      shooting_location_pax: Number(loc.pax ?? 0),
+      shooting_location_rate:
+        typeof loc.rating === "number" ? loc.rating : Number(loc.rating ?? 0),
+      shooting_location_image_url: (imagesResult.data ?? [])
+        .filter((row) => Number(row.location_id) === Number(loc.id))
+        .map((row) => {
+          const path = String(row.url ?? "");
+          return signedMap.get(path) ?? path;
+        }),
+      tags: (tagPivotResult.data ?? [])
+        .filter((pivot) => Number(pivot.location_id) === Number(loc.id))
+        .map((pivot) => tagsById.get(Number(pivot.location_tag_id)) || "")
+        .filter((tag) => tag.length > 0),
+      created_at: loc.updated_at,
     }));
 
     return NextResponse.json({ locations: locationsWithTags }, { status: 200 });

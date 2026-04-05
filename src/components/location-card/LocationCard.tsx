@@ -55,6 +55,24 @@ type LocationReviewsResponse = {
   message?: string;
 };
 
+type LocationDetail = {
+  shooting_location_id: string;
+  shooting_location_name: string;
+  shooting_location_city: string;
+  shooting_location_price: string;
+  shooting_location_description: string;
+  shooting_location_area: number;
+  shooting_location_pax: number;
+  shooting_location_rate: number;
+  shooting_location_image_url: string[];
+  tags: string[];
+};
+
+type LocationDetailResponse = {
+  location?: LocationDetail;
+  message?: string;
+};
+
 function formatReviewDate(value: string | null) {
   if (!value) {
     return "";
@@ -89,28 +107,62 @@ export default function LocationCard({
   const router = useRouter();
   const { addItem, isInCart } = useCart();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [locationDetail, setLocationDetail] = useState<LocationDetail | null>(
+    null,
+  );
+  const [isLoadingDetail, setIsLoadingDetail] = useState(false);
+  const [detailError, setDetailError] = useState<string | null>(null);
   const [reviews, setReviews] = useState<LocationReview[]>([]);
   const [isLoadingReviews, setIsLoadingReviews] = useState(false);
   const [reviewsError, setReviewsError] = useState<string | null>(null);
+
+  const resolvedDetail: LocationDetail =
+    locationDetail ??
+    ({
+      shooting_location_id: id,
+      shooting_location_name: name,
+      shooting_location_city: city,
+      shooting_location_price: price,
+      shooting_location_description: description || "",
+      shooting_location_area: area,
+      shooting_location_pax: pax,
+      shooting_location_rate: Number(rate ?? 0),
+      shooting_location_image_url: imageUrl,
+      tags,
+    } as LocationDetail);
+
+  const resolvedName = resolvedDetail.shooting_location_name;
+  const resolvedCity = resolvedDetail.shooting_location_city;
+  const resolvedPrice = resolvedDetail.shooting_location_price;
+  const resolvedDescription = resolvedDetail.shooting_location_description;
+  const resolvedArea = resolvedDetail.shooting_location_area;
+  const resolvedPax = resolvedDetail.shooting_location_pax;
+  const resolvedTags = resolvedDetail.tags ?? [];
+  const resolvedRate = Number(resolvedDetail.shooting_location_rate);
+
   const isAdded = isInCart(id, "location");
-  const images = imageUrl && imageUrl.length > 0 ? imageUrl : ["/hero.webp"];
-  const hasReview = rate !== null && Number.isFinite(rate);
-  const ratingLabel = formatLocationRating(rate);
+  const images =
+    resolvedDetail.shooting_location_image_url &&
+    resolvedDetail.shooting_location_image_url.length > 0
+      ? resolvedDetail.shooting_location_image_url
+      : ["/hero.webp"];
+  const hasReview = Number.isFinite(resolvedRate) && resolvedRate > 0;
+  const ratingLabel = formatLocationRating(hasReview ? resolvedRate : null);
 
   const handleAddToCart = () => {
     addItem({
       id,
       itemType: "location",
-      name,
-      subtitle: city,
-      price,
+      name: resolvedName,
+      subtitle: resolvedCity,
+      price: resolvedPrice,
       imageUrl: images[0],
-      tags,
+      tags: resolvedTags,
       requiresDateRange: true,
     });
 
     if (redirectToCartOnAdd) {
-      router.push("/cart");
+      // router.push("/cart");
     }
   };
 
@@ -120,6 +172,41 @@ export default function LocationCard({
     }
 
     let isMounted = true;
+
+    const loadDetail = async () => {
+      setIsLoadingDetail(true);
+      setDetailError(null);
+
+      try {
+        const response = await fetch(`/api/locations/${id}`, {
+          method: "GET",
+          cache: "no-store",
+        });
+
+        const result = (await response.json()) as LocationDetailResponse;
+
+        if (!isMounted) {
+          return;
+        }
+
+        if (!response.ok) {
+          setDetailError(result.message || "Gagal mengambil detail lokasi.");
+          return;
+        }
+
+        setLocationDetail(result.location ?? null);
+      } catch {
+        if (!isMounted) {
+          return;
+        }
+
+        setDetailError("Terjadi kesalahan saat mengambil detail lokasi.");
+      } finally {
+        if (isMounted) {
+          setIsLoadingDetail(false);
+        }
+      }
+    };
 
     const loadReviews = async () => {
       setIsLoadingReviews(true);
@@ -158,6 +245,7 @@ export default function LocationCard({
       }
     };
 
+    void loadDetail();
     void loadReviews();
 
     return () => {
@@ -167,21 +255,23 @@ export default function LocationCard({
 
   return (
     <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-      <div className="group snap-start shrink-0 w-[clamp(260px,84vw,440px)] sm:w-[420px]">
+      <div className="group w-full">
         <DialogTrigger asChild>
           <button type="button" className="w-full text-left">
             {/* Image */}
             <div className="relative aspect-[4/3] overflow-hidden rounded-xl">
               <Image
                 src={images[0]}
-                alt={name}
+                alt={resolvedName}
                 fill
-                sizes="(max-width: 640px) 84vw, (max-width: 1024px) 420px, 440px"
+                sizes="(max-width: 768px) 100vw, (max-width: 1280px) 50vw, 33vw"
                 className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
               />
               {/* Rating badge */}
               <div className="absolute right-2.5 top-2.5 flex items-center gap-1 rounded-lg bg-background/90 px-2 py-1 text-xs font-semibold backdrop-blur-sm sm:right-3 sm:top-3 sm:text-sm">
-                {hasReview ? <Star className="h-3.5 w-3.5 fill-star text-star" /> : null}
+                {hasReview ? (
+                  <Star className="h-3.5 w-3.5 fill-star text-star" />
+                ) : null}
                 <span>{ratingLabel}</span>
               </div>
               {/* Tags */}
@@ -203,10 +293,10 @@ export default function LocationCard({
             <div className="pb-1 pt-2.5 sm:pt-3">
               <div className="flex items-start justify-between gap-2">
                 <h3 className="line-clamp-2 text-sm font-bold leading-tight text-foreground sm:text-base">
-                  {name}
+                  {resolvedName}
                 </h3>
                 <span className="whitespace-nowrap text-sm font-bold text-primary sm:text-base">
-                  {formatPrice(price)}
+                  {formatPrice(resolvedPrice)}
                   <span className="text-xs font-normal text-muted-foreground sm:text-sm">
                     /hari
                   </span>
@@ -214,16 +304,16 @@ export default function LocationCard({
               </div>
               <p className="mt-1 flex items-center gap-1 text-xs text-muted-foreground sm:text-sm">
                 <MapPin className="h-3.5 w-3.5" />
-                {city}
+                {resolvedCity}
               </p>
               <div className="mt-2 flex items-center gap-3 text-xs text-muted-foreground sm:gap-4 sm:text-sm">
                 <span className="flex items-center gap-1">
                   <Maximize className="h-3.5 w-3.5" />
-                  {area} m²
+                  {resolvedArea} m²
                 </span>
                 <span className="flex items-center gap-1">
                   <Users className="h-3.5 w-3.5" />
-                  {pax}
+                  {resolvedPax}
                 </span>
               </div>
             </div>
@@ -250,64 +340,80 @@ export default function LocationCard({
         </Button>
       </div>
 
-      <DialogContent className="h-[94vh] w-[98vw] max-w-[2400px] overflow-hidden p-0">
-        <div className="grid h-full grid-cols-1 lg:grid-cols-[minmax(0,1fr)_420px]">
-          <section className="flex min-h-0 flex-col border-b border-border/40 lg:border-r lg:border-b-0">
-            <div className="relative bg-muted/20">
-              <Carousel className="w-full">
-                <CarouselContent className="ml-0">
-                  {images.map((img, index) => (
-                    <CarouselItem key={`${id}-${index}`} className="pl-0">
-                      <div className="relative h-[230px] w-full sm:h-[280px] lg:h-[320px]">
-                        <Image
-                          src={img}
-                          alt={`${name} ${index + 1}`}
-                          fill
-                          sizes="(max-width: 1024px) 96vw, 62vw"
-                          className="h-full w-full object-cover"
-                        />
-                      </div>
-                    </CarouselItem>
-                  ))}
-                </CarouselContent>
-                {images.length > 1 ? (
-                  <>
-                    <CarouselPrevious className="left-4 top-1/2 -translate-y-1/2" />
-                    <CarouselNext className="right-4 top-1/2 -translate-y-1/2" />
-                  </>
-                ) : null}
-              </Carousel>
-            </div>
+      <DialogContent className="h-[92vh] w-[96vw] max-w-5xl overflow-hidden p-0">
+        <div className="h-full overflow-y-auto">
+          <div className="relative bg-muted/20">
+            <Carousel className="w-full">
+              <CarouselContent className="ml-0">
+                {images.map((img, index) => (
+                  <CarouselItem key={`${id}-${index}`} className="pl-0">
+                    <div className="relative h-[240px] w-full sm:h-[320px] lg:h-[380px]">
+                      <Image
+                        src={img}
+                        alt={`${resolvedName} ${index + 1}`}
+                        fill
+                        sizes="(max-width: 1024px) 96vw, 72vw"
+                        className="h-full w-full object-cover"
+                      />
+                    </div>
+                  </CarouselItem>
+                ))}
+              </CarouselContent>
+              {images.length > 1 ? (
+                <>
+                  <CarouselPrevious className="left-4 top-1/2 -translate-y-1/2" />
+                  <CarouselNext className="right-4 top-1/2 -translate-y-1/2" />
+                </>
+              ) : null}
+            </Carousel>
+          </div>
 
-            <div className="min-h-0 flex-1 overflow-hidden p-5 lg:p-6">
-              <DialogHeader>
-                <DialogTitle className="font-display text-2xl">{name}</DialogTitle>
-                <DialogDescription className="flex items-center gap-1.5 pt-1">
-                  <MapPin className="h-4 w-4" />
-                  {city}
-                </DialogDescription>
-              </DialogHeader>
+          <div className="space-y-5 p-5 lg:p-6">
+            <DialogHeader>
+              <DialogTitle className="font-display text-2xl">
+                {resolvedName}
+              </DialogTitle>
+              <DialogDescription className="flex items-center gap-1.5 pt-1">
+                <MapPin className="h-4 w-4" />
+                {resolvedCity}
+              </DialogDescription>
+            </DialogHeader>
 
-              <div className="mt-5 space-y-3 text-sm">
-                <div className="flex items-center justify-between rounded-lg border border-border/40 bg-muted/20 px-4 py-3">
-                  <span className="text-muted-foreground">Harga</span>
-                  <span className="text-base font-semibold text-primary">
-                    {formatPrice(price)}
-                    <span className="ml-1 text-sm font-normal text-muted-foreground">/hari</span>
+            {isLoadingDetail ? (
+              <div className="space-y-3">
+                <div className="h-20 animate-pulse rounded-xl border border-border/40 bg-muted/30" />
+                <div className="h-24 animate-pulse rounded-xl border border-border/40 bg-muted/30" />
+              </div>
+            ) : detailError ? (
+              <div className="rounded-xl border border-destructive/30 bg-destructive/5 px-3 py-4 text-sm text-destructive">
+                {detailError}
+              </div>
+            ) : null}
+
+            <section className="space-y-3 text-sm">
+              <h3 className="text-base font-semibold text-foreground">
+                Spesifikasi
+              </h3>
+
+              <div className="flex items-center justify-between rounded-lg border border-border/40 bg-muted/20 px-4 py-3">
+                <span className="text-muted-foreground">Harga</span>
+                <span className="text-base font-semibold text-primary">
+                  {formatPrice(resolvedPrice)}
+                  <span className="ml-1 text-sm font-normal text-muted-foreground">
+                    /hari
                   </span>
-                </div>
+                </span>
+              </div>
 
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="rounded-lg border border-border/40 bg-muted/20 px-4 py-3">
-                    <p className="text-xs text-muted-foreground">Luas</p>
-                    <p className="mt-1 font-medium">{area} m²</p>
-                  </div>
-                  <div className="rounded-lg border border-border/40 bg-muted/20 px-4 py-3">
-                    <p className="text-xs text-muted-foreground">Kapasitas</p>
-                    <p className="mt-1 font-medium">{pax} pax</p>
-                  </div>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                <div className="rounded-lg border border-border/40 bg-muted/20 px-4 py-3">
+                  <p className="text-xs text-muted-foreground">Luas</p>
+                  <p className="mt-1 font-medium">{resolvedArea} m²</p>
                 </div>
-
+                <div className="rounded-lg border border-border/40 bg-muted/20 px-4 py-3">
+                  <p className="text-xs text-muted-foreground">Kapasitas</p>
+                  <p className="mt-1 font-medium">{resolvedPax} pax</p>
+                </div>
                 <div className="rounded-lg border border-border/40 bg-muted/20 px-4 py-3">
                   <p className="text-xs text-muted-foreground">Rating</p>
                   {hasReview ? (
@@ -316,66 +422,49 @@ export default function LocationCard({
                       {ratingLabel}
                     </p>
                   ) : (
-                    <p className="mt-1 font-medium text-muted-foreground">{ratingLabel}</p>
+                    <p className="mt-1 font-medium text-muted-foreground">
+                      {ratingLabel}
+                    </p>
                   )}
                 </div>
-
-                {description ? (
-                  <div className="rounded-lg border border-border/40 bg-muted/20 px-4 py-3">
-                    <p className="text-xs text-muted-foreground">Deskripsi</p>
-                    <p className="mt-2 line-clamp-6 leading-relaxed text-foreground/90">
-                      {description}
-                    </p>
-                  </div>
-                ) : null}
-
-                {tags && tags.length > 0 ? (
-                  <div>
-                    <p className="mb-2 text-xs text-muted-foreground">Tags</p>
-                    <div className="flex flex-wrap gap-2">
-                      {tags.map((tag, index) => (
-                        <span
-                          key={`${tag}-${index}`}
-                          className="rounded-full bg-secondary px-2.5 py-1 text-xs font-medium text-secondary-foreground"
-                        >
-                          {tag}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                ) : null}
               </div>
 
-              <Button
-                type="button"
-                className="mt-5 w-full"
-                variant={isAdded ? "secondary" : "default"}
-                onClick={handleAddToCart}
-              >
-                {isAdded ? (
-                  <>
-                    <Check className="h-4 w-4" />
-                    Sudah di keranjang
-                  </>
-                ) : (
-                  <>
-                    <ShoppingBag className="h-4 w-4" />
-                    Tambah ke keranjang
-                  </>
-                )}
-              </Button>
-            </div>
-          </section>
+              {resolvedDescription ? (
+                <div className="rounded-lg border border-border/40 bg-muted/20 px-4 py-3">
+                  <p className="text-xs text-muted-foreground">Deskripsi</p>
+                  <p className="mt-2 leading-relaxed text-foreground/90">
+                    {resolvedDescription}
+                  </p>
+                </div>
+              ) : null}
 
-          <aside className="flex min-h-0 flex-col bg-muted/10">
-            <div className="border-b border-border/40 px-4 py-4">
-              <h3 className="text-base font-semibold text-foreground">Review Tempat</h3>
-              <p className="mt-1 text-xs text-muted-foreground">
-                Total {reviews.length} review untuk lokasi ini
-              </p>
-            </div>
+              {resolvedTags.length > 0 ? (
+                <div>
+                  <p className="mb-2 text-xs text-muted-foreground">Tags</p>
+                  <div className="flex flex-wrap gap-2">
+                    {resolvedTags.map((tag, index) => (
+                      <span
+                        key={`${tag}-${index}`}
+                        className="rounded-full bg-secondary px-2.5 py-1 text-xs font-medium text-secondary-foreground"
+                      >
+                        {tag}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+            </section>
 
-            <div className="min-h-0 flex-1 overflow-y-auto p-4">
+            <section className="space-y-3">
+              <div>
+                <h3 className="text-base font-semibold text-foreground">
+                  Review Tempat
+                </h3>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Total {reviews.length} review untuk lokasi ini
+                </p>
+              </div>
+
               {isLoadingReviews ? (
                 <div className="space-y-3">
                   <div className="h-20 animate-pulse rounded-xl border border-border/40 bg-background/60" />
@@ -438,8 +527,27 @@ export default function LocationCard({
                   ))}
                 </div>
               )}
-            </div>
-          </aside>
+            </section>
+
+            <Button
+              type="button"
+              className="w-full"
+              variant={isAdded ? "secondary" : "default"}
+              onClick={handleAddToCart}
+            >
+              {isAdded ? (
+                <>
+                  <Check className="h-4 w-4" />
+                  Sudah di keranjang
+                </>
+              ) : (
+                <>
+                  <ShoppingBag className="h-4 w-4" />
+                  Tambah ke keranjang
+                </>
+              )}
+            </Button>
+          </div>
         </div>
       </DialogContent>
     </Dialog>

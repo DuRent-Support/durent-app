@@ -1,6 +1,140 @@
 import { createClient } from "@/lib/supabase/server";
+import { createServiceRoleClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
 import { upsertLocationEmbedding } from "@/lib/embedding";
+
+export async function GET(
+  _request: Request,
+  { params }: { params: Promise<{ id: string }> },
+) {
+  try {
+    const { id } = await params;
+    const locationId = Number(id);
+
+    if (!Number.isInteger(locationId)) {
+      return NextResponse.json(
+        { message: "Location id tidak valid." },
+        { status: 400 },
+      );
+    }
+
+    const serviceRoleClient = createServiceRoleClient();
+
+    const { data: location, error: locationError } = await serviceRoleClient
+      .from("locations")
+      .select(
+        "id, name, city, price, description, area, pax, rating, updated_at",
+      )
+      .eq("id", locationId)
+      .maybeSingle();
+
+    if (locationError) {
+      return NextResponse.json(
+        { message: locationError.message },
+        { status: 400 },
+      );
+    }
+
+    if (!location) {
+      return NextResponse.json(
+        { message: "Lokasi tidak ditemukan." },
+        { status: 404 },
+      );
+    }
+
+    const [tagPivotResult, tagsResult, imagesResult] = await Promise.all([
+      serviceRoleClient
+        .from("location_tag")
+        .select("location_tag_id")
+        .eq("location_id", locationId),
+      serviceRoleClient.from("location_tags").select("id, name"),
+      serviceRoleClient
+        .from("location_images")
+        .select("url, position")
+        .eq("location_id", locationId)
+        .order("position", { ascending: true }),
+    ]);
+
+    if (tagPivotResult.error) {
+      return NextResponse.json(
+        { message: tagPivotResult.error.message },
+        { status: 400 },
+      );
+    }
+
+    if (tagsResult.error) {
+      return NextResponse.json(
+        { message: tagsResult.error.message },
+        { status: 400 },
+      );
+    }
+
+    if (imagesResult.error) {
+      return NextResponse.json(
+        { message: imagesResult.error.message },
+        { status: 400 },
+      );
+    }
+
+    const tagsById = new Map<number, string>();
+    (tagsResult.data ?? []).forEach((row) => {
+      tagsById.set(Number(row.id), String(row.name ?? ""));
+    });
+
+    const imagePaths = Array.from(
+      new Set(
+        (imagesResult.data ?? [])
+          .map((row) => String(row.url ?? "").trim())
+          .filter((path) => path.length > 0),
+      ),
+    );
+
+    const signedMap = new Map<string, string>();
+    if (imagePaths.length > 0) {
+      const signedResult = await serviceRoleClient.storage
+        .from("media")
+        .createSignedUrls(imagePaths, 60 * 60);
+
+      if (!signedResult.error) {
+        (signedResult.data ?? []).forEach((item, index) => {
+          if (!item.error && item.signedUrl) {
+            signedMap.set(imagePaths[index], item.signedUrl);
+          }
+        });
+      }
+    }
+
+    const responseLocation = {
+      shooting_location_id: String(location.id),
+      shooting_location_name: String(location.name ?? ""),
+      shooting_location_city: String(location.city ?? ""),
+      shooting_location_price: String(location.price ?? 0),
+      shooting_location_description: String(location.description ?? ""),
+      shooting_location_area: Number(location.area ?? 0),
+      shooting_location_pax: Number(location.pax ?? 0),
+      shooting_location_rate:
+        typeof location.rating === "number"
+          ? location.rating
+          : Number(location.rating ?? 0),
+      shooting_location_image_url: (imagesResult.data ?? []).map((row) => {
+        const path = String(row.url ?? "");
+        return signedMap.get(path) ?? path;
+      }),
+      tags: (tagPivotResult.data ?? [])
+        .map((row) => tagsById.get(Number(row.location_tag_id)) || "")
+        .filter((tag) => tag.length > 0),
+      created_at: location.updated_at,
+    };
+
+    return NextResponse.json({ location: responseLocation }, { status: 200 });
+  } catch (error) {
+    console.error("Get location detail error:", error);
+    return NextResponse.json(
+      { message: "Terjadi kesalahan saat mengambil detail lokasi." },
+      { status: 500 },
+    );
+  }
+}
 
 // PUT update location by ID
 export async function PUT(

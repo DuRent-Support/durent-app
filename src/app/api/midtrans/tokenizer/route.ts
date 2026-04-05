@@ -56,13 +56,33 @@ function addMinutes(date: Date, minutes: number) {
   return new Date(date.getTime() + minutes * 60 * 1000);
 }
 
+function splitUserName(rawName: unknown) {
+  const fullName = String(rawName ?? "").trim();
+  if (!fullName) {
+    return {
+      firstName: "Customer",
+      lastName: "",
+    };
+  }
+
+  const parts = fullName.split(/\s+/).filter(Boolean);
+  if (parts.length === 1) {
+    return {
+      firstName: parts[0],
+      lastName: "",
+    };
+  }
+
+  return {
+    firstName: parts[0],
+    lastName: parts.slice(1).join(" "),
+  };
+}
+
 export async function POST(request: Request) {
   try {
-
-
     const supabase = await createClient();
     const body = await request.json();
-    console.log("Midtrans tokenizer request body:", body.dateRange);
     const items = (
       Array.isArray(body?.items) ? body.items : []
     ) as CheckoutItem[];
@@ -92,6 +112,16 @@ export async function POST(request: Request) {
         { status: 400 },
       );
     }
+
+    console.log("Midtrans checkout user:", {
+      id: authUser.id,
+      email: authUser.email,
+      phone: authUser.phone,
+      full_name: authUser.user_metadata?.full_name ?? null,
+      name: authUser.user_metadata?.name ?? null,
+    });
+
+    console.log("Midtrans checkout items:", items);
 
     const grossAmount = items.reduce(
       (sum: number, item: { subtotal?: number }) => {
@@ -128,6 +158,9 @@ export async function POST(request: Request) {
     const orderId = `ORD-${crypto.randomUUID()}`;
     const pageExpiryMinutes = 5;
     const expiresAt = addMinutes(new Date(), pageExpiryMinutes).toISOString();
+    const profileName =
+      authUser.user_metadata?.full_name ?? authUser.user_metadata?.name ?? "";
+    const { firstName, lastName } = splitUserName(profileName);
 
     const parameter = {
       transaction_details: {
@@ -144,7 +177,10 @@ export async function POST(request: Request) {
         "shopeepay",
       ],
       customer_details: {
+        first_name: firstName,
+        last_name: lastName,
         email: authUser.email,
+        phone: authUser.phone || undefined,
       },
       page_expiry: {
         duration: pageExpiryMinutes,
@@ -157,6 +193,8 @@ export async function POST(request: Request) {
         name: String(item.name || "Item"),
       })),
     };
+
+    console.log("Midtrans transaction payload:", parameter);
 
     const token = await snap.createTransaction(parameter);
 

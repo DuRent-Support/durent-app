@@ -173,7 +173,7 @@ export default function HomePage() {
     {
       title: "Pilih Crew",
       description: "Tambah kru profesional sesuai kebutuhan produksi",
-      href: "/crew",
+      href: "/crews",
       icon: Users,
     },
     {

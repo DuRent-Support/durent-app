@@ -46,7 +46,7 @@ export default function CrewCard({ crew }: CrewCardProps) {
       requiresDateRange: true,
     });
 
-    router.push("/cart");
+    // router.push("/cart");
   };
 
   return (

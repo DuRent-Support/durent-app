@@ -7,3 +7,6 @@ export * from "./shooting-location";
 export * from "./profile";
 export * from "./crew";
 export * from "./equipment";
+export * from "./food-and-beverage";
+export * from "./expendable";
+export * from "./bundle";

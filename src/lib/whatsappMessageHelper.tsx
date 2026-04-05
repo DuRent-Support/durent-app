@@ -32,7 +32,17 @@ export function buildWhatsappMessage(items: WhatsappItem[]) {
         ? "Lokasi"
         : item.itemType === "crew"
           ? "Crew"
-          : "Equipment";
+          : item.itemType === "equipment"
+            ? "Equipment"
+            : item.itemType === "rental"
+              ? "Rental"
+              : item.itemType === "food_and_beverage"
+                ? "Food & Beverage"
+                : item.itemType === "expendable"
+                  ? "Expendable"
+                  : item.itemType === "bundle"
+                    ? "Bundle"
+                    : "Item";
 
     if (!item.requiresDateRange) {
       return `${itemKind}: ${item.name}\n${item.subtitle}\nHarga: ${item.price}`;

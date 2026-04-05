@@ -3,7 +3,6 @@
 import {
   Camera,
   CalendarCheck,
-  ChevronDown,
   Boxes,
   CreditCard,
   FileText,
@@ -20,17 +19,12 @@ import {
   Users,
 } from "lucide-react";
 import Image from "next/image";
-import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
 import { useCart } from "@/hooks/use-cart";
 import { useAuth } from "@/providers/AuthProvider";
 import { Button } from "@/components/ui/button";
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "@/components/ui/collapsible";
+import { Collapsible, CollapsibleContent } from "@/components/ui/collapsible";
 import {
   Sheet,
   SheetContent,
@@ -43,11 +37,10 @@ import {
   SidebarContent,
   SidebarGroup,
   SidebarGroupContent,
-  SidebarGroupLabel,
   SidebarMenu,
-  SidebarMenuButton,
-  SidebarMenuItem,
 } from "@/components/ui/sidebar";
+import SidebarCollapsibleTrigger from "@/components/app-sidebar/SidebarCollapsibleTrigger";
+import SidebarNavItem from "@/components/app-sidebar/SidebarNavItem";
 
 type SidebarNavContentProps = {
   mobile?: boolean;
@@ -98,149 +91,134 @@ function SidebarNavContent({
   return (
     <SidebarContent className="px-2 py-2">
       <SidebarGroup className="px-1 pb-1">
-        <SidebarGroupLabel>Main</SidebarGroupLabel>
-        <SidebarGroupContent>
-          <SidebarMenu>
-            <SidebarMenuItem className={itemWrapperClassName}>
-              <SidebarMenuButton
-                asChild
-                className={buttonClassName}
-                isActive={isPathActive(pathname, "/")}
-              >
-                <Link href="/" className={itemClassName}>
-                  <House className={iconClassName} />
-                  <span className={labelClassName}>Dashboard</span>
-                </Link>
-              </SidebarMenuButton>
-            </SidebarMenuItem>
-            <SidebarMenuItem className={itemWrapperClassName}>
-              <SidebarMenuButton
-                asChild
-                className={buttonClassName}
-                isActive={isPathActive(pathname, "/cart")}
-              >
-                <Link href="/cart" className={itemClassName}>
-                  <ShoppingBag className={iconClassName} />
-                  <span className={labelClassName}>Cart</span>
-                  {totalItems > 0 ? (
-                    <span className="ml-auto flex h-5 min-w-5 items-center justify-center rounded-full bg-primary px-1.5 text-[10px] font-bold text-primary-foreground">
-                      {totalItems}
-                    </span>
-                  ) : null}
-                </Link>
-              </SidebarMenuButton>
-            </SidebarMenuItem>
-            <SidebarMenuItem className={itemWrapperClassName}>
-              <SidebarMenuButton
-                asChild
-                className={buttonClassName}
-                isActive={isPathActive(pathname, "/payments")}
-              >
-                <Link href="/payments" className={itemClassName}>
-                  <CreditCard className={iconClassName} />
-                  <span className={labelClassName}>Payments</span>
-                </Link>
-              </SidebarMenuButton>
-            </SidebarMenuItem>
-            <SidebarMenuItem className={itemWrapperClassName}>
-              <SidebarMenuButton
-                asChild
-                className={buttonClassName}
-                isActive={isPathActive(pathname, "/reservations")}
-              >
-                <Link href="/reservations" className={itemClassName}>
-                  <CalendarCheck className={iconClassName} />
-                  <span className={labelClassName}>Reservations</span>
-                </Link>
-              </SidebarMenuButton>
-            </SidebarMenuItem>
-          </SidebarMenu>
-        </SidebarGroupContent>
+        <Collapsible defaultOpen className="group/collapsible">
+          <SidebarCollapsibleTrigger label="Main" />
+          <CollapsibleContent>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                <SidebarNavItem
+                  href="/"
+                  label="Dashboard"
+                  icon={House}
+                  isActive={isPathActive(pathname, "/")}
+                  itemClassName={itemClassName}
+                  iconClassName={iconClassName}
+                  labelClassName={labelClassName}
+                  itemWrapperClassName={itemWrapperClassName}
+                  buttonClassName={buttonClassName}
+                />
+                <SidebarNavItem
+                  href="/cart"
+                  label="Cart"
+                  icon={ShoppingBag}
+                  isActive={isPathActive(pathname, "/cart")}
+                  itemClassName={itemClassName}
+                  iconClassName={iconClassName}
+                  labelClassName={labelClassName}
+                  itemWrapperClassName={itemWrapperClassName}
+                  buttonClassName={buttonClassName}
+                  badgeCount={totalItems}
+                />
+                <SidebarNavItem
+                  href="/payments"
+                  label="Payments"
+                  icon={CreditCard}
+                  isActive={isPathActive(pathname, "/payments")}
+                  itemClassName={itemClassName}
+                  iconClassName={iconClassName}
+                  labelClassName={labelClassName}
+                  itemWrapperClassName={itemWrapperClassName}
+                  buttonClassName={buttonClassName}
+                />
+                <SidebarNavItem
+                  href="/reservations"
+                  label="Reservations"
+                  icon={CalendarCheck}
+                  isActive={isPathActive(pathname, "/reservations")}
+                  itemClassName={itemClassName}
+                  iconClassName={iconClassName}
+                  labelClassName={labelClassName}
+                  itemWrapperClassName={itemWrapperClassName}
+                  buttonClassName={buttonClassName}
+                />
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </CollapsibleContent>
+        </Collapsible>
       </SidebarGroup>
 
       <SidebarGroup className="px-1 py-0">
         <Collapsible defaultOpen className="group/collapsible">
-          <SidebarGroupLabel asChild>
-            <CollapsibleTrigger className="flex w-full items-center justify-between px-2">
-              Katalog
-              <ChevronDown className="h-4 w-4 transition-transform group-data-[state=closed]/collapsible:rotate-[-90deg]" />
-            </CollapsibleTrigger>
-          </SidebarGroupLabel>
+          <SidebarCollapsibleTrigger label="Katalog" />
           <CollapsibleContent>
             <SidebarGroupContent>
               <SidebarMenu>
-                <SidebarMenuItem className={itemWrapperClassName}>
-                  <SidebarMenuButton
-                    asChild
-                    className={buttonClassName}
-                    isActive={isPathActive(pathname, "/locations")}
-                  >
-                    <Link href="/locations" className={itemClassName}>
-                      <MapPin className={iconClassName} />
-                      <span className={labelClassName}>Locations</span>
-                    </Link>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-                <SidebarMenuItem className={itemWrapperClassName}>
-                  <SidebarMenuButton
-                    asChild
-                    className={buttonClassName}
-                    isActive={isPathActive(pathname, "/crew")}
-                  >
-                    <Link href="/crew" className={itemClassName}>
-                      <Users className={iconClassName} />
-                      <span className={labelClassName}>Crew</span>
-                    </Link>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-                <SidebarMenuItem className={itemWrapperClassName}>
-                  <SidebarMenuButton
-                    asChild
-                    className={buttonClassName}
-                    isActive={isPathActive(pathname, "/rentals")}
-                  >
-                    <Link href="/rentals" className={itemClassName}>
-                      <Camera className={iconClassName} />
-                      <span className={labelClassName}>Rentals</span>
-                    </Link>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-                <SidebarMenuItem className={itemWrapperClassName}>
-                  <SidebarMenuButton
-                    asChild
-                    className={buttonClassName}
-                    isActive={isPathActive(pathname, "/bundles")}
-                  >
-                    <Link href="/bundles" className={itemClassName}>
-                      <Package className={iconClassName} />
-                      <span className={labelClassName}>Bundles</span>
-                    </Link>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-                <SidebarMenuItem className={itemWrapperClassName}>
-                  <SidebarMenuButton
-                    asChild
-                    className={buttonClassName}
-                    isActive={isPathActive(pathname, "/food-and-beverage")}
-                  >
-                    <Link href="/food-and-beverage" className={itemClassName}>
-                      <UtensilsCrossed className={iconClassName} />
-                      <span className={labelClassName}>Food & Beverage</span>
-                    </Link>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-                <SidebarMenuItem className={itemWrapperClassName}>
-                  <SidebarMenuButton
-                    asChild
-                    className={buttonClassName}
-                    isActive={isPathActive(pathname, "/expendables")}
-                  >
-                    <Link href="/expendables" className={itemClassName}>
-                      <Boxes className={iconClassName} />
-                      <span className={labelClassName}>Expendables</span>
-                    </Link>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
+                <SidebarNavItem
+                  href="/locations"
+                  label="Locations"
+                  icon={MapPin}
+                  isActive={isPathActive(pathname, "/locations")}
+                  itemClassName={itemClassName}
+                  iconClassName={iconClassName}
+                  labelClassName={labelClassName}
+                  itemWrapperClassName={itemWrapperClassName}
+                  buttonClassName={buttonClassName}
+                />
+                <SidebarNavItem
+                  href="/crews"
+                  label="Crews"
+                  icon={Users}
+                  isActive={isPathActive(pathname, "/crews")}
+                  itemClassName={itemClassName}
+                  iconClassName={iconClassName}
+                  labelClassName={labelClassName}
+                  itemWrapperClassName={itemWrapperClassName}
+                  buttonClassName={buttonClassName}
+                />
+                <SidebarNavItem
+                  href="/rentals"
+                  label="Rentals"
+                  icon={Camera}
+                  isActive={isPathActive(pathname, "/rentals")}
+                  itemClassName={itemClassName}
+                  iconClassName={iconClassName}
+                  labelClassName={labelClassName}
+                  itemWrapperClassName={itemWrapperClassName}
+                  buttonClassName={buttonClassName}
+                />
+                <SidebarNavItem
+                  href="/food-and-beverage"
+                  label="Food & Beverage"
+                  icon={UtensilsCrossed}
+                  isActive={isPathActive(pathname, "/food-and-beverage")}
+                  itemClassName={itemClassName}
+                  iconClassName={iconClassName}
+                  labelClassName={labelClassName}
+                  itemWrapperClassName={itemWrapperClassName}
+                  buttonClassName={buttonClassName}
+                />
+                <SidebarNavItem
+                  href="/expendables"
+                  label="Expendables"
+                  icon={Boxes}
+                  isActive={isPathActive(pathname, "/expendables")}
+                  itemClassName={itemClassName}
+                  iconClassName={iconClassName}
+                  labelClassName={labelClassName}
+                  itemWrapperClassName={itemWrapperClassName}
+                  buttonClassName={buttonClassName}
+                />
+                <SidebarNavItem
+                  href="/bundles"
+                  label="Bundles"
+                  icon={Package}
+                  isActive={isPathActive(pathname, "/bundles")}
+                  itemClassName={itemClassName}
+                  iconClassName={iconClassName}
+                  labelClassName={labelClassName}
+                  itemWrapperClassName={itemWrapperClassName}
+                  buttonClassName={buttonClassName}
+                />
               </SidebarMenu>
             </SidebarGroupContent>
           </CollapsibleContent>
@@ -248,310 +226,318 @@ function SidebarNavContent({
       </SidebarGroup>
 
       <SidebarGroup className="px-1 pt-1">
-        <SidebarGroupLabel>Tools</SidebarGroupLabel>
-        <SidebarGroupContent>
-          <SidebarMenu>
-            <SidebarMenuItem className={itemWrapperClassName}>
-              <SidebarMenuButton
-                asChild
-                className={buttonClassName}
-                isActive={isPathActive(pathname, "/ai-scout")}
-              >
-                <Link href="/ai-scout" className={itemClassName}>
-                  <Sparkles className={iconClassName} />
-                  <span className={labelClassName}>AI Scout</span>
-                </Link>
-              </SidebarMenuButton>
-            </SidebarMenuItem>
-          </SidebarMenu>
-        </SidebarGroupContent>
+        <Collapsible defaultOpen className="group/collapsible">
+          <SidebarCollapsibleTrigger label="Tools" />
+          <CollapsibleContent>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                <SidebarNavItem
+                  href="/ai-scout"
+                  label="AI Scout"
+                  icon={Sparkles}
+                  isActive={isPathActive(pathname, "/ai-scout")}
+                  itemClassName={itemClassName}
+                  iconClassName={iconClassName}
+                  labelClassName={labelClassName}
+                  itemWrapperClassName={itemWrapperClassName}
+                  buttonClassName={buttonClassName}
+                />
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </CollapsibleContent>
+        </Collapsible>
       </SidebarGroup>
 
       {isAdmin ? (
         <>
           <SidebarGroup className="px-1 pt-1">
-            <SidebarGroupLabel>Admin</SidebarGroupLabel>
-            <SidebarGroupContent>
-              <SidebarMenu>
-                <SidebarMenuItem className={itemWrapperClassName}>
-                  <SidebarMenuButton
-                    asChild
-                    className={buttonClassName}
-                    isActive={isPathActive(pathname, "/admin", { exact: true })}
-                  >
-                    <Link href="/admin" className={itemClassName}>
-                      <LayoutDashboard className={iconClassName} />
-                      <span className={labelClassName}>Dashboard</span>
-                    </Link>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-                <SidebarMenuItem className={itemWrapperClassName}>
-                  <SidebarMenuButton
-                    asChild
-                    className={buttonClassName}
-                    isActive={isPathActive(pathname, "/admin/bookings")}
-                  >
-                    <Link href="/admin/bookings" className={itemClassName}>
-                      <FileText className={iconClassName} />
-                      <span className={labelClassName}>Bookings</span>
-                    </Link>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-                <SidebarMenuItem className={itemWrapperClassName}>
-                  <SidebarMenuButton
-                    asChild
-                    className={buttonClassName}
-                    isActive={isPathActive(pathname, "/admin/reviews")}
-                  >
-                    <Link href="/admin/reviews" className={itemClassName}>
-                      <Star className={iconClassName} />
-                      <span className={labelClassName}>Reviews</span>
-                    </Link>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              </SidebarMenu>
-            </SidebarGroupContent>
+            <Collapsible defaultOpen className="group/collapsible">
+              <SidebarCollapsibleTrigger label="Admin" />
+              <CollapsibleContent>
+                <SidebarGroupContent>
+                  <SidebarMenu>
+                    <SidebarNavItem
+                      href="/admin"
+                      label="Dashboard"
+                      icon={LayoutDashboard}
+                      isActive={isPathActive(pathname, "/admin", {
+                        exact: true,
+                      })}
+                      itemClassName={itemClassName}
+                      iconClassName={iconClassName}
+                      labelClassName={labelClassName}
+                      itemWrapperClassName={itemWrapperClassName}
+                      buttonClassName={buttonClassName}
+                    />
+                    <SidebarNavItem
+                      href="/admin/bookings"
+                      label="Bookings"
+                      icon={FileText}
+                      isActive={isPathActive(pathname, "/admin/bookings")}
+                      itemClassName={itemClassName}
+                      iconClassName={iconClassName}
+                      labelClassName={labelClassName}
+                      itemWrapperClassName={itemWrapperClassName}
+                      buttonClassName={buttonClassName}
+                    />
+                    <SidebarNavItem
+                      href="/admin/reviews"
+                      label="Reviews"
+                      icon={Star}
+                      isActive={isPathActive(pathname, "/admin/reviews")}
+                      itemClassName={itemClassName}
+                      iconClassName={iconClassName}
+                      labelClassName={labelClassName}
+                      itemWrapperClassName={itemWrapperClassName}
+                      buttonClassName={buttonClassName}
+                    />
+                  </SidebarMenu>
+                </SidebarGroupContent>
+              </CollapsibleContent>
+            </Collapsible>
           </SidebarGroup>
 
           <SidebarGroup className="px-1 pt-1">
-            <SidebarGroupLabel>Bundles CRUD</SidebarGroupLabel>
-            <SidebarGroupContent>
-              <SidebarMenu>
-                <SidebarMenuItem className={itemWrapperClassName}>
-                  <SidebarMenuButton
-                    asChild
-                    className={buttonClassName}
-                    isActive={isPathActive(pathname, "/admin/bundles")}
-                  >
-                    <Link href="/admin/bundles" className={itemClassName}>
-                      <Package className={iconClassName} />
-                      <span className={labelClassName}>Bundles</span>
-                    </Link>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              </SidebarMenu>
-            </SidebarGroupContent>
+            <Collapsible defaultOpen className="group/collapsible">
+              <SidebarCollapsibleTrigger label="Bundles CRUD" />
+              <CollapsibleContent>
+                <SidebarGroupContent>
+                  <SidebarMenu>
+                    <SidebarNavItem
+                      href="/admin/bundles"
+                      label="Bundles"
+                      icon={Package}
+                      isActive={isPathActive(pathname, "/admin/bundles")}
+                      itemClassName={itemClassName}
+                      iconClassName={iconClassName}
+                      labelClassName={labelClassName}
+                      itemWrapperClassName={itemWrapperClassName}
+                      buttonClassName={buttonClassName}
+                    />
+                  </SidebarMenu>
+                </SidebarGroupContent>
+              </CollapsibleContent>
+            </Collapsible>
           </SidebarGroup>
 
           <SidebarGroup className="px-1 pt-1">
-            <SidebarGroupLabel>Locations CRUD</SidebarGroupLabel>
-            <SidebarGroupContent>
-              <SidebarMenu>
-                <SidebarMenuItem className={itemWrapperClassName}>
-                  <SidebarMenuButton
-                    asChild
-                    className={buttonClassName}
-                    isActive={isPathActive(pathname, "/admin/locations", {
-                      exact: true,
-                    })}
-                  >
-                    <Link href="/admin/locations" className={itemClassName}>
-                      <MapPin className={iconClassName} />
-                      <span className={labelClassName}>Locations</span>
-                    </Link>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-                <SidebarMenuItem className={itemWrapperClassName}>
-                  <SidebarMenuButton
-                    asChild
-                    className={buttonClassName}
-                    isActive={isPathActive(pathname, "/admin/locations/tags")}
-                  >
-                    <Link
+            <Collapsible defaultOpen className="group/collapsible">
+              <SidebarCollapsibleTrigger label="Locations CRUD" />
+              <CollapsibleContent>
+                <SidebarGroupContent>
+                  <SidebarMenu>
+                    <SidebarNavItem
+                      href="/admin/locations"
+                      label="Locations"
+                      icon={MapPin}
+                      isActive={isPathActive(pathname, "/admin/locations", {
+                        exact: true,
+                      })}
+                      itemClassName={itemClassName}
+                      iconClassName={iconClassName}
+                      labelClassName={labelClassName}
+                      itemWrapperClassName={itemWrapperClassName}
+                      buttonClassName={buttonClassName}
+                    />
+                    <SidebarNavItem
                       href="/admin/locations/tags"
-                      className={itemClassName}
-                    >
-                      <Tag className={iconClassName} />
-                      <span className={labelClassName}>Tags</span>
-                    </Link>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              </SidebarMenu>
-            </SidebarGroupContent>
+                      label="Tags"
+                      icon={Tag}
+                      isActive={isPathActive(pathname, "/admin/locations/tags")}
+                      itemClassName={itemClassName}
+                      iconClassName={iconClassName}
+                      labelClassName={labelClassName}
+                      itemWrapperClassName={itemWrapperClassName}
+                      buttonClassName={buttonClassName}
+                    />
+                  </SidebarMenu>
+                </SidebarGroupContent>
+              </CollapsibleContent>
+            </Collapsible>
           </SidebarGroup>
 
           <SidebarGroup className="px-1 pt-1">
-            <SidebarGroupLabel>Crews CRUD</SidebarGroupLabel>
-            <SidebarGroupContent>
-              <SidebarMenu>
-                <SidebarMenuItem className={itemWrapperClassName}>
-                  <SidebarMenuButton
-                    asChild
-                    className={buttonClassName}
-                    isActive={isPathActive(pathname, "/admin/crews", {
-                      exact: true,
-                    })}
-                  >
-                    <Link href="/admin/crews" className={itemClassName}>
-                      <Users className={iconClassName} />
-                      <span className={labelClassName}>Crews</span>
-                    </Link>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-                <SidebarMenuItem className={itemWrapperClassName}>
-                  <SidebarMenuButton
-                    asChild
-                    className={buttonClassName}
-                    isActive={isPathActive(pathname, "/admin/crews/skills")}
-                  >
-                    <Link href="/admin/crews/skills" className={itemClassName}>
-                      <Sparkles className={iconClassName} />
-                      <span className={labelClassName}>Skills</span>
-                    </Link>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              </SidebarMenu>
-            </SidebarGroupContent>
+            <Collapsible defaultOpen className="group/collapsible">
+              <SidebarCollapsibleTrigger label="Crews CRUD" />
+              <CollapsibleContent>
+                <SidebarGroupContent>
+                  <SidebarMenu>
+                    <SidebarNavItem
+                      href="/admin/crews"
+                      label="Crews"
+                      icon={Users}
+                      isActive={isPathActive(pathname, "/admin/crews", {
+                        exact: true,
+                      })}
+                      itemClassName={itemClassName}
+                      iconClassName={iconClassName}
+                      labelClassName={labelClassName}
+                      itemWrapperClassName={itemWrapperClassName}
+                      buttonClassName={buttonClassName}
+                    />
+                    <SidebarNavItem
+                      href="/admin/crews/skills"
+                      label="Skills"
+                      icon={Sparkles}
+                      isActive={isPathActive(pathname, "/admin/crews/skills")}
+                      itemClassName={itemClassName}
+                      iconClassName={iconClassName}
+                      labelClassName={labelClassName}
+                      itemWrapperClassName={itemWrapperClassName}
+                      buttonClassName={buttonClassName}
+                    />
+                  </SidebarMenu>
+                </SidebarGroupContent>
+              </CollapsibleContent>
+            </Collapsible>
           </SidebarGroup>
 
           <SidebarGroup className="px-1 pt-1">
-            <SidebarGroupLabel>Expendables CRUD</SidebarGroupLabel>
-            <SidebarGroupContent>
-              <SidebarMenu>
-                <SidebarMenuItem className={itemWrapperClassName}>
-                  <SidebarMenuButton
-                    asChild
-                    className={buttonClassName}
-                    isActive={isPathActive(pathname, "/admin/expendables")}
-                  >
-                    <Link href="/admin/expendables" className={itemClassName}>
-                      <Boxes className={iconClassName} />
-                      <span className={labelClassName}>Expendables</span>
-                    </Link>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              </SidebarMenu>
-            </SidebarGroupContent>
+            <Collapsible defaultOpen className="group/collapsible">
+              <SidebarCollapsibleTrigger label="Expendables CRUD" />
+              <CollapsibleContent>
+                <SidebarGroupContent>
+                  <SidebarMenu>
+                    <SidebarNavItem
+                      href="/admin/expendables"
+                      label="Expendables"
+                      icon={Boxes}
+                      isActive={isPathActive(pathname, "/admin/expendables")}
+                      itemClassName={itemClassName}
+                      iconClassName={iconClassName}
+                      labelClassName={labelClassName}
+                      itemWrapperClassName={itemWrapperClassName}
+                      buttonClassName={buttonClassName}
+                    />
+                  </SidebarMenu>
+                </SidebarGroupContent>
+              </CollapsibleContent>
+            </Collapsible>
           </SidebarGroup>
 
           <SidebarGroup className="px-1 pt-1">
-            <SidebarGroupLabel>Food & Beverage CRUD</SidebarGroupLabel>
-            <SidebarGroupContent>
-              <SidebarMenu>
-                <SidebarMenuItem className={itemWrapperClassName}>
-                  <SidebarMenuButton
-                    asChild
-                    className={buttonClassName}
-                    isActive={isPathActive(
-                      pathname,
-                      "/admin/food-and-beverage",
-                      { exact: true },
-                    )}
-                  >
-                    <Link
+            <Collapsible defaultOpen className="group/collapsible">
+              <SidebarCollapsibleTrigger label="Food & Beverage CRUD" />
+              <CollapsibleContent>
+                <SidebarGroupContent>
+                  <SidebarMenu>
+                    <SidebarNavItem
                       href="/admin/food-and-beverage"
-                      className={itemClassName}
-                    >
-                      <UtensilsCrossed className={iconClassName} />
-                      <span className={labelClassName}>Food & Beverage</span>
-                    </Link>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-                <SidebarMenuItem className={itemWrapperClassName}>
-                  <SidebarMenuButton
-                    asChild
-                    className={buttonClassName}
-                    isActive={isPathActive(
-                      pathname,
-                      "/admin/food-and-beverage/tags",
-                    )}
-                  >
-                    <Link
+                      label="Food & Beverage"
+                      icon={UtensilsCrossed}
+                      isActive={isPathActive(
+                        pathname,
+                        "/admin/food-and-beverage",
+                        {
+                          exact: true,
+                        },
+                      )}
+                      itemClassName={itemClassName}
+                      iconClassName={iconClassName}
+                      labelClassName={labelClassName}
+                      itemWrapperClassName={itemWrapperClassName}
+                      buttonClassName={buttonClassName}
+                    />
+                    <SidebarNavItem
                       href="/admin/food-and-beverage/tags"
-                      className={itemClassName}
-                    >
-                      <Tag className={iconClassName} />
-                      <span className={labelClassName}>Tags</span>
-                    </Link>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              </SidebarMenu>
-            </SidebarGroupContent>
+                      label="Tags"
+                      icon={Tag}
+                      isActive={isPathActive(
+                        pathname,
+                        "/admin/food-and-beverage/tags",
+                      )}
+                      itemClassName={itemClassName}
+                      iconClassName={iconClassName}
+                      labelClassName={labelClassName}
+                      itemWrapperClassName={itemWrapperClassName}
+                      buttonClassName={buttonClassName}
+                    />
+                  </SidebarMenu>
+                </SidebarGroupContent>
+              </CollapsibleContent>
+            </Collapsible>
           </SidebarGroup>
 
           <SidebarGroup className="px-1 pt-1">
-            <SidebarGroupLabel>Rentals CRUD</SidebarGroupLabel>
-            <SidebarGroupContent>
-              <SidebarMenu>
-                <SidebarMenuItem className={itemWrapperClassName}>
-                  <SidebarMenuButton
-                    asChild
-                    className={buttonClassName}
-                    isActive={isPathActive(pathname, "/admin/rentals")}
-                  >
-                    <Link href="/admin/rentals" className={itemClassName}>
-                      <Camera className={iconClassName} />
-                      <span className={labelClassName}>Rentals</span>
-                    </Link>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              </SidebarMenu>
-            </SidebarGroupContent>
+            <Collapsible defaultOpen className="group/collapsible">
+              <SidebarCollapsibleTrigger label="Rentals CRUD" />
+              <CollapsibleContent>
+                <SidebarGroupContent>
+                  <SidebarMenu>
+                    <SidebarNavItem
+                      href="/admin/rentals"
+                      label="Rentals"
+                      icon={Camera}
+                      isActive={isPathActive(pathname, "/admin/rentals")}
+                      itemClassName={itemClassName}
+                      iconClassName={iconClassName}
+                      labelClassName={labelClassName}
+                      itemWrapperClassName={itemWrapperClassName}
+                      buttonClassName={buttonClassName}
+                    />
+                  </SidebarMenu>
+                </SidebarGroupContent>
+              </CollapsibleContent>
+            </Collapsible>
           </SidebarGroup>
 
           <SidebarGroup className="px-1 pt-1">
-            <SidebarGroupLabel>Categories CRUD</SidebarGroupLabel>
-            <SidebarGroupContent>
-              <SidebarMenu>
-                <SidebarMenuItem className={itemWrapperClassName}>
-                  <SidebarMenuButton
-                    asChild
-                    className={buttonClassName}
-                    isActive={isPathActive(pathname, "/admin/categories")}
-                  >
-                    <Link href="/admin/categories" className={itemClassName}>
-                      <Tag className={iconClassName} />
-                      <span className={labelClassName}>Categories</span>
-                    </Link>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-                <SidebarMenuItem className={itemWrapperClassName}>
-                  <SidebarMenuButton
-                    asChild
-                    className={buttonClassName}
-                    isActive={isPathActive(pathname, "/admin/sub-categories")}
-                  >
-                    <Link
+            <Collapsible defaultOpen className="group/collapsible">
+              <SidebarCollapsibleTrigger label="Categories CRUD" />
+              <CollapsibleContent>
+                <SidebarGroupContent>
+                  <SidebarMenu>
+                    <SidebarNavItem
+                      href="/admin/categories"
+                      label="Categories"
+                      icon={Tag}
+                      isActive={isPathActive(pathname, "/admin/categories")}
+                      itemClassName={itemClassName}
+                      iconClassName={iconClassName}
+                      labelClassName={labelClassName}
+                      itemWrapperClassName={itemWrapperClassName}
+                      buttonClassName={buttonClassName}
+                    />
+                    <SidebarNavItem
                       href="/admin/sub-categories"
-                      className={itemClassName}
-                    >
-                      <Tag className={iconClassName} />
-                      <span className={labelClassName}>Sub Categories</span>
-                    </Link>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-                <SidebarMenuItem className={itemWrapperClassName}>
-                  <SidebarMenuButton
-                    asChild
-                    className={buttonClassName}
-                    isActive={isPathActive(pathname, "/admin/bundle-type")}
-                  >
-                    <Link href="/admin/bundle-type" className={itemClassName}>
-                      <Package className={iconClassName} />
-                      <span className={labelClassName}>Bundle Type</span>
-                    </Link>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-                <SidebarMenuItem className={itemWrapperClassName}>
-                  <SidebarMenuButton
-                    asChild
-                    className={buttonClassName}
-                    isActive={isPathActive(
-                      pathname,
-                      "/admin/bundle-categories",
-                    )}
-                  >
-                    <Link
+                      label="Sub Categories"
+                      icon={Tag}
+                      isActive={isPathActive(pathname, "/admin/sub-categories")}
+                      itemClassName={itemClassName}
+                      iconClassName={iconClassName}
+                      labelClassName={labelClassName}
+                      itemWrapperClassName={itemWrapperClassName}
+                      buttonClassName={buttonClassName}
+                    />
+                    <SidebarNavItem
+                      href="/admin/bundle-type"
+                      label="Bundle Type"
+                      icon={Package}
+                      isActive={isPathActive(pathname, "/admin/bundle-type")}
+                      itemClassName={itemClassName}
+                      iconClassName={iconClassName}
+                      labelClassName={labelClassName}
+                      itemWrapperClassName={itemWrapperClassName}
+                      buttonClassName={buttonClassName}
+                    />
+                    <SidebarNavItem
                       href="/admin/bundle-categories"
-                      className={itemClassName}
-                    >
-                      <Boxes className={iconClassName} />
-                      <span className={labelClassName}>Bundle Categories</span>
-                    </Link>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              </SidebarMenu>
-            </SidebarGroupContent>
+                      label="Bundle Categories"
+                      icon={Boxes}
+                      isActive={isPathActive(
+                        pathname,
+                        "/admin/bundle-categories",
+                      )}
+                      itemClassName={itemClassName}
+                      iconClassName={iconClassName}
+                      labelClassName={labelClassName}
+                      itemWrapperClassName={itemWrapperClassName}
+                      buttonClassName={buttonClassName}
+                    />
+                  </SidebarMenu>
+                </SidebarGroupContent>
+              </CollapsibleContent>
+            </Collapsible>
           </SidebarGroup>
         </>
       ) : null}

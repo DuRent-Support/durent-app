@@ -1,13 +1,11 @@
 "use client";
 
 import Image from "next/image";
-import Link from "next/link";
+import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { format } from "date-fns";
-import { id } from "date-fns/locale";
-import { ArrowLeft, CalendarIcon, ShoppingBag, Trash2 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { CalendarDays, TicketPercent, Trash2 } from "lucide-react";
 
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
 import { Input } from "@/components/ui/input";
@@ -16,37 +14,20 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import { Separator } from "@/components/ui/separator";
 import { useCart } from "@/hooks/use-cart";
-import { cn } from "@/lib/utils";
+import formatPrice from "@/lib/formatPrice";
 import {
   buildWhatsappLink,
   buildWhatsappMessage,
 } from "@/lib/whatsappMessageHelper";
-import { type CartDateRange, type CartItem } from "@/types/cart";
 
-function parsePrice(price: string | number | null | undefined) {
-  const numericValue = String(price ?? "").replace(/[^0-9]/g, "");
-  return Number.parseInt(numericValue, 10) || 0;
-}
-
-function formatPrice(value: number) {
-  return `Rp ${value.toLocaleString("id-ID")}`;
-}
-
-function formatRange(range: CartDateRange | null) {
-  if (!range?.from || !range?.to) {
-    return "Pilih tanggal sewa";
-  }
-
-  const from = format(range.from, "d MMM yyyy", { locale: id });
-  const to = format(range.to, "d MMM yyyy", { locale: id });
-
-  return from === to ? from : `${from} - ${to}`;
-}
-
-function hasSelectedDateRange(range: CartDateRange | null) {
-  return Boolean(range?.from && range?.to);
-}
+type GroupedItems = {
+  locations: CheckoutItem[];
+  expendables: CheckoutItem[];
+  bundles: CheckoutItem[];
+  others: CheckoutItem[];
+};
 
 type SnapResult = {
   order_id?: string;
@@ -66,39 +47,50 @@ type Snap = {
   ) => void;
 };
 
-type TokenizerResponse = {
+type MidtransTokenizerResponse = {
   token?: string;
-  order_id?: string;
-  expires_at?: string;
   message?: string;
 };
 
-type OrderItemBookingRow = {
-  location_id: string;
-  booking_start: string;
-  booking_end: string;
+type CheckoutItem = {
+  id: string;
+  sourceId: string;
+  imageUrl: string;
+  name: string;
+  subtitle: string;
+  itemType: string;
+  tags: string[];
+  dateRange: { from: Date; to: Date } | null;
+  requiresDateRange: boolean;
+  multiplier: number;
+  unitPrice: number;
+  lineTotal: number;
 };
 
-type BookedRangesResponse = {
-  rows?: OrderItemBookingRow[];
-  message?: string;
+const REFERRAL_DISCOUNT_RULES: Record<
+  string,
+  { type: "percent" | "fixed"; value: number }
+> = {
+  DURENT10: { type: "percent", value: 10 },
+  HEMAT50: { type: "fixed", value: 50000 },
 };
 
-type BookedRange = {
-  from: Date;
-  to: Date;
-};
+function toNumberPrice(raw: string) {
+  const normalized = String(raw)
+    .replace(/[^\d.,-]/g, "")
+    .replace(/\./g, "")
+    .replace(",", ".");
+  const parsed = Number(normalized);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
 
-const REFERRAL_DISCOUNTS: Record<string, number> = {
-  DURENT10: 10,
-  CREW5: 5,
-  EQUIP8: 8,
-};
-
-function getItemTypeLabel(itemType: CartItem["itemType"]) {
-  if (itemType === "location") return "Location";
-  if (itemType === "crew") return "Crew";
-  return "Equipment";
+function formatDateLabel(value: Date | null | undefined) {
+  if (!value) return "-";
+  return new Intl.DateTimeFormat("id-ID", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  }).format(value);
 }
 
 async function ensureSnapLoaded(snapUrl: string, clientKey: string) {
@@ -107,29 +99,6 @@ async function ensureSnapLoaded(snapUrl: string, clientKey: string) {
   if (win.snap) {
     return win.snap;
   }
-
-  const waitForSnap = () =>
-    new Promise<Snap>((resolve, reject) => {
-      let attempts = 20;
-
-      const check = () => {
-        if (win.snap) {
-          resolve(win.snap);
-          return;
-        }
-
-        attempts -= 1;
-
-        if (attempts <= 0) {
-          reject(new Error("Snap.js loaded but window.snap is unavailable."));
-          return;
-        }
-
-        window.setTimeout(check, 100);
-      };
-
-      check();
-    });
 
   return new Promise<Snap>((resolve, reject) => {
     const existingScript = document.getElementById(
@@ -145,18 +114,22 @@ async function ensureSnapLoaded(snapUrl: string, clientKey: string) {
       document.body.appendChild(script);
     }
 
-    const handleLoad = () => {
-      void waitForSnap().then(resolve).catch(reject);
+    const checkSnap = () => {
+      if (win.snap) {
+        resolve(win.snap);
+        return;
+      }
+
+      window.setTimeout(checkSnap, 100);
     };
 
-    const handleError = () => {
-      reject(new Error("Gagal memuat Snap.js dari Midtrans."));
-    };
+    script.addEventListener("load", checkSnap, { once: true });
+    script.addEventListener(
+      "error",
+      () => reject(new Error("Gagal memuat Snap.js dari Midtrans.")),
+      { once: true },
+    );
 
-    script.addEventListener("load", handleLoad, { once: true });
-    script.addEventListener("error", handleError, { once: true });
-
-    // If script already exists and has been loaded earlier, resolve immediately.
     window.setTimeout(() => {
       if (win.snap) {
         resolve(win.snap);
@@ -165,730 +138,491 @@ async function ensureSnapLoaded(snapUrl: string, clientKey: string) {
   });
 }
 
-function normalizeToStartOfDay(value: Date | string | null | undefined) {
-  const parsed = value ? new Date(value) : null;
-
-  if (!parsed || Number.isNaN(parsed.getTime())) {
-    return null;
-  }
-
-  parsed.setHours(0, 0, 0, 0);
-  return parsed;
-}
-
-function formatDateOnlyLocal(value: Date | string | null | undefined) {
-  const parsed = normalizeToStartOfDay(value);
-
-  if (!parsed) {
-    return null;
-  }
-
-  const year = parsed.getFullYear();
-  const month = String(parsed.getMonth() + 1).padStart(2, "0");
-  const day = String(parsed.getDate()).padStart(2, "0");
-
-  return `${year}-${month}-${day}`;
-}
-
-function isDateWithinRange(date: Date, range: BookedRange) {
-  const target = normalizeToStartOfDay(date);
-
-  if (!target) {
-    return false;
-  }
-
-  return target >= range.from && target <= range.to;
-}
-
 export default function CartPage() {
   const router = useRouter();
-  const [isSnapReady, setIsSnapReady] = useState(false);
-  const [isCheckingOut, setIsCheckingOut] = useState(false);
+  const { items, totalItems, clearCart, getDays, updateDateRange } = useCart();
   const [referralInput, setReferralInput] = useState("");
-  const [appliedReferral, setAppliedReferral] = useState<{
-    code: string;
-    percent: number;
-  } | null>(null);
-  const [referralError, setReferralError] = useState<string | null>(null);
-  const [bookedRangesByLocation, setBookedRangesByLocation] = useState<
-    Record<string, BookedRange[]>
-  >({});
-  const { items, removeItem, updateDateRange, clearCart, totalItems, getDays } =
-    useCart();
-  const hasUnselectedDateRange = items.some(
-    (item) => item.requiresDateRange && !hasSelectedDateRange(item.dateRange),
+  const [appliedReferral, setAppliedReferral] = useState("");
+  const [referralError, setReferralError] = useState("");
+  const [checkoutError, setCheckoutError] = useState("");
+  const [isPaying, setIsPaying] = useState(false);
+
+  const checkoutItems = useMemo<CheckoutItem[]>(() => {
+    return items.map((item) => {
+      const multiplier = Math.max(1, Number(getDays(item) || 1));
+      const unitPrice = toNumberPrice(item.price);
+
+      return {
+        id: item.id,
+        sourceId: item.sourceId,
+        imageUrl: item.imageUrl,
+        name: item.name,
+        subtitle: item.subtitle,
+        itemType: String(item.itemType),
+        tags: item.tags,
+        dateRange: item.dateRange,
+        requiresDateRange: item.requiresDateRange,
+        multiplier,
+        unitPrice,
+        lineTotal: unitPrice * multiplier,
+      };
+    });
+  }, [items, getDays]);
+
+  const grouped = useMemo<GroupedItems>(() => {
+    const locations: CheckoutItem[] = [];
+    const expendables: CheckoutItem[] = [];
+    const bundles: CheckoutItem[] = [];
+    const others: CheckoutItem[] = [];
+
+    checkoutItems.forEach((item) => {
+      const itemType = item.itemType.toLowerCase();
+      const subtitle = item.subtitle.toLowerCase();
+
+      if (itemType === "location") {
+        locations.push(item);
+        return;
+      }
+
+      if (itemType === "expendable" || subtitle.includes("expendable")) {
+        expendables.push(item);
+        return;
+      }
+
+      if (itemType === "bundle" || subtitle.includes("bundle")) {
+        bundles.push(item);
+        return;
+      }
+
+      others.push(item);
+    });
+
+    return {
+      locations,
+      expendables,
+      bundles,
+      others,
+    };
+  }, [checkoutItems]);
+
+  const subtotal = useMemo(
+    () => checkoutItems.reduce((sum, item) => sum + item.lineTotal, 0),
+    [checkoutItems],
   );
-  const hasNonLocationItems = items.some((item) => item.itemType !== "location");
-  const hasLocationItems = items.some((item) => item.itemType === "location");
 
-  const sectionedItems = useMemo(
-    () => ({
-      location: items.filter((item) => item.itemType === "location"),
-      crew: items.filter((item) => item.itemType === "crew"),
-      equipment: items.filter((item) => item.itemType === "equipment"),
-    }),
-    [items],
-  );
+  const discount = useMemo(() => {
+    const normalized = appliedReferral.trim().toUpperCase();
+    const rule = REFERRAL_DISCOUNT_RULES[normalized];
+    if (!rule) return 0;
 
-  const whatsappHref = useMemo(() => {
-    const baseMessage = buildWhatsappMessage(items);
-    const message = appliedReferral
-      ? `${baseMessage}\nKode referral: ${appliedReferral.code} (${appliedReferral.percent}% diskon)`
-      : baseMessage;
+    if (rule.type === "percent") {
+      return Math.floor((subtotal * rule.value) / 100);
+    }
 
-    return buildWhatsappLink("628111029064", message);
-  }, [items, appliedReferral]);
-  const todayTimestamp = useMemo(() => {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    return today.getTime();
-  }, []);
+    return Math.min(subtotal, rule.value);
+  }, [appliedReferral, subtotal]);
 
+  const totalPrice = Math.max(0, subtotal - discount);
   const snapUrl =
     process.env.NEXT_PUBLIC_MIDTRANS_IS_PRODUCTION === "true"
       ? "https://app.midtrans.com/snap/snap.js"
       : "https://app.sandbox.midtrans.com/snap/snap.js";
   const midtransClientKey = process.env.NEXT_PUBLIC_MIDTRANS_CLIENT_KEY;
 
-  const ensureSnap = useCallback(async () => {
-    if (!midtransClientKey) {
-      setIsSnapReady(false);
-      // console.error("NEXT_PUBLIC_MIDTRANS_CLIENT_KEY belum diatur.");
-      return null;
-    }
+  const whatsappLink = useMemo(() => {
+    const message = buildWhatsappMessage(items);
+    return buildWhatsappLink("628111029064", message);
+  }, [items]);
 
-    try {
-      const snap = await ensureSnapLoaded(snapUrl, midtransClientKey);
-      setIsSnapReady(true);
-      return snap;
-    } catch (error) {
-      setIsSnapReady(false);
-      // console.error("Snap.js belum siap:", error);
-      return null;
-    }
-  }, [midtransClientKey, snapUrl]);
-
-  useEffect(() => {
-    void ensureSnap();
-  }, [ensureSnap]);
-
-  const handleApplyReferral = () => {
-    const normalizedCode = referralInput.trim().toUpperCase();
-
-    if (!normalizedCode) {
-      setReferralError("Masukkan kode referral dulu.");
+  const applyReferral = () => {
+    const code = referralInput.trim().toUpperCase();
+    if (!code) {
+      setAppliedReferral("");
+      setReferralError("");
       return;
     }
 
-    const discountPercent = REFERRAL_DISCOUNTS[normalizedCode];
-
-    if (!discountPercent) {
-      setAppliedReferral(null);
+    if (!REFERRAL_DISCOUNT_RULES[code]) {
+      setAppliedReferral("");
       setReferralError("Kode referral tidak valid.");
       return;
     }
 
-    setAppliedReferral({
-      code: normalizedCode,
-      percent: discountPercent,
-    });
-    setReferralError(null);
+    setAppliedReferral(code);
+    setReferralError("");
   };
 
-  const handleClearReferral = () => {
-    setReferralInput("");
-    setAppliedReferral(null);
-    setReferralError(null);
-  };
+  const handleMidtransCheckout = async () => {
+    if (checkoutItems.length === 0 || isPaying) {
+      return;
+    }
 
-  const handleClearCart = () => {
-    clearCart();
-    handleClearReferral();
-  };
+    if (!midtransClientKey) {
+      setCheckoutError("Midtrans client key belum dikonfigurasi.");
+      return;
+    }
 
-  useEffect(() => {
-    const loadBookedRanges = async () => {
-      const locationIds = [
-        ...new Set(
-          items
-            .filter((item) => item.itemType === "location")
-            .map((item) => item.sourceId),
-        ),
-      ];
+    const hasMissingDates = checkoutItems.some(
+      (item) =>
+        item.requiresDateRange &&
+        (!item.dateRange?.from || !item.dateRange?.to),
+    );
 
-      if (locationIds.length === 0) {
-        setBookedRangesByLocation({});
-        return;
-      }
+    if (hasMissingDates) {
+      setCheckoutError("Masih ada item tanpa tanggal booking.");
+      return;
+    }
 
-      const response = await fetch("/api/cart/booked-ranges", {
+    setCheckoutError("");
+    setIsPaying(true);
+
+    try {
+      const checkoutPayloadItems = checkoutItems.map((item) => ({
+        id: item.sourceId,
+        name: item.name,
+        subtotal: item.lineTotal,
+        unitPrice: item.unitPrice,
+        days: item.multiplier,
+        dateRange: item.dateRange
+          ? {
+              from: item.dateRange.from.toISOString(),
+              to: item.dateRange.to.toISOString(),
+            }
+          : undefined,
+      }));
+
+      console.log("Checkout items (client):", checkoutPayloadItems);
+
+      const response = await fetch("/api/midtrans/tokenizer", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ locationIds }),
+        body: JSON.stringify({
+          items: checkoutPayloadItems,
+        }),
       });
 
-      const result = (await response.json()) as BookedRangesResponse;
-
-      if (!response.ok) {
-        console.error("Gagal mengambil tanggal booking:", result.message);
-        setBookedRangesByLocation({});
+      if (response.status === 401) {
+        router.push("/login");
         return;
       }
 
-      const rows = result.rows ?? [];
-      const grouped: Record<string, BookedRange[]> = {};
+      const result = (await response.json()) as MidtransTokenizerResponse;
 
-      for (const row of rows) {
-        const from = normalizeToStartOfDay(row.booking_start);
-        const to = normalizeToStartOfDay(row.booking_end);
-
-        if (!from || !to) {
-          continue;
-        }
-
-        const normalizedRange: BookedRange =
-          to < from
-            ? {
-                from,
-                to: from,
-              }
-            : {
-                from,
-                to,
-              };
-
-        if (!grouped[row.location_id]) {
-          grouped[row.location_id] = [];
-        }
-
-        grouped[row.location_id].push(normalizedRange);
+      if (!response.ok || !result.token) {
+        setCheckoutError(result.message || "Gagal membuat token Midtrans.");
+        return;
       }
 
-      setBookedRangesByLocation(grouped);
-    };
+      const snap = await ensureSnapLoaded(snapUrl, midtransClientKey);
 
-    void loadBookedRanges();
-  }, [items]);
-
-  const handleCheckout = async () => {
-    if (hasUnselectedDateRange) {
-      console.error(
-        "Tanggal sewa wajib diisi untuk semua item sebelum checkout.",
-      );
-      return;
-    }
-
-    if (hasNonLocationItems || !hasLocationItems) {
-      console.error(
-        "Checkout Midtrans saat ini hanya mendukung item lokasi. Gunakan WhatsApp untuk crew/equipment.",
-      );
-      return;
-    }
-
-    if (isCheckingOut) {
-      return;
-    }
-
-    setIsCheckingOut(true);
-
-    try {
-    const snap = await ensureSnap();
-
-    if (!snap) {
-      console.error("Snap.js belum siap. Coba lagi beberapa detik.");
-      return;
-    }
-    
-
-    const purchasedItems = items.map((item) => {
-      const days = getDays(item);
-      const unitPrice = parsePrice(item.price);
-      const fromDateOnly = formatDateOnlyLocal(item.dateRange?.from);
-      const toDateOnly = formatDateOnlyLocal(
-        item.dateRange?.to ?? item.dateRange?.from,
-      );
-
-      return {
-        id: item.sourceId,
-        name: item.name,
-        city: item.subtitle,
-        dateRange: {
-          from: fromDateOnly,
-          to: toDateOnly,
+      snap.pay(result.token, {
+        onSuccess: () => {
+          clearCart();
+          router.push("/payments");
+          router.refresh();
         },
-        days,
-        unitPrice,
-        subtotal: unitPrice * days,
-      };
-    });
-
-    const response = await fetch("/api/midtrans/tokenizer", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        items: purchasedItems,
-      }),
-    });
-
-    const tokenizerResult = (await response.json()) as TokenizerResponse;
-
-    if (response.status === 401) {
-      router.push("/login");
-      return;
-    }
-
-    if (!response.ok) {
-      console.error("Tokenizer request failed:", tokenizerResult);
-      return;
-    }
-
-    if (!tokenizerResult.token) {
-      console.error("Token Midtrans tidak tersedia:", tokenizerResult);
-      return;
-    }
-
-    handleClearCart();
-
-    snap.pay(tokenizerResult.token, {
-      onSuccess: () => {
-        // console.log("Midtrans success:", result);
-        router.push("/payments");
-        router.refresh();
-      },
-      onPending: () => {
-        // console.log("Midtrans pending:", result);
-        router.push("/payments");
-        router.refresh();
-      },
-      onError: (result) => {
-        console.error("Midtrans error:", result);
-        router.push("/payments");
-      },
-      onClose: () => {
-        console.log(
-          "User menutup popup Midtrans sebelum menyelesaikan pembayaran",
-        );
-        router.push("/payments");
-      },
-    });
+        onPending: () => {
+          clearCart();
+          router.push("/payments");
+          router.refresh();
+        },
+        onError: () => {
+          setCheckoutError("Pembayaran gagal diproses oleh Midtrans.");
+        },
+        onClose: () => {
+          setIsPaying(false);
+        },
+      });
+    } catch (error) {
+      console.error("Checkout Midtrans error:", error);
+      setCheckoutError("Terjadi kesalahan saat memproses checkout Midtrans.");
     } finally {
-      setIsCheckingOut(false);
+      setIsPaying(false);
     }
   };
 
-  const subtotal = items.reduce((sum, item) => {
-    return sum + parsePrice(item.price) * getDays(item);
-  }, 0);
+  const handleSelectStartDate = (item: CheckoutItem, selectedDate?: Date) => {
+    if (!selectedDate) {
+      return;
+    }
 
-  const discountAmount = appliedReferral
-    ? Math.floor((subtotal * appliedReferral.percent) / 100)
-    : 0;
+    const currentEnd = item.dateRange?.to ?? selectedDate;
+    const nextEnd = currentEnd < selectedDate ? selectedDate : currentEnd;
 
-  const totalAfterDiscount = Math.max(0, subtotal - discountAmount);
-
-  const renderCartItem = (item: CartItem) => {
-    const days = getDays(item);
-    const itemSubtotal = parsePrice(item.price) * days;
-    const bookedRanges = bookedRangesByLocation[item.sourceId] ?? [];
-
-    const isBookedDate = (date: Date) => {
-      return bookedRanges.some((range) => isDateWithinRange(date, range));
-    };
-
-    return (
-      <article
-        key={item.id}
-        className="rounded-3xl border border-border/40 bg-card/40 p-4 shadow-sm backdrop-blur-sm"
-      >
-        <div className="flex flex-col gap-4 sm:flex-row">
-          <div className="relative h-44 w-full overflow-hidden rounded-2xl sm:h-36 sm:w-28">
-            <Image
-              src={item.imageUrl}
-              alt={item.name}
-              fill
-              sizes="(max-width: 640px) 100vw, 112px"
-              className="object-cover"
-            />
-          </div>
-          <div className="flex min-w-0 flex-1 flex-col justify-between gap-4">
-            <div className="flex items-start justify-between gap-4">
-              <div className="min-w-0">
-                <h2 className="truncate text-lg font-semibold text-foreground">
-                  {item.name}
-                </h2>
-                <p className="mt-1 text-sm text-muted-foreground">{item.subtitle}</p>
-                {item.tags.length > 0 ? (
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    {item.tags.slice(0, 3).map((tag) => (
-                      <span
-                        key={tag}
-                        className="rounded-full bg-secondary px-2.5 py-1 text-xs font-medium text-secondary-foreground"
-                      >
-                        {tag}
-                      </span>
-                    ))}
-                  </div>
-                ) : null}
-              </div>
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                className="text-muted-foreground hover:text-destructive"
-                onClick={() => removeItem(item.id)}
-              >
-                <Trash2 className="h-4 w-4" />
-              </Button>
-            </div>
-
-            <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end">
-              <Popover>
-                <PopoverTrigger asChild>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="h-auto w-full justify-start rounded-2xl border-border/50 px-4 py-3 text-left"
-                  >
-                    <CalendarIcon className="mr-3 h-4 w-4 shrink-0 text-muted-foreground" />
-                    <div className="min-w-0">
-                      <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
-                        Tanggal sewa
-                      </p>
-                      <p
-                        className={cn(
-                          "truncate text-sm font-medium",
-                          hasSelectedDateRange(item.dateRange)
-                            ? "text-foreground"
-                            : "text-muted-foreground",
-                        )}
-                      >
-                        {formatRange(item.dateRange)}
-                      </p>
-                    </div>
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-auto p-0" align="start">
-                  <Calendar
-                    mode="range"
-                    selected={item.dateRange ?? undefined}
-                    modifiers={{
-                      booked: isBookedDate,
-                    }}
-                    modifiersClassNames={{
-                      booked:
-                        "bg-destructive/20 text-destructive opacity-100 line-through",
-                    }}
-                    onSelect={(range) => {
-                      if (!range?.from) {
-                        return;
-                      }
-
-                      updateDateRange(item.id, {
-                        from: range.from,
-                        to: range.to ?? range.from,
-                      });
-                    }}
-                    disabled={(date) => {
-                      const normalizedDate = normalizeToStartOfDay(date);
-
-                      if (!normalizedDate) {
-                        return true;
-                      }
-
-                      const target = normalizedDate.getTime();
-
-                      if (target < todayTimestamp) {
-                        return true;
-                      }
-
-                      if (item.itemType === "location" && isBookedDate(normalizedDate)) {
-                        return true;
-                      }
-
-                      return false;
-                    }}
-                    numberOfMonths={1}
-                    className={cn("p-3 pointer-events-auto")}
-                  />
-                </PopoverContent>
-              </Popover>
-
-              <div className="rounded-2xl border border-border/40 bg-background/70 px-4 py-3 lg:min-w-44">
-                <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
-                  Subtotal
-                </p>
-                <p className="mt-1 text-base font-semibold text-primary">
-                  {formatPrice(itemSubtotal)}
-                </p>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  {days > 0 ? `${days} hari x ${item.price}` : "Pilih tanggal dulu"}
-                </p>
-              </div>
-            </div>
-          </div>
-        </div>
-      </article>
-    );
+    updateDateRange(item.id, {
+      from: selectedDate,
+      to: nextEnd,
+    });
   };
 
-  return (
-    <div className="mx-auto flex w-full max-w-6xl flex-col gap-8 px-6 py-8">
-      <div className="flex flex-col gap-6 rounded-3xl border border-border/40 bg-card/50 p-6 shadow-sm backdrop-blur-sm lg:flex-row lg:items-end lg:justify-between">
-        <div className="flex items-center gap-4">
-          <Link
-            href="/"
-            className="flex h-10 w-10 items-center justify-center rounded-xl border border-border/50 bg-background/70 text-foreground transition-colors hover:bg-accent"
-          >
-            <ArrowLeft className="h-5 w-5" />
-          </Link>
-          <div>
-            <h1 className="font-display text-2xl font-bold text-foreground md:text-3xl">
-              Keranjang
-            </h1>
-            <p className="mt-1 text-sm text-muted-foreground">
-              Atur durasi sewa dan lanjutkan ke pemesanan.
-            </p>
-          </div>
-        </div>
-        <div className="flex items-center gap-4">
-          <div className="flex items-center gap-4 rounded-2xl border border-border/40 bg-background/70 px-4 py-3">
-            <span className="inline-flex h-11 w-11 items-center justify-center rounded-2xl bg-primary/10 text-primary">
-              <ShoppingBag className="h-5 w-5" />
-            </span>
-            <div>
-              <p className="text-sm text-muted-foreground">Total item</p>
-              <p className="text-xl font-semibold text-foreground">
-                {totalItems}
-              </p>
-            </div>
-          </div>
-          {items.length > 0 ? (
-            <Button
-              type="button"
-              variant="ghost"
-              className="text-muted-foreground"
-              onClick={handleClearCart}
-            >
-              Hapus semua
-            </Button>
-          ) : null}
-        </div>
+  const handleSelectEndDate = (item: CheckoutItem, selectedDate?: Date) => {
+    if (!selectedDate) {
+      return;
+    }
+
+    const currentStart = item.dateRange?.from ?? selectedDate;
+    const nextStart = currentStart > selectedDate ? selectedDate : currentStart;
+
+    updateDateRange(item.id, {
+      from: nextStart,
+      to: selectedDate,
+    });
+  };
+
+  const renderGroup = (title: string, sectionItems: CheckoutItem[]) => (
+    <section className="rounded-xl border border-border bg-card p-4">
+      <div className="mb-3 flex items-center justify-between">
+        <h3 className="text-base font-semibold">{title}</h3>
+        <Badge variant="secondary">{sectionItems.length} item</Badge>
       </div>
 
-      {items.length === 0 ? (
-        <div className="flex min-h-[420px] flex-col items-center justify-center rounded-3xl border border-dashed border-border/50 bg-card/30 px-6 py-16 text-center">
-          <div className="mb-5 flex h-16 w-16 items-center justify-center rounded-2xl bg-secondary text-secondary-foreground">
-            <ShoppingBag className="h-8 w-8" />
+      <div className="space-y-3">
+        {sectionItems.map((item) => (
+          <div
+            key={item.id}
+            className="rounded-lg border border-border/60 bg-background p-3"
+          >
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex items-start gap-3">
+                <div className="relative h-24 w-36 shrink-0 overflow-hidden rounded-md border border-border/60">
+                  <Image
+                    src={item.imageUrl || "/hero.webp"}
+                    alt={item.name}
+                    fill
+                    sizes="(max-width: 768px) 40vw, 160px"
+                    className="object-cover"
+                  />
+                </div>
+                <div>
+                  <p className="text-sm font-semibold">{item.name}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {item.subtitle}
+                  </p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Start: {formatDateLabel(item.dateRange?.from)}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    End: {formatDateLabel(item.dateRange?.to)}
+                  </p>
+
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          className="h-7 gap-1.5 px-2 text-xs"
+                        >
+                          <CalendarDays className="h-3.5 w-3.5" />
+                          Pilih Start
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-auto p-0" align="start">
+                        <Calendar
+                          mode="single"
+                          selected={item.dateRange?.from ?? undefined}
+                          onSelect={(date) => handleSelectStartDate(item, date)}
+                          initialFocus
+                        />
+                      </PopoverContent>
+                    </Popover>
+
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          className="h-7 gap-1.5 px-2 text-xs"
+                        >
+                          <CalendarDays className="h-3.5 w-3.5" />
+                          Pilih End
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-auto p-0" align="start">
+                        <Calendar
+                          mode="single"
+                          selected={item.dateRange?.to ?? undefined}
+                          onSelect={(date) => handleSelectEndDate(item, date)}
+                          initialFocus
+                        />
+                      </PopoverContent>
+                    </Popover>
+                  </div>
+                </div>
+              </div>
+              <p className="text-sm font-semibold text-primary">
+                {formatPrice(item.lineTotal)}
+              </p>
+            </div>
+            <p className="mt-1 text-xs text-muted-foreground">
+              {formatPrice(item.unitPrice)} x {item.multiplier}
+            </p>
           </div>
-          <h2 className="font-display text-xl font-semibold text-foreground">
-            Keranjang masih kosong
-          </h2>
-          <p className="mt-2 max-w-md text-sm text-muted-foreground">
-            Tambahkan lokasi, crew, atau equipment ke keranjang lalu lanjutkan
-            checkout dari sini.
-          </p>
-          <Button asChild className="mt-6">
-            <Link href="/locations">Jelajahi katalog</Link>
+        ))}
+      </div>
+    </section>
+  );
+
+  return (
+    <main className="px-4 py-8 md:px-6 md:py-10">
+      <section className="mx-auto w-full max-w-7xl">
+        <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
+          <div className="space-y-2">
+            <h1 className="font-display text-3xl font-bold tracking-tight md:text-4xl">
+              Checkout
+            </h1>
+            <p className="max-w-2xl text-sm text-muted-foreground md:text-base">
+              Periksa kembali semua item sebelum melanjutkan ke pembayaran.
+            </p>
+            <Badge variant="outline">Total item checkout: {totalItems}</Badge>
+          </div>
+
+          <Button
+            type="button"
+            variant="destructive"
+            className="gap-2"
+            onClick={clearCart}
+            disabled={totalItems === 0}
+          >
+            <Trash2 className="h-4 w-4" />
+            Hapus Semua
           </Button>
         </div>
-      ) : (
-        <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
-          <div className="space-y-6">
-            {sectionedItems.location.length > 0 ? (
-              <section className="space-y-3">
-                <p className="text-xs uppercase tracking-[0.25em] text-muted-foreground">
-                  Location
-                </p>
-                <div className="space-y-4">
-                  {sectionedItems.location.map((item) => renderCartItem(item))}
-                </div>
-              </section>
-            ) : null}
 
-            {sectionedItems.crew.length > 0 ? (
-              <section className="space-y-3">
-                <p className="text-xs uppercase tracking-[0.25em] text-muted-foreground">
-                  Crew
-                </p>
-                <div className="space-y-4">
-                  {sectionedItems.crew.map((item) => renderCartItem(item))}
-                </div>
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1.75fr_1fr]">
+          <div className="space-y-4">
+            {checkoutItems.length === 0 ? (
+              <section className="rounded-xl border border-border bg-card p-6 text-sm text-muted-foreground">
+                Belom ada item di keranjang.
               </section>
-            ) : null}
-
-            {sectionedItems.equipment.length > 0 ? (
-              <section className="space-y-3">
-                <p className="text-xs uppercase tracking-[0.25em] text-muted-foreground">
-                  Equipment
-                </p>
-                <div className="space-y-4">
-                  {sectionedItems.equipment.map((item) => renderCartItem(item))}
-                </div>
-              </section>
-            ) : null}
+            ) : (
+              <>
+                {grouped.locations.length > 0
+                  ? renderGroup("By Location", grouped.locations)
+                  : null}
+                {grouped.expendables.length > 0
+                  ? renderGroup("By Expendables", grouped.expendables)
+                  : null}
+                {grouped.bundles.length > 0
+                  ? renderGroup("Bundles", grouped.bundles)
+                  : null}
+                {grouped.others.length > 0
+                  ? renderGroup("Lainnya", grouped.others)
+                  : null}
+              </>
+            )}
           </div>
 
-          <aside className="h-fit rounded-3xl border border-border/40 bg-card/60 p-6 shadow-sm backdrop-blur-sm xl:sticky xl:top-8">
-            <h2 className="font-display text-xl font-semibold text-foreground">
-              Ringkasan pesanan
-            </h2>
-            <div className="mt-5 space-y-5">
-              {([sectionedItems.location, sectionedItems.crew, sectionedItems.equipment] as const)
-                .filter((group) => group.length > 0)
-                .map((group) => (
-                  <div key={group[0].itemType} className="space-y-3">
-                    <p className="text-[11px] uppercase tracking-[0.2em] text-muted-foreground">
-                      {getItemTypeLabel(group[0].itemType)}
-                    </p>
-                    <div className="space-y-3">
-                      {group.map((item) => {
-                        const days = getDays(item);
+          <aside className="h-fit rounded-xl border border-border bg-card p-4">
+            <h2 className="text-lg font-semibold">Ringkasan Pesanan</h2>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Ringkasan item checkout Anda.
+            </p>
 
-                        return (
-                          <div key={item.id} className="text-sm">
-                            <div className="flex items-start justify-between gap-3">
-                              <div className="min-w-0">
-                                <p className="truncate font-medium text-foreground">
-                                  {item.name}
-                                </p>
-                                <p className="mt-1 text-xs text-muted-foreground">
-                                  {days > 0
-                                    ? `${days} hari x ${item.price}`
-                                    : "Pilih tanggal dulu"}
-                                </p>
-                              </div>
-                              <span className="shrink-0 font-semibold text-foreground">
-                                {formatPrice(parsePrice(item.price) * days)}
-                              </span>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
+            <div className="mt-4 space-y-2">
+              {checkoutItems.length === 0 ? (
+                <p className="text-sm text-muted-foreground">
+                  Belum ada item di checkout.
+                </p>
+              ) : (
+                checkoutItems.map((item) => (
+                  <div
+                    key={`summary-${item.id}`}
+                    className="flex items-start justify-between gap-3 text-sm"
+                  >
+                    <span className="line-clamp-2">{item.name}</span>
+                    <span className="whitespace-nowrap font-semibold">
+                      {formatPrice(item.lineTotal)}
+                    </span>
                   </div>
-                ))}
+                ))
+              )}
             </div>
 
-            <div className="my-5 border-t border-border/40" />
+            <Separator className="my-4" />
 
-            <div className="space-y-2">
-              <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
-                Referral code
-              </p>
-              <div className="flex items-center gap-2">
+            <div className="space-y-2 text-sm">
+              <div className="flex items-center justify-between">
+                <span>Total Item</span>
+                <span className="font-semibold">{totalItems}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span>Sub Total</span>
+                <span className="font-semibold">{formatPrice(subtotal)}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span>Diskon</span>
+                <span className="font-semibold text-green-600">
+                  -{formatPrice(discount)}
+                </span>
+              </div>
+            </div>
+
+            <Separator className="my-4" />
+
+            <div className="flex items-center justify-between text-base font-bold">
+              <span>Total Harga</span>
+              <span>{formatPrice(totalPrice)}</span>
+            </div>
+
+            <div className="mt-5 rounded-lg border border-border/60 p-3">
+              <div className="mb-2 flex items-center gap-2 text-sm font-semibold">
+                <TicketPercent className="h-4 w-4" />
+                Referral Code
+              </div>
+              <div className="flex gap-2">
                 <Input
                   value={referralInput}
-                  onChange={(event) => {
-                    setReferralInput(event.target.value);
-                    setReferralError(null);
-                  }}
-                  placeholder="Contoh: DURENT10"
-                  className="h-10"
+                  onChange={(event) => setReferralInput(event.target.value)}
+                  placeholder="Masukkan kode referral"
                 />
-                <Button type="button" variant="outline" onClick={handleApplyReferral}>
-                  Apply
+                <Button type="button" onClick={applyReferral}>
+                  Terapkan
                 </Button>
               </div>
               {appliedReferral ? (
-                <div className="flex items-center justify-between rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-700">
-                  <span>
-                    Kode aktif: {appliedReferral.code} ({appliedReferral.percent}%)
-                  </span>
-                  <button
-                    type="button"
-                    className="font-semibold underline"
-                    onClick={handleClearReferral}
-                  >
-                    Hapus
-                  </button>
-                </div>
+                <p className="mt-2 text-xs text-green-600">
+                  Kode referral {appliedReferral} berhasil diterapkan.
+                </p>
               ) : null}
               {referralError ? (
-                <p className="text-xs text-destructive">{referralError}</p>
+                <p className="mt-2 text-xs text-destructive">{referralError}</p>
               ) : null}
             </div>
 
-            <div className="my-5 border-t border-border/40" />
-
-            <div className="flex items-center justify-between text-sm text-muted-foreground">
-              <span>Total item</span>
-              <span>{totalItems}</span>
-            </div>
-            <div className="mt-2 flex items-center justify-between text-sm text-muted-foreground">
-              <span>Subtotal</span>
-              <span>{formatPrice(subtotal)}</span>
-            </div>
-            <div className="mt-2 flex items-center justify-between text-sm text-muted-foreground">
-              <span>Diskon</span>
-              <span>
-                {discountAmount > 0
-                  ? `- ${formatPrice(discountAmount)}`
-                  : formatPrice(0)}
-              </span>
-            </div>
-            <div className="mt-3 flex items-center justify-between text-lg font-semibold text-foreground">
-              <span>Total</span>
-              <span className="text-primary">{formatPrice(totalAfterDiscount)}</span>
-            </div>
-
-            <Button
-              className="mt-6 w-full"
-              size="lg"
-              onClick={handleCheckout}
-              disabled={
-                hasUnselectedDateRange ||
-                !isSnapReady ||
-                isCheckingOut ||
-                hasNonLocationItems ||
-                !hasLocationItems
-              }
-            >
-              {isCheckingOut ? "Memproses..." : "Checkout"}
-            </Button>
-            {hasUnselectedDateRange ? (
-              <p className="mt-2 text-xs text-destructive">
-                Pilih tanggal sewa untuk semua item sebelum checkout.
-              </p>
-            ) : null}
-            {hasNonLocationItems ? (
-              <p className="mt-2 text-xs text-muted-foreground">
-                Checkout Midtrans saat ini hanya untuk item lokasi. Gunakan
-                WhatsApp untuk proses gabungan crew dan equipment.
-              </p>
-            ) : null}
-            {!hasLocationItems ? (
-              <p className="mt-2 text-xs text-muted-foreground">
-                Tambahkan minimal satu lokasi untuk menggunakan checkout Midtrans.
-              </p>
-            ) : null}
-            <Button
-              asChild
-              variant="secondary"
-              className="mt-3 w-full"
-              size="lg"
-              disabled={hasUnselectedDateRange}
-            >
-              <a
-                href={hasUnselectedDateRange ? undefined : whatsappHref}
-                target="_blank"
-                rel="noopener noreferrer"
-                aria-disabled={hasUnselectedDateRange}
-                onClick={(event) => {
-                  if (hasUnselectedDateRange) {
-                    event.preventDefault();
-                  }
-                }}
+            <div className="mt-5 space-y-3">
+              <Button
+                type="button"
+                className="w-full"
+                onClick={() => void handleMidtransCheckout()}
+                disabled={checkoutItems.length === 0 || isPaying}
               >
-                Pesan via WhatsApp
-              </a>
-            </Button>
+                {isPaying ? "Memproses pembayaran..." : "Pembayaran"}
+              </Button>
+
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full"
+                onClick={() => {
+                  window.open(whatsappLink, "_blank", "noopener,noreferrer");
+                }}
+                disabled={checkoutItems.length === 0}
+              >
+                Order by Whatsapp
+              </Button>
+
+              {checkoutError ? (
+                <p className="text-xs text-destructive">{checkoutError}</p>
+              ) : null}
+            </div>
           </aside>
         </div>
-      )}
-    </div>
+      </section>
+    </main>
   );
 }

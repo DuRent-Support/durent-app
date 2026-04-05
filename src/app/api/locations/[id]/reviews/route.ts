@@ -21,9 +21,9 @@ export async function GET(
 ) {
   try {
     const { id } = await params;
-    const locationId = String(id || "").trim();
+    const locationId = Number(id);
 
-    if (!locationId) {
+    if (!Number.isInteger(locationId)) {
       return NextResponse.json(
         { message: "Location id tidak valid." },
         { status: 400 },
@@ -33,9 +33,9 @@ export async function GET(
     const serviceRoleClient = createServiceRoleClient();
 
     const { data: location, error: locationError } = await serviceRoleClient
-      .from("shooting_locations")
-      .select("shooting_location_id")
-      .eq("shooting_location_id", locationId)
+      .from("locations")
+      .select("id")
+      .eq("id", locationId)
       .maybeSingle();
 
     if (locationError) {

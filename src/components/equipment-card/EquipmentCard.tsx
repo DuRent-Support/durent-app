@@ -31,7 +31,8 @@ export default function EquipmentCard({ equipment }: EquipmentCardProps) {
   const router = useRouter();
   const { addItem, isInCart } = useCart();
 
-  const images = equipment.images.length > 0 ? equipment.images : ["/hero.webp"];
+  const images =
+    equipment.images.length > 0 ? equipment.images : ["/hero.webp"];
   const added = isInCart(equipment.equipment_id, "equipment");
 
   const handleAdd = () => {
@@ -46,7 +47,7 @@ export default function EquipmentCard({ equipment }: EquipmentCardProps) {
       requiresDateRange: true,
     });
 
-    router.push("/cart");
+    // router.push("/cart");
   };
 
   return (

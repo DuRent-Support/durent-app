@@ -52,7 +52,15 @@ function normalizeDateRange(
 }
 
 function normalizeItemType(value: unknown): CartItemType {
-  if (value === "crew" || value === "equipment" || value === "location") {
+  if (
+    value === "crew" ||
+    value === "equipment" ||
+    value === "location" ||
+    value === "rental" ||
+    value === "food_and_beverage" ||
+    value === "expendable" ||
+    value === "bundle"
+  ) {
     return value;
   }
 
@@ -66,6 +74,10 @@ function buildCartId(itemType: CartItemType, sourceId: string) {
 function getDefaultSubtitle(itemType: CartItemType) {
   if (itemType === "crew") return "Crew";
   if (itemType === "equipment") return "Equipment";
+  if (itemType === "rental") return "Rental";
+  if (itemType === "food_and_beverage") return "Food & Beverage";
+  if (itemType === "expendable") return "Expendable";
+  if (itemType === "bundle") return "Bundle";
   return "Location";
 }
 
