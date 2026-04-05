@@ -328,7 +328,7 @@ Table bundle_rentals {
   }
 }
 
-Table bundle_food_and_beverages {
+Table bundle_food_and_beverage {
   Note: "Detail food and beverage dalam bundle"
 
   id integer [pk, increment, not null, note: "Primary key"]
@@ -682,8 +682,8 @@ Ref: "crew_images"."crew_id" > "crews"."id"
 
 Ref: "bundle_crews"."bundle_id" > "bundles"."id"
 Ref: "bundle_crews"."crew_id" > "crews"."id"
-Ref: "bundle_food_and_beverages"."bundle_id" > "bundles"."id"
-Ref: "bundle_food_and_beverages"."food_and_beverage_id" > "food_and_beverage"."id"
+Ref: "bundle_food_and_beverage"."bundle_id" > "bundles"."id"
+Ref: "bundle_food_and_beverage"."food_and_beverage_id" > "food_and_beverage"."id"
 Ref: "bundle_expendables"."bundle_id" > "bundles"."id"
 Ref: "bundle_expendables"."expendable_id" > "expendables"."id"
 Ref: "bundle_rentals"."bundle_id" > "bundles"."id"

@@ -483,7 +483,7 @@ export async function syncBundleRelations(
     serviceRoleClient.from("bundle_crews").delete().eq("bundle_id", bundleId),
     serviceRoleClient.from("bundle_rentals").delete().eq("bundle_id", bundleId),
     serviceRoleClient
-      .from("bundle_food_and_beverages")
+      .from("bundle_food_and_beverage")
       .delete()
       .eq("bundle_id", bundleId),
     serviceRoleClient
@@ -557,7 +557,7 @@ export async function syncBundleRelations(
 
   if (payload.food_and_beverages.length > 0) {
     const insertFood = await serviceRoleClient
-      .from("bundle_food_and_beverages")
+      .from("bundle_food_and_beverage")
       .insert(
         payload.food_and_beverages.map((item) => ({
           uuid: crypto.randomUUID(),
@@ -644,7 +644,7 @@ export async function listBundlesWithRelations() {
       .select("bundle_id, rental_id, quantity, notes")
       .in("bundle_id", bundleIds),
     serviceRoleClient
-      .from("bundle_food_and_beverages")
+      .from("bundle_food_and_beverage")
       .select("bundle_id, food_and_beverage_id, quantity, notes")
       .in("bundle_id", bundleIds),
     serviceRoleClient

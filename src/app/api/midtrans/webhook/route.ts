@@ -92,14 +92,14 @@ export async function POST(request: Request) {
     const { data: allRows, error } = await supabase
       .from("orders")
       .select("*")
-      .eq("order_id", orderId);
+      .eq("code", orderId);
     console.log("Midtrans webhook all orders:", allRows, error);
 
     const { data: updatedRows, error: updateError } = await supabase
       .from("orders")
       .update({ payment_status: transactionStatus })
-      .eq("order_id", orderId)
-      .select("order_id");
+      .eq("code", orderId)
+      .select("code");
 
     if (updateError) {
       console.error("Midtrans webhook update error:", updateError);

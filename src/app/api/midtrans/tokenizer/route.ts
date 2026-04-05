@@ -1,6 +1,6 @@
 import Midtrans from "midtrans-client";
 import { NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { createClient, createServiceRoleClient } from "@/lib/supabase/server";
 
 const snap = new Midtrans.Snap({
   // Set to true if you want Production Environment (accept real transaction).
@@ -10,9 +10,11 @@ const snap = new Midtrans.Snap({
 
 type CheckoutItem = {
   id?: string;
+  itemType?: string;
   name?: string;
   subtotal?: number;
   unitPrice?: number;
+  quantity?: number;
   days?: number;
   dateRange?: {
     from?: string;
@@ -20,36 +22,151 @@ type CheckoutItem = {
   };
 };
 
+type CodeCounterRow = {
+  prefix_code: string;
+  last_number: number | null;
+};
+
+const INDONESIA_TIME_ZONE = "Asia/Jakarta";
+
+function formatDateOnlyInTimeZone(date: Date, timeZone: string) {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(date);
+
+  const year = parts.find((part) => part.type === "year")?.value;
+  const month = parts.find((part) => part.type === "month")?.value;
+  const day = parts.find((part) => part.type === "day")?.value;
+
+  if (!year || !month || !day) {
+    return null;
+  }
+
+  return `${year}-${month}-${day}`;
+}
+
 function toDateOnly(value: string | undefined) {
   if (!value) {
     return null;
   }
 
-  const dateOnlyCandidate = String(value).trim().slice(0, 10);
-  if (/^\d{4}-\d{2}-\d{2}$/.test(dateOnlyCandidate)) {
-    return dateOnlyCandidate;
+  const normalizedValue = String(value).trim();
+
+  if (/^\d{4}-\d{2}-\d{2}$/.test(normalizedValue)) {
+    return normalizedValue;
   }
 
-  const date = new Date(value);
+  const date = new Date(normalizedValue);
 
   if (Number.isNaN(date.getTime())) {
     return null;
   }
 
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-
-  return `${year}-${month}-${day}`;
+  return formatDateOnlyInTimeZone(date, INDONESIA_TIME_ZONE);
 }
 
-function getQuantityDays(startDateOnly: string, endDateOnly: string) {
-  const start = new Date(`${startDateOnly}T00:00:00.000Z`);
-  const end = new Date(`${endDateOnly}T00:00:00.000Z`);
-  const diffMs = end.getTime() - start.getTime();
-  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+function getTodayDateOnly() {
+  return formatDateOnlyInTimeZone(new Date(), INDONESIA_TIME_ZONE);
+}
 
-  return Math.max(1, diffDays + 1);
+function getDatePartsInTimeZone(date: Date, timeZone: string) {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    day: "2-digit",
+    month: "2-digit",
+    year: "2-digit",
+  }).formatToParts(date);
+
+  const day = parts.find((part) => part.type === "day")?.value;
+  const month = parts.find((part) => part.type === "month")?.value;
+  const year = parts.find((part) => part.type === "year")?.value;
+
+  if (!day || !month || !year) {
+    return null;
+  }
+
+  return { day, month, year };
+}
+
+function buildOrderCodePrefix() {
+  const dateParts = getDatePartsInTimeZone(new Date(), INDONESIA_TIME_ZONE);
+
+  if (!dateParts) {
+    return null;
+  }
+
+  return `DR-${dateParts.day}${dateParts.month}${dateParts.year}`;
+}
+
+function formatOrderCode(prefix: string, number: number) {
+  return `${prefix}-${String(number).padStart(4, "0")}`;
+}
+
+function normalizeItemType(value: string | undefined) {
+  const normalized = String(value ?? "").trim().toLowerCase();
+
+  if (
+    normalized === "food-and-beverage" ||
+    normalized === "food beverage" ||
+    normalized === "food_and_beverage"
+  ) {
+    return "food_and_beverage";
+  }
+
+  return normalized.replace(/-/g, "_") || "location";
+}
+
+async function generateOrderCode() {
+  const serviceRoleClient = createServiceRoleClient();
+  const prefixCode = buildOrderCodePrefix();
+
+  if (!prefixCode) {
+    throw new Error("Gagal membuat prefix code order");
+  }
+
+  const counterResult = await serviceRoleClient
+    .from("code_counter")
+    .select("prefix_code, last_number")
+    .eq("prefix_code", prefixCode)
+    .maybeSingle();
+
+  if (counterResult.error) {
+    throw new Error(counterResult.error.message);
+  }
+
+  const existingCounter = (counterResult.data ?? null) as CodeCounterRow | null;
+  const nextNumber = existingCounter
+    ? Math.max(1, Number(existingCounter.last_number ?? 0) + 1)
+    : 1;
+
+  if (!existingCounter) {
+    const insertCounterResult = await serviceRoleClient
+      .from("code_counter")
+      .insert({
+        prefix_code: prefixCode,
+        last_number: nextNumber,
+      });
+
+    if (insertCounterResult.error) {
+      throw new Error(insertCounterResult.error.message);
+    }
+  } else {
+    const updateCounterResult = await serviceRoleClient
+      .from("code_counter")
+      .update({
+        last_number: nextNumber,
+      })
+      .eq("prefix_code", prefixCode);
+
+    if (updateCounterResult.error) {
+      throw new Error(updateCounterResult.error.message);
+    }
+  }
+
+  return formatOrderCode(prefixCode, nextNumber);
 }
 
 function addMinutes(date: Date, minutes: number) {
@@ -82,6 +199,7 @@ function splitUserName(rawName: unknown) {
 export async function POST(request: Request) {
   try {
     const supabase = await createClient();
+    const serviceRoleClient = createServiceRoleClient();
     const body = await request.json();
     const items = (
       Array.isArray(body?.items) ? body.items : []
@@ -113,13 +231,13 @@ export async function POST(request: Request) {
       );
     }
 
-    console.log("Midtrans checkout user:", {
-      id: authUser.id,
-      email: authUser.email,
-      phone: authUser.phone,
-      full_name: authUser.user_metadata?.full_name ?? null,
-      name: authUser.user_metadata?.name ?? null,
-    });
+    // console.log("Midtrans checkout user:", {
+    //   id: authUser.id,
+    //   email: authUser.email,
+    //   phone: authUser.phone,
+    //   full_name: authUser.user_metadata?.full_name ?? null,
+    //   name: authUser.user_metadata?.name ?? null,
+    // });
 
     console.log("Midtrans checkout items:", items);
 
@@ -131,22 +249,53 @@ export async function POST(request: Request) {
     );
 
     const normalizedItems = items.map((item) => {
-      const locationId = String(item.id || "").trim();
+      const itemId = Number.parseInt(String(item.id ?? "").trim(), 10);
       const bookingStart = toDateOnly(item.dateRange?.from);
       const bookingEnd = toDateOnly(item.dateRange?.to ?? item.dateRange?.from);
+      const quantity = Math.max(1, Number(item.quantity ?? item.days ?? 1));
+      const unitPriceSnapshot = Math.max(0, Number(item.unitPrice || 0));
+      const lineTotal = Math.max(
+        0,
+        Number(item.subtotal ?? unitPriceSnapshot * quantity),
+      );
 
-      if (!locationId || !bookingStart || !bookingEnd) {
+      if (!Number.isInteger(itemId) || itemId <= 0) {
         return null;
       }
 
       return {
-        location_id: locationId,
+        item_type: normalizeItemType(item.itemType),
+        item_id: itemId,
+        item_name_snapshot: String(item.name || "Item"),
+        quantity,
+        unit_price_snapshot: unitPriceSnapshot,
+        line_total: lineTotal,
         booking_start: bookingStart,
         booking_end: bookingEnd,
-        price: Number(item.unitPrice || 0),
-        quantity: getQuantityDays(bookingStart, bookingEnd),
       };
     });
+
+    const todayDateOnly = getTodayDateOnly();
+    if (!todayDateOnly) {
+      return NextResponse.json(
+        { message: "Gagal membaca waktu lokal Indonesia" },
+        { status: 500 },
+      );
+    }
+
+    const hasPastBookingDate = normalizedItems.some(
+      (item) =>
+        item !== null &&
+        ((item.booking_start !== null && item.booking_start < todayDateOnly) ||
+          (item.booking_end !== null && item.booking_end < todayDateOnly)),
+    );
+
+    if (hasPastBookingDate) {
+      return NextResponse.json(
+        { message: "Tanggal booking yang sudah lewat tidak dapat diproses" },
+        { status: 400 },
+      );
+    }
 
     if (normalizedItems.some((item) => item === null)) {
       return NextResponse.json(
@@ -155,7 +304,8 @@ export async function POST(request: Request) {
       );
     }
 
-    const orderId = `ORD-${crypto.randomUUID()}`;
+    const orderCode = await generateOrderCode();
+    const orderUuid = crypto.randomUUID();
     const pageExpiryMinutes = 5;
     const expiresAt = addMinutes(new Date(), pageExpiryMinutes).toISOString();
     const profileName =
@@ -164,7 +314,7 @@ export async function POST(request: Request) {
 
     const parameter = {
       transaction_details: {
-        order_id: orderId,
+        order_id: orderCode,
         gross_amount: grossAmount,
       },
 
@@ -194,8 +344,6 @@ export async function POST(request: Request) {
       })),
     };
 
-    console.log("Midtrans transaction payload:", parameter);
-
     const token = await snap.createTransaction(parameter);
 
     if (!token?.token) {
@@ -204,17 +352,27 @@ export async function POST(request: Request) {
         { status: 500 },
       );
     }
+    const { data: createdOrder, error: orderInsertError } = await serviceRoleClient
+      .from("orders")
+      .insert({
+        uuid: orderUuid,
+        code: orderCode,
+        user_uuid: authUser.id,
+        purpose: "Shooting",
+        shooting_address: "Alamat shooting akan dikonfirmasi",
+        payment_status: "pending",
+        subtotal_amount: grossAmount,
+        bundle_discount_amount: 0,
+        promo_discount_amount: 0,
+        total_discount_amount: 0,
+        grand_total_amount: grossAmount,
+        midtrans_token: token.token,
+        midtrans_expires_at: expiresAt,
+      })
+      .select("id, code")
+      .single();
 
-    const { error: orderInsertError } = await supabase.from("orders").insert({
-      order_id: orderId,
-      user_id: authUser.id,
-      payment_status: "pending",
-      total_price: grossAmount,
-      midtrans_token: token.token,
-      midtrans_expire_at: expiresAt,
-    });
-
-    if (orderInsertError) {
+    if (orderInsertError || !createdOrder) {
       console.error("Insert orders error:", orderInsertError);
       return NextResponse.json(
         { message: "Gagal membuat order" },
@@ -225,21 +383,25 @@ export async function POST(request: Request) {
     const orderItemRows = normalizedItems
       .filter((item): item is NonNullable<typeof item> => item !== null)
       .map((item) => ({
-        order_id: orderId,
-        location_id: item.location_id,
+        uuid: crypto.randomUUID(),
+        order_id: createdOrder.id,
+        item_type: item.item_type,
+        item_id: item.item_id,
+        item_name_snapshot: item.item_name_snapshot,
+        quantity: item.quantity,
+        unit_price_snapshot: item.unit_price_snapshot,
+        line_total: item.line_total,
         booking_start: item.booking_start,
         booking_end: item.booking_end,
-        price: item.price,
-        quantity: item.quantity,
       }));
 
-    const { error: orderItemsInsertError } = await supabase
+    const { error: orderItemsInsertError } = await serviceRoleClient
       .from("order_items")
       .insert(orderItemRows);
 
     if (orderItemsInsertError) {
       console.error("Insert order_items error:", orderItemsInsertError);
-      await supabase.from("orders").delete().eq("order_id", orderId);
+      await serviceRoleClient.from("orders").delete().eq("id", createdOrder.id);
       return NextResponse.json(
         { message: "Gagal membuat order item" },
         { status: 500 },
@@ -248,7 +410,7 @@ export async function POST(request: Request) {
 
     return NextResponse.json({
       token: token.token,
-      order_id: orderId,
+      order_id: createdOrder.code,
       gross_amount: grossAmount,
       expires_at: expiresAt,
     });

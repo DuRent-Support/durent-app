@@ -3,26 +3,23 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 
 type PendingOrderRow = {
-  order_id: string;
-  total_price: string | number | null;
+  id: number;
+  code: string;
+  grand_total_amount: string | number | null;
   payment_status: string | null;
   created_at: string | null;
   midtrans_token: string | null;
-  midtrans_expire_at: string | null;
+  midtrans_expires_at: string | null;
 };
 
 type PendingOrderItemRow = {
-  order_id: string;
-  location_id: string;
-  booking_start: string;
-  booking_end: string;
+  order_id: number;
+  item_id: number;
+  item_name_snapshot: string | null;
+  booking_start: string | null;
+  booking_end: string | null;
   quantity: number | null;
-  price: string | number | null;
-};
-
-type LocationRow = {
-  shooting_location_id: string;
-  shooting_location_name: string;
+  unit_price_snapshot: string | number | null;
 };
 
 export async function GET() {
@@ -41,9 +38,9 @@ export async function GET() {
     const { data, error } = await supabase
       .from("orders")
       .select(
-        "order_id, total_price, payment_status, created_at, midtrans_token, midtrans_expire_at",
+        "id, code, grand_total_amount, payment_status, created_at, midtrans_token, midtrans_expires_at",
       )
-      .eq("user_id", user.id)
+      .eq("user_uuid", user.id)
       .eq("payment_status", "pending")
       .order("created_at", { ascending: false });
 
@@ -62,10 +59,12 @@ export async function GET() {
       return NextResponse.json({ pendingPayments: [] }, { status: 200 });
     }
 
-    const orderIds = pendingRows.map((row) => row.order_id);
+    const orderIds = pendingRows.map((row) => row.id);
     const { data: orderItemsData, error: orderItemsError } = await supabase
       .from("order_items")
-      .select("order_id, location_id, booking_start, booking_end, quantity, price")
+      .select(
+        "order_id, item_id, item_name_snapshot, booking_start, booking_end, quantity, unit_price_snapshot",
+      )
       .in("order_id", orderIds);
 
     if (orderItemsError) {
@@ -79,41 +78,33 @@ export async function GET() {
     }
 
     const orderItems = (orderItemsData ?? []) as PendingOrderItemRow[];
-    const locationIds = [...new Set(orderItems.map((item) => item.location_id))];
-
-    let locationMap = new Map<string, string>();
-
-    if (locationIds.length > 0) {
-      const { data: locationsData, error: locationsError } = await supabase
-        .from("shooting_locations")
-        .select("shooting_location_id, shooting_location_name")
-        .in("shooting_location_id", locationIds);
-
-      if (locationsError) {
-        console.error("Fetch locations error:", locationsError);
-      } else {
-        const locations = (locationsData ?? []) as LocationRow[];
-        locationMap = new Map(
-          locations.map((location) => [
-            location.shooting_location_id,
-            location.shooting_location_name,
-          ]),
-        );
-      }
-    }
 
     const enrichedRows = pendingRows.map((row) => ({
-      ...row,
+      order_id: row.code,
+      total_price: row.grand_total_amount,
+      payment_status: row.payment_status,
+      created_at: row.created_at,
+      midtrans_token: row.midtrans_token,
+      midtrans_expire_at: row.midtrans_expires_at,
       items: orderItems
-        .filter((item) => item.order_id === row.order_id)
+        .filter((item) => item.order_id === row.id)
         .map((item) => ({
-          ...item,
+          order_id: row.code,
+          location_id: String(item.item_id),
+          booking_start: item.booking_start ?? "",
+          booking_end: item.booking_end ?? "",
+          quantity: item.quantity,
+          price: item.unit_price_snapshot,
           location_name:
-            locationMap.get(item.location_id) ?? "Lokasi tidak ditemukan",
+            String(item.item_name_snapshot ?? "").trim() ||
+            `Item ${item.item_id}`,
         })),
     }));
 
-    return NextResponse.json({ pendingPayments: enrichedRows }, { status: 200 });
+    return NextResponse.json(
+      { pendingPayments: enrichedRows },
+      { status: 200 },
+    );
   } catch (error) {
     console.error("Pending payments API error:", error);
     return NextResponse.json(

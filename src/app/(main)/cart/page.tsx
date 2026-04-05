@@ -17,6 +17,7 @@ import {
 import { Separator } from "@/components/ui/separator";
 import { useCart } from "@/hooks/use-cart";
 import formatPrice from "@/lib/formatPrice";
+import { useAuth } from "@/providers/AuthProvider";
 import {
   buildWhatsappLink,
   buildWhatsappMessage,
@@ -24,9 +25,11 @@ import {
 
 type GroupedItems = {
   locations: CheckoutItem[];
+  crews: CheckoutItem[];
+  foodAndBeverage: CheckoutItem[];
+  rentals: CheckoutItem[];
   expendables: CheckoutItem[];
   bundles: CheckoutItem[];
-  others: CheckoutItem[];
 };
 
 type SnapResult = {
@@ -59,10 +62,13 @@ type CheckoutItem = {
   name: string;
   subtitle: string;
   itemType: string;
+  isLocation: boolean;
   tags: string[];
   dateRange: { from: Date; to: Date } | null;
   requiresDateRange: boolean;
   multiplier: number;
+  quantity: number;
+  effectiveUnits: number;
   unitPrice: number;
   lineTotal: number;
 };
@@ -91,6 +97,12 @@ function formatDateLabel(value: Date | null | undefined) {
     month: "short",
     year: "numeric",
   }).format(value);
+}
+
+function startOfDay(value: Date) {
+  const next = new Date(value);
+  next.setHours(0, 0, 0, 0);
+  return next;
 }
 
 async function ensureSnapLoaded(snapUrl: string, clientKey: string) {
@@ -141,16 +153,28 @@ async function ensureSnapLoaded(snapUrl: string, clientKey: string) {
 export default function CartPage() {
   const router = useRouter();
   const { items, totalItems, clearCart, getDays, updateDateRange } = useCart();
+  const { user } = useAuth();
+  const [itemQuantities, setItemQuantities] = useState<Record<string, number>>(
+    {},
+  );
   const [referralInput, setReferralInput] = useState("");
   const [appliedReferral, setAppliedReferral] = useState("");
   const [referralError, setReferralError] = useState("");
   const [checkoutError, setCheckoutError] = useState("");
   const [isPaying, setIsPaying] = useState(false);
+  const [showMissingDateFrame, setShowMissingDateFrame] = useState(false);
+  const minBookingDate = useMemo(() => startOfDay(new Date()), []);
 
   const checkoutItems = useMemo<CheckoutItem[]>(() => {
     return items.map((item) => {
+      const itemType = String(item.itemType).toLowerCase();
+      const isLocation = itemType === "location";
       const multiplier = Math.max(1, Number(getDays(item) || 1));
       const unitPrice = toNumberPrice(item.price);
+      const quantity = isLocation
+        ? 1
+        : Math.max(1, Number(itemQuantities[item.id] ?? 1));
+      const effectiveUnits = isLocation ? multiplier : quantity * multiplier;
 
       return {
         id: item.id,
@@ -159,21 +183,26 @@ export default function CartPage() {
         name: item.name,
         subtitle: item.subtitle,
         itemType: String(item.itemType),
+        isLocation,
         tags: item.tags,
         dateRange: item.dateRange,
         requiresDateRange: item.requiresDateRange,
         multiplier,
+        quantity,
+        effectiveUnits,
         unitPrice,
-        lineTotal: unitPrice * multiplier,
+        lineTotal: unitPrice * effectiveUnits,
       };
     });
-  }, [items, getDays]);
+  }, [items, getDays, itemQuantities]);
 
   const grouped = useMemo<GroupedItems>(() => {
     const locations: CheckoutItem[] = [];
+    const crews: CheckoutItem[] = [];
+    const foodAndBeverage: CheckoutItem[] = [];
+    const rentals: CheckoutItem[] = [];
     const expendables: CheckoutItem[] = [];
     const bundles: CheckoutItem[] = [];
-    const others: CheckoutItem[] = [];
 
     checkoutItems.forEach((item) => {
       const itemType = item.itemType.toLowerCase();
@@ -181,6 +210,27 @@ export default function CartPage() {
 
       if (itemType === "location") {
         locations.push(item);
+        return;
+      }
+
+      if (itemType === "crew" || subtitle.includes("crew")) {
+        crews.push(item);
+        return;
+      }
+
+      if (
+        itemType === "food-and-beverage" ||
+        itemType === "food_and_beverage" ||
+        itemType === "food beverage" ||
+        subtitle.includes("food") ||
+        subtitle.includes("beverage")
+      ) {
+        foodAndBeverage.push(item);
+        return;
+      }
+
+      if (itemType === "rental" || subtitle.includes("rental")) {
+        rentals.push(item);
         return;
       }
 
@@ -194,14 +244,16 @@ export default function CartPage() {
         return;
       }
 
-      others.push(item);
+      rentals.push(item);
     });
 
     return {
       locations,
+      crews,
+      foodAndBeverage,
+      rentals,
       expendables,
       bundles,
-      others,
     };
   }, [checkoutItems]);
 
@@ -268,20 +320,41 @@ export default function CartPage() {
         (!item.dateRange?.from || !item.dateRange?.to),
     );
 
+    const hasPastBookingDate = checkoutItems.some((item) => {
+      if (!item.dateRange?.from || !item.dateRange?.to) {
+        return false;
+      }
+
+      return (
+        startOfDay(item.dateRange.from) < minBookingDate ||
+        startOfDay(item.dateRange.to) < minBookingDate
+      );
+    });
+
     if (hasMissingDates) {
+      setShowMissingDateFrame(true);
       setCheckoutError("Masih ada item tanpa tanggal booking.");
       return;
     }
 
+    if (hasPastBookingDate) {
+      setCheckoutError("Tanggal booking yang sudah lewat tidak bisa dipilih.");
+      return;
+    }
+
+    setShowMissingDateFrame(false);
     setCheckoutError("");
     setIsPaying(true);
+    clearCart();
 
     try {
       const checkoutPayloadItems = checkoutItems.map((item) => ({
         id: item.sourceId,
+        itemType: item.itemType,
         name: item.name,
         subtotal: item.lineTotal,
         unitPrice: item.unitPrice,
+        quantity: item.quantity,
         days: item.multiplier,
         dateRange: item.dateRange
           ? {
@@ -291,7 +364,16 @@ export default function CartPage() {
           : undefined,
       }));
 
+      const checkoutUser = {
+        id: user?.id ?? null,
+        email: user?.email ?? null,
+        phone: user?.phone ?? null,
+        full_name: user?.user_metadata?.full_name ?? null,
+        name: user?.user_metadata?.name ?? null,
+      };
+
       console.log("Checkout items (client):", checkoutPayloadItems);
+      console.log("Checkout user (client/useAuth):", checkoutUser);
 
       const response = await fetch("/api/midtrans/tokenizer", {
         method: "POST",
@@ -300,6 +382,7 @@ export default function CartPage() {
         },
         body: JSON.stringify({
           items: checkoutPayloadItems,
+          checkoutUser,
         }),
       });
 
@@ -348,13 +431,26 @@ export default function CartPage() {
       return;
     }
 
-    const currentEnd = item.dateRange?.to ?? selectedDate;
-    const nextEnd = currentEnd < selectedDate ? selectedDate : currentEnd;
+    const normalizedSelectedDate = startOfDay(selectedDate);
+    if (normalizedSelectedDate < minBookingDate) {
+      setCheckoutError("Tanggal booking yang sudah lewat tidak bisa dipilih.");
+      return;
+    }
+
+    const currentEnd = item.dateRange?.to ?? normalizedSelectedDate;
+    const normalizedCurrentEnd = startOfDay(currentEnd);
+    const nextEnd =
+      normalizedCurrentEnd < normalizedSelectedDate
+        ? normalizedSelectedDate
+        : normalizedCurrentEnd;
 
     updateDateRange(item.id, {
-      from: selectedDate,
+      from: normalizedSelectedDate,
       to: nextEnd,
     });
+
+    setShowMissingDateFrame(false);
+    setCheckoutError("");
   };
 
   const handleSelectEndDate = (item: CheckoutItem, selectedDate?: Date) => {
@@ -362,13 +458,36 @@ export default function CartPage() {
       return;
     }
 
-    const currentStart = item.dateRange?.from ?? selectedDate;
-    const nextStart = currentStart > selectedDate ? selectedDate : currentStart;
+    const normalizedSelectedDate = startOfDay(selectedDate);
+    if (normalizedSelectedDate < minBookingDate) {
+      setCheckoutError("Tanggal booking yang sudah lewat tidak bisa dipilih.");
+      return;
+    }
+
+    const currentStart = item.dateRange?.from ?? normalizedSelectedDate;
+    const normalizedCurrentStart = startOfDay(currentStart);
+    const nextStart =
+      normalizedCurrentStart > normalizedSelectedDate
+        ? normalizedSelectedDate
+        : normalizedCurrentStart;
 
     updateDateRange(item.id, {
       from: nextStart,
-      to: selectedDate,
+      to: normalizedSelectedDate,
     });
+
+    setShowMissingDateFrame(false);
+    setCheckoutError("");
+  };
+
+  const handleChangeQuantity = (itemId: string, value: string) => {
+    const parsed = Number.parseInt(value, 10);
+    const nextQuantity = Number.isFinite(parsed) && parsed > 0 ? parsed : 1;
+
+    setItemQuantities((prev) => ({
+      ...prev,
+      [itemId]: nextQuantity,
+    }));
   };
 
   const renderGroup = (title: string, sectionItems: CheckoutItem[]) => (
@@ -379,90 +498,127 @@ export default function CartPage() {
       </div>
 
       <div className="space-y-3">
-        {sectionItems.map((item) => (
-          <div
-            key={item.id}
-            className="rounded-lg border border-border/60 bg-background p-3"
-          >
-            <div className="flex items-start justify-between gap-3">
-              <div className="flex items-start gap-3">
-                <div className="relative h-24 w-36 shrink-0 overflow-hidden rounded-md border border-border/60">
-                  <Image
-                    src={item.imageUrl || "/hero.webp"}
-                    alt={item.name}
-                    fill
-                    sizes="(max-width: 768px) 40vw, 160px"
-                    className="object-cover"
-                  />
-                </div>
-                <div>
-                  <p className="text-sm font-semibold">{item.name}</p>
-                  <p className="text-xs text-muted-foreground">
-                    {item.subtitle}
-                  </p>
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    Start: {formatDateLabel(item.dateRange?.from)}
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    End: {formatDateLabel(item.dateRange?.to)}
-                  </p>
+        {sectionItems.map((item) => {
+          const isMissingDateRange =
+            item.requiresDateRange &&
+            (!item.dateRange?.from || !item.dateRange?.to);
 
-                  <div className="mt-2 flex flex-wrap gap-2">
-                    <Popover>
-                      <PopoverTrigger asChild>
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="outline"
-                          className="h-7 gap-1.5 px-2 text-xs"
-                        >
-                          <CalendarDays className="h-3.5 w-3.5" />
-                          Pilih Start
-                        </Button>
-                      </PopoverTrigger>
-                      <PopoverContent className="w-auto p-0" align="start">
-                        <Calendar
-                          mode="single"
-                          selected={item.dateRange?.from ?? undefined}
-                          onSelect={(date) => handleSelectStartDate(item, date)}
-                          initialFocus
-                        />
-                      </PopoverContent>
-                    </Popover>
+          return (
+            <div
+              key={item.id}
+              className={`rounded-lg border bg-background p-3 ${
+                showMissingDateFrame && isMissingDateRange
+                  ? "border-red-500"
+                  : "border-border/60"
+              }`}
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex items-start gap-3">
+                  <div className="relative h-24 w-36 shrink-0 overflow-hidden rounded-md border border-border/60">
+                    <Image
+                      src={item.imageUrl || "/hero.webp"}
+                      alt={item.name}
+                      fill
+                      sizes="(max-width: 768px) 40vw, 160px"
+                      className="object-cover"
+                    />
+                  </div>
+                  <div>
+                    <p className="text-sm font-semibold">{item.name}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {item.subtitle}
+                    </p>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      Start: {formatDateLabel(item.dateRange?.from)}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      End: {formatDateLabel(item.dateRange?.to)}
+                    </p>
 
-                    <Popover>
-                      <PopoverTrigger asChild>
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="outline"
-                          className="h-7 gap-1.5 px-2 text-xs"
+                    {!item.isLocation ? (
+                      <div className="mt-2 flex items-center gap-2">
+                        <label
+                          htmlFor={`quantity-${item.id}`}
+                          className="text-xs text-muted-foreground"
                         >
-                          <CalendarDays className="h-3.5 w-3.5" />
-                          Pilih End
-                        </Button>
-                      </PopoverTrigger>
-                      <PopoverContent className="w-auto p-0" align="start">
-                        <Calendar
-                          mode="single"
-                          selected={item.dateRange?.to ?? undefined}
-                          onSelect={(date) => handleSelectEndDate(item, date)}
-                          initialFocus
+                          Quantity
+                        </label>
+                        <Input
+                          id={`quantity-${item.id}`}
+                          type="number"
+                          min={1}
+                          inputMode="numeric"
+                          className="h-7 w-20 text-xs"
+                          value={item.quantity}
+                          onChange={(event) =>
+                            handleChangeQuantity(item.id, event.target.value)
+                          }
                         />
-                      </PopoverContent>
-                    </Popover>
+                      </div>
+                    ) : null}
+
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            className="h-7 gap-1.5 px-2 text-xs"
+                          >
+                            <CalendarDays className="h-3.5 w-3.5" />
+                            Pilih Start
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-auto p-0" align="start">
+                          <Calendar
+                            mode="single"
+                            selected={item.dateRange?.from ?? undefined}
+                            onSelect={(date) =>
+                              handleSelectStartDate(item, date)
+                            }
+                            disabled={(date) =>
+                              startOfDay(date) < minBookingDate
+                            }
+                            initialFocus
+                          />
+                        </PopoverContent>
+                      </Popover>
+
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            className="h-7 gap-1.5 px-2 text-xs"
+                          >
+                            <CalendarDays className="h-3.5 w-3.5" />
+                            Pilih End
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-auto p-0" align="start">
+                          <Calendar
+                            mode="single"
+                            selected={item.dateRange?.to ?? undefined}
+                            onSelect={(date) => handleSelectEndDate(item, date)}
+                            disabled={(date) =>
+                              startOfDay(date) < minBookingDate
+                            }
+                            initialFocus
+                          />
+                        </PopoverContent>
+                      </Popover>
+                    </div>
                   </div>
                 </div>
+                <p className="text-sm font-semibold text-primary">
+                  {formatPrice(item.lineTotal)}
+                </p>
               </div>
-              <p className="text-sm font-semibold text-primary">
-                {formatPrice(item.lineTotal)}
-              </p>
             </div>
-            <p className="mt-1 text-xs text-muted-foreground">
-              {formatPrice(item.unitPrice)} x {item.multiplier}
-            </p>
-          </div>
-        ))}
+          );
+        })}
       </div>
     </section>
   );
@@ -502,16 +658,22 @@ export default function CartPage() {
             ) : (
               <>
                 {grouped.locations.length > 0
-                  ? renderGroup("By Location", grouped.locations)
+                  ? renderGroup("Locations", grouped.locations)
+                  : null}
+                {grouped.crews.length > 0
+                  ? renderGroup("Crews", grouped.crews)
+                  : null}
+                {grouped.foodAndBeverage.length > 0
+                  ? renderGroup("Food & Beverage", grouped.foodAndBeverage)
+                  : null}
+                {grouped.rentals.length > 0
+                  ? renderGroup("Rentals", grouped.rentals)
                   : null}
                 {grouped.expendables.length > 0
-                  ? renderGroup("By Expendables", grouped.expendables)
+                  ? renderGroup("Expendables", grouped.expendables)
                   : null}
                 {grouped.bundles.length > 0
                   ? renderGroup("Bundles", grouped.bundles)
-                  : null}
-                {grouped.others.length > 0
-                  ? renderGroup("Lainnya", grouped.others)
                   : null}
               </>
             )}
@@ -529,17 +691,34 @@ export default function CartPage() {
                   Belum ada item di checkout.
                 </p>
               ) : (
-                checkoutItems.map((item) => (
-                  <div
-                    key={`summary-${item.id}`}
-                    className="flex items-start justify-between gap-3 text-sm"
-                  >
-                    <span className="line-clamp-2">{item.name}</span>
-                    <span className="whitespace-nowrap font-semibold">
-                      {formatPrice(item.lineTotal)}
-                    </span>
-                  </div>
-                ))
+                checkoutItems.map((item) => {
+                  const isMissingDateRange =
+                    item.requiresDateRange &&
+                    (!item.dateRange?.from || !item.dateRange?.to);
+
+                  return (
+                    <div
+                      key={`summary-${item.id}`}
+                      className={`flex items-start justify-between gap-3 rounded-md border p-2 text-sm ${
+                        showMissingDateFrame && isMissingDateRange
+                          ? "border-red-500"
+                          : "border-transparent"
+                      }`}
+                    >
+                      <span className="line-clamp-2">
+                        {item.name}
+                        <span className="text-zinc-400">
+                          {item.isLocation
+                            ? ` x ${item.multiplier} hari`
+                            : ` x ${item.quantity} qty x ${item.multiplier} hari`}
+                        </span>
+                      </span>
+                      <span className="whitespace-nowrap font-semibold">
+                        {formatPrice(item.lineTotal)}
+                      </span>
+                    </div>
+                  );
+                })
               )}
             </div>
 
@@ -597,7 +776,7 @@ export default function CartPage() {
             <div className="mt-5 space-y-3">
               <Button
                 type="button"
-                className="w-full"
+                className="w-full bg-green-500 text-white hover:bg-green-600"
                 onClick={() => void handleMidtransCheckout()}
                 disabled={checkoutItems.length === 0 || isPaying}
               >
@@ -606,8 +785,7 @@ export default function CartPage() {
 
               <Button
                 type="button"
-                variant="outline"
-                className="w-full"
+                className="w-full bg-neutral-700 text-white hover:bg-neutral-800"
                 onClick={() => {
                   window.open(whatsappLink, "_blank", "noopener,noreferrer");
                 }}

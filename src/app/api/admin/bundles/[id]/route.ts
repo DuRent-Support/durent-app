@@ -126,7 +126,7 @@ export async function DELETE(_request: Request, { params }: RouteContext) {
         .delete()
         .eq("bundle_id", bundleId),
       serviceRoleClient
-        .from("bundle_food_and_beverages")
+        .from("bundle_food_and_beverage")
         .delete()
         .eq("bundle_id", bundleId),
       serviceRoleClient
