@@ -106,7 +106,9 @@ function formatOrderCode(prefix: string, number: number) {
 }
 
 function normalizeItemType(value: string | undefined) {
-  const normalized = String(value ?? "").trim().toLowerCase();
+  const normalized = String(value ?? "")
+    .trim()
+    .toLowerCase();
 
   if (
     normalized === "food-and-beverage" ||
@@ -204,6 +206,7 @@ export async function POST(request: Request) {
     const items = (
       Array.isArray(body?.items) ? body.items : []
     ) as CheckoutItem[];
+    const purpose = String(body?.purpose ?? "").trim();
 
     const {
       data: { user: authUser },
@@ -352,25 +355,26 @@ export async function POST(request: Request) {
         { status: 500 },
       );
     }
-    const { data: createdOrder, error: orderInsertError } = await serviceRoleClient
-      .from("orders")
-      .insert({
-        uuid: orderUuid,
-        code: orderCode,
-        user_uuid: authUser.id,
-        purpose: "Shooting",
-        shooting_address: "Alamat shooting akan dikonfirmasi",
-        payment_status: "pending",
-        subtotal_amount: grossAmount,
-        bundle_discount_amount: 0,
-        promo_discount_amount: 0,
-        total_discount_amount: 0,
-        grand_total_amount: grossAmount,
-        midtrans_token: token.token,
-        midtrans_expires_at: expiresAt,
-      })
-      .select("id, code")
-      .single();
+    const { data: createdOrder, error: orderInsertError } =
+      await serviceRoleClient
+        .from("orders")
+        .insert({
+          uuid: orderUuid,
+          code: orderCode,
+          user_uuid: authUser.id,
+          purpose: purpose || "Shooting",
+          shooting_address: "Alamat shooting akan dikonfirmasi",
+          payment_status: "pending",
+          subtotal_amount: grossAmount,
+          bundle_discount_amount: 0,
+          promo_discount_amount: 0,
+          total_discount_amount: 0,
+          grand_total_amount: grossAmount,
+          midtrans_token: token.token,
+          midtrans_expires_at: expiresAt,
+        })
+        .select("id, code")
+        .single();
 
     if (orderInsertError || !createdOrder) {
       console.error("Insert orders error:", orderInsertError);

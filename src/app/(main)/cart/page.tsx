@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { CalendarDays, TicketPercent, Trash2 } from "lucide-react";
 
@@ -17,6 +17,7 @@ import {
 import { Separator } from "@/components/ui/separator";
 import { useCart } from "@/hooks/use-cart";
 import formatPrice from "@/lib/formatPrice";
+import { createClient } from "@/lib/supabase/client";
 import { useAuth } from "@/providers/AuthProvider";
 import {
   buildWhatsappLink,
@@ -55,6 +56,17 @@ type MidtransTokenizerResponse = {
   message?: string;
 };
 
+type PromoCodeData = {
+  id: number;
+  code: string;
+  discount_type: "percent" | "fixed";
+  discount_value: number;
+  min_order_amount: number;
+  starts_at: string | null;
+  expires_at: string | null;
+  is_active: boolean;
+};
+
 type CheckoutItem = {
   id: string;
   sourceId: string;
@@ -73,12 +85,9 @@ type CheckoutItem = {
   lineTotal: number;
 };
 
-const REFERRAL_DISCOUNT_RULES: Record<
-  string,
-  { type: "percent" | "fixed"; value: number }
-> = {
-  DURENT10: { type: "percent", value: 10 },
-  HEMAT50: { type: "fixed", value: 50000 },
+type BundlePriceSnapshot = {
+  basePrice: number;
+  finalPrice: number;
 };
 
 function toNumberPrice(raw: string) {
@@ -154,12 +163,18 @@ export default function CartPage() {
   const router = useRouter();
   const { items, totalItems, clearCart, getDays, updateDateRange } = useCart();
   const { user } = useAuth();
+  const supabase = useMemo(() => createClient(), []);
   const [itemQuantities, setItemQuantities] = useState<Record<string, number>>(
     {},
   );
+  const [rentPurpose, setRentPurpose] = useState("");
   const [referralInput, setReferralInput] = useState("");
   const [appliedReferral, setAppliedReferral] = useState("");
   const [referralError, setReferralError] = useState("");
+  const [promoCode, setPromoCode] = useState<PromoCodeData | null>(null);
+  const [bundlePriceMap, setBundlePriceMap] = useState<
+    Record<number, BundlePriceSnapshot>
+  >({});
   const [checkoutError, setCheckoutError] = useState("");
   const [isPaying, setIsPaying] = useState(false);
   const [showMissingDateFrame, setShowMissingDateFrame] = useState(false);
@@ -262,19 +277,55 @@ export default function CartPage() {
     [checkoutItems],
   );
 
-  const discount = useMemo(() => {
-    const normalized = appliedReferral.trim().toUpperCase();
-    const rule = REFERRAL_DISCOUNT_RULES[normalized];
-    if (!rule) return 0;
+  const bundleDiscounts = useMemo(() => {
+    const discounts: Record<string, number> = {};
 
-    if (rule.type === "percent") {
-      return Math.floor((subtotal * rule.value) / 100);
+    checkoutItems.forEach((item) => {
+      if (item.itemType.toLowerCase() !== "bundle") {
+        return;
+      }
+
+      const bundleId = Number.parseInt(String(item.sourceId), 10);
+      const snapshot = bundlePriceMap[bundleId];
+
+      if (!snapshot) {
+        return;
+      }
+
+      const discountPerUnit = Math.max(
+        0,
+        Number(snapshot.basePrice) - Number(snapshot.finalPrice),
+      );
+
+      if (discountPerUnit <= 0) {
+        return;
+      }
+
+      discounts[item.id] = discountPerUnit * item.effectiveUnits;
+    });
+
+    return discounts;
+  }, [bundlePriceMap, checkoutItems]);
+
+  const bundleDiscountTotal = useMemo(
+    () => Object.values(bundleDiscounts).reduce((sum, value) => sum + value, 0),
+    [bundleDiscounts],
+  );
+
+  const displayedSubtotal = subtotal + bundleDiscountTotal;
+
+  const promoDiscount = useMemo(() => {
+    if (!promoCode) return 0;
+
+    if (promoCode.discount_type === "percent") {
+      return Math.floor((subtotal * promoCode.discount_value) / 100);
     }
 
-    return Math.min(subtotal, rule.value);
-  }, [appliedReferral, subtotal]);
+    return Math.min(subtotal, promoCode.discount_value);
+  }, [promoCode, subtotal]);
 
-  const totalPrice = Math.max(0, subtotal - discount);
+  const totalDiscount = bundleDiscountTotal + promoDiscount;
+  const totalPrice = Math.max(0, subtotal - promoDiscount);
   const snapUrl =
     process.env.NEXT_PUBLIC_MIDTRANS_IS_PRODUCTION === "true"
       ? "https://app.midtrans.com/snap/snap.js"
@@ -286,23 +337,128 @@ export default function CartPage() {
     return buildWhatsappLink("628111029064", message);
   }, [items]);
 
-  const applyReferral = () => {
+  const applyReferral = async () => {
     const code = referralInput.trim().toUpperCase();
     if (!code) {
       setAppliedReferral("");
       setReferralError("");
+      setPromoCode(null);
       return;
     }
 
-    if (!REFERRAL_DISCOUNT_RULES[code]) {
+    const { data, error } = await supabase
+      .from("promo_codes")
+      .select(
+        "id, code, discount_type, discount_value, min_order_amount, starts_at, expires_at, is_active",
+      )
+      .eq("code", code)
+      .maybeSingle<PromoCodeData>();
+
+    if (error || !data) {
       setAppliedReferral("");
-      setReferralError("Kode referral tidak valid.");
+      setPromoCode(null);
+      setReferralError("Kode promo tidak valid.");
       return;
     }
 
-    setAppliedReferral(code);
+    if (!data.is_active) {
+      setAppliedReferral("");
+      setPromoCode(null);
+      setReferralError("Kode promo sedang tidak aktif.");
+      return;
+    }
+
+    const now = new Date();
+    if (data.starts_at && now < new Date(data.starts_at)) {
+      setAppliedReferral("");
+      setPromoCode(null);
+      setReferralError("Kode promo belum berlaku.");
+      return;
+    }
+
+    if (data.expires_at && now > new Date(data.expires_at)) {
+      setAppliedReferral("");
+      setPromoCode(null);
+      setReferralError("Kode promo sudah kedaluwarsa.");
+      return;
+    }
+
+    if (subtotal < Number(data.min_order_amount || 0)) {
+      setAppliedReferral("");
+      setPromoCode(null);
+      setReferralError("Minimum subtotal belum memenuhi syarat promo.");
+      return;
+    }
+
+    setAppliedReferral(data.code);
+    setPromoCode(data);
     setReferralError("");
   };
+
+  useEffect(() => {
+    const bundleIds = Array.from(
+      new Set(
+        checkoutItems
+          .filter((item) => item.itemType.toLowerCase() === "bundle")
+          .map((item) => Number.parseInt(String(item.sourceId), 10))
+          .filter((value) => Number.isFinite(value) && value > 0),
+      ),
+    );
+
+    if (bundleIds.length === 0) {
+      setBundlePriceMap({});
+      return;
+    }
+
+    let isActive = true;
+
+    const loadBundlePrices = async () => {
+      const { data, error } = await supabase
+        .from("bundles")
+        .select("id, base_price, final_price")
+        .in("id", bundleIds);
+
+      if (error || !data || !isActive) {
+        if (error) {
+          console.error("Bundle fetch error:", error.message);
+        }
+        return;
+      }
+
+      const nextMap: Record<number, BundlePriceSnapshot> = {};
+
+      data.forEach((row) => {
+        const bundleId = Number(row.id);
+        if (!Number.isFinite(bundleId)) {
+          return;
+        }
+        nextMap[bundleId] = {
+          basePrice: Number(row.base_price || 0),
+          finalPrice: Number(row.final_price || 0),
+        };
+      });
+
+      setBundlePriceMap(nextMap);
+    };
+
+    void loadBundlePrices();
+
+    return () => {
+      isActive = false;
+    };
+  }, [checkoutItems, supabase]);
+
+  useEffect(() => {
+    if (!promoCode) {
+      return;
+    }
+
+    if (subtotal < Number(promoCode.min_order_amount || 0)) {
+      setAppliedReferral("");
+      setPromoCode(null);
+      setReferralError("Minimum subtotal belum memenuhi syarat promo.");
+    }
+  }, [promoCode, subtotal]);
 
   const handleMidtransCheckout = async () => {
     if (checkoutItems.length === 0 || isPaying) {
@@ -383,6 +539,7 @@ export default function CartPage() {
         body: JSON.stringify({
           items: checkoutPayloadItems,
           checkoutUser,
+          purpose: rentPurpose,
         }),
       });
 
@@ -713,9 +870,23 @@ export default function CartPage() {
                             : ` x ${item.quantity} qty x ${item.multiplier} hari`}
                         </span>
                       </span>
-                      <span className="whitespace-nowrap font-semibold">
-                        {formatPrice(item.lineTotal)}
-                      </span>
+                      <div className="flex flex-col items-end">
+                        {bundleDiscounts[item.id] ? (
+                          <span className="text-xs text-muted-foreground line-through">
+                            {formatPrice(
+                              item.lineTotal + bundleDiscounts[item.id],
+                            )}
+                          </span>
+                        ) : null}
+                        <span className="whitespace-nowrap font-semibold">
+                          {formatPrice(item.lineTotal)}
+                        </span>
+                        {bundleDiscounts[item.id] ? (
+                          <span className="text-xs text-green-600">
+                            -{formatPrice(bundleDiscounts[item.id])}
+                          </span>
+                        ) : null}
+                      </div>
                     </div>
                   );
                 })
@@ -731,14 +902,34 @@ export default function CartPage() {
               </div>
               <div className="flex items-center justify-between">
                 <span>Sub Total</span>
-                <span className="font-semibold">{formatPrice(subtotal)}</span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span>Diskon</span>
-                <span className="font-semibold text-green-600">
-                  -{formatPrice(discount)}
+                <span className="font-semibold">
+                  {formatPrice(displayedSubtotal)}
                 </span>
               </div>
+              {bundleDiscountTotal > 0 ? (
+                <div className="flex items-center justify-between">
+                  <span>Diskon Bundle</span>
+                  <span className="font-semibold text-green-600">
+                    -{formatPrice(bundleDiscountTotal)}
+                  </span>
+                </div>
+              ) : null}
+              {promoDiscount > 0 ? (
+                <div className="flex items-center justify-between">
+                  <span>Diskon Promo</span>
+                  <span className="font-semibold text-green-600">
+                    -{formatPrice(promoDiscount)}
+                  </span>
+                </div>
+              ) : null}
+              {totalDiscount > 0 ? (
+                <div className="flex items-center justify-between">
+                  <span>Total Diskon</span>
+                  <span className="font-semibold text-green-600">
+                    -{formatPrice(totalDiscount)}
+                  </span>
+                </div>
+              ) : null}
             </div>
 
             <Separator className="my-4" />
@@ -746,6 +937,18 @@ export default function CartPage() {
             <div className="flex items-center justify-between text-base font-bold">
               <span>Total Harga</span>
               <span>{formatPrice(totalPrice)}</span>
+            </div>
+
+            <div className="mt-4 space-y-2">
+              <label htmlFor="rent-purpose" className="text-sm font-medium">
+                Rent Purpose
+              </label>
+              <Input
+                id="rent-purpose"
+                value={rentPurpose}
+                onChange={(event) => setRentPurpose(event.target.value)}
+                placeholder="Contoh: dokumentasi produk"
+              />
             </div>
 
             <div className="mt-5 rounded-lg border border-border/60 p-3">
