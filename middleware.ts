@@ -7,13 +7,32 @@ export async function middleware(request: NextRequest) {
 
   const url = request.nextUrl.clone();
 
-  // Public routes yang bisa diakses siapa saja
-  const publicRoutes = ["/login", "/register"];
-  const isPublicRoute = publicRoutes.includes(url.pathname);
+  const publicRoutes = new Set(["/login", "/register"]);
+  const guestRoutes = new Set([
+    "/explore",
+    "/cart",
+    "/ai-scout",
+    "/locations",
+    "/crews",
+    "/food-and-beverage",
+    "/expendables",
+    "/bundles",
+    "/rentals",
+  ]);
+  const blockedRoutes = ["/payments", "/reservations", "/dashboard"];
+
+  const isPublicRoute = publicRoutes.has(url.pathname);
+  const isGuestRoute = guestRoutes.has(url.pathname);
+  const isBlockedRoute = blockedRoutes.some((route) =>
+    url.pathname.startsWith(route),
+  );
 
   // Admin routes
   const isAdminRoute = url.pathname.startsWith("/admin");
-  const isReservationsRoute = url.pathname.startsWith("/reservations");
+  if (isBlockedRoute) {
+    url.pathname = "/explore";
+    return NextResponse.redirect(url);
+  }
 
   // Jika user sudah login dan mencoba akses login/register
   if (user && isPublicRoute) {
@@ -56,10 +75,16 @@ export async function middleware(request: NextRequest) {
     }
   }
 
-  // Jika user mencoba akses halaman reservasi
-  if (isReservationsRoute && !user) {
-    url.pathname = "/login";
-    return NextResponse.redirect(url);
+  if (!user) {
+    if (url.pathname === "/") {
+      url.pathname = "/explore";
+      return NextResponse.redirect(url);
+    }
+
+    if (!isPublicRoute && !isGuestRoute && !isAdminRoute) {
+      url.pathname = "/explore";
+      return NextResponse.redirect(url);
+    }
   }
 
   return supabaseResponse;

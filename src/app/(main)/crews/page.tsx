@@ -1,15 +1,13 @@
 "use client";
 
-import Image from "next/image";
-import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Check, Loader2, Search, ShoppingBag } from "lucide-react";
+import { Loader2, Search } from "lucide-react";
 
-import { Badge } from "@/components/ui/badge";
+import AppCard from "@/components/app-card/AppCard";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useCart } from "@/hooks/use-cart";
-import formatPrice from "@/lib/formatPrice";
+import { AppCardType } from "@/types/app-card";
 
 type CrewApiItem = {
   crew_id: string;
@@ -59,7 +57,6 @@ function parseSkillTags(skills: CrewApiItem["skills"]) {
 }
 
 export default function CrewsPage() {
-  const router = useRouter();
   const { addItem, isInCart } = useCart();
   const [items, setItems] = useState<CrewApiItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -200,67 +197,30 @@ export default function CrewsPage() {
           ) : (
             <div className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-3">
               {filteredCrews.map((crew) => {
-                const thumb = getPrimaryImage(crew);
-                const added = isInCart(String(crew.crew_id), "crew");
+                const crewId = String(crew.crew_id);
+                const added = isInCart(crewId, "crew");
                 const skills = parseSkillTags(crew.skills);
 
                 return (
-                  <div key={crew.crew_id} className="group w-full">
-                    <div className="relative aspect-[4/3] overflow-hidden rounded-xl">
-                      <Image
-                        src={thumb}
-                        alt={crew.name}
-                        fill
-                        sizes="(max-width: 768px) 100vw, (max-width: 1280px) 50vw, 33vw"
-                        className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
-                      />
-                    </div>
-
-                    <div className="pb-1 pt-2.5 sm:pt-3">
-                      <div className="flex items-start justify-between gap-2">
-                        <h3 className="line-clamp-2 text-sm font-bold leading-tight text-foreground sm:text-base">
-                          {crew.name}
-                        </h3>
-                        <span className="whitespace-nowrap text-sm font-bold text-primary sm:text-base">
-                          {formatPrice(crew.price)}
-                        </span>
-                      </div>
-
-                      <p className="mt-1 line-clamp-2 text-xs text-muted-foreground sm:text-sm">
-                        {crew.description}
-                      </p>
-
-                      <div className="mt-2 flex flex-wrap gap-1.5">
-                        {skills.slice(0, 3).map((skill) => (
-                          <Badge
-                            key={`${crew.crew_id}-${skill}`}
-                            variant="secondary"
-                          >
-                            {skill}
-                          </Badge>
-                        ))}
-                      </div>
-                    </div>
-
-                    <Button
-                      type="button"
-                      className="mt-3 w-full sm:mt-4"
-                      variant={added ? "secondary" : "default"}
-                      onClick={() => addCrewToCart(crew)}
-                    >
-                      {added ? (
-                        <>
-                          <Check className="h-4 w-4" />
-                          Sudah di keranjang
-                        </>
-                      ) : (
-                        <>
-                          <ShoppingBag className="h-4 w-4" />
-                          Tambah ke keranjang
-                        </>
-                      )}
-                    </Button>
-                  </div>
+                  <AppCard
+                    key={crewId}
+                    type={AppCardType.Crew}
+                    name={crew.name}
+                    description={crew.description}
+                    price={crew.price}
+                    skills={skills}
+                    imageUrl={getPrimaryImage(crew)}
+                    action={
+                      <Button
+                        type="button"
+                        className="w-full"
+                        variant={added ? "secondary" : "default"}
+                        onClick={() => addCrewToCart(crew)}
+                      >
+                        {added ? "Sudah di keranjang" : "Tambah ke keranjang"}
+                      </Button>
+                    }
+                  />
                 );
               })}
             </div>

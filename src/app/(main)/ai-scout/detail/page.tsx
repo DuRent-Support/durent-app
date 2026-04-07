@@ -6,7 +6,8 @@ import { useSearchParams } from "next/navigation";
 import { ArrowLeft, Loader2, MapPin, Tag } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import LocationCard from "@/components/location-card/LocationCard";
+import AppCard from "@/components/app-card/AppCard";
+import { AppCardType } from "@/types/app-card";
 import { LocationWithTags } from "@/types/location";
 
 type SceneLocation = {
@@ -160,19 +161,19 @@ export default function AIScoutDetailPage() {
                     Memuat card lokasi...
                   </div>
                 ) : matchedLocations.length > 0 ? (
-                  <div className="flex flex-wrap justify-start mt-4 gap-6 ml-8">
+                  <div className="mt-4 grid gap-6 ml-8 sm:grid-cols-2 lg:grid-cols-3">
                     {matchedLocations.map((location) => (
-                      <LocationCard
+                      <AppCard
                         key={location.shooting_location_id}
-                        id={location.shooting_location_id}
+                        type={AppCardType.Location}
                         name={location.shooting_location_name}
                         city={location.shooting_location_city}
                         price={location.shooting_location_price}
                         description={location.shooting_location_description}
                         area={location.shooting_location_area}
-                        imageUrl={location.shooting_location_image_url}
+                        imageUrl={location.shooting_location_image_url?.[0]}
                         pax={location.shooting_location_pax}
-                        rate={location.shooting_location_rate}
+                        rating={location.shooting_location_rate}
                         tags={location.tags}
                       />
                     ))}

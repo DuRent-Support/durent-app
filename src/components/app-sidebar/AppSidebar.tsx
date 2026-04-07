@@ -2,8 +2,8 @@
 
 import {
   Camera,
-  CalendarCheck,
   Boxes,
+  CalendarCheck,
   CreditCard,
   FileText,
   House,
@@ -17,6 +17,7 @@ import {
   Tag,
   UtensilsCrossed,
   Users,
+  Store,
 } from "lucide-react";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
@@ -47,6 +48,7 @@ type SidebarNavContentProps = {
   pathname: string;
   totalItems: number;
   isAdmin: boolean;
+  isAuthenticated: boolean;
 };
 
 function isPathActive(
@@ -79,6 +81,7 @@ function SidebarNavContent({
   pathname,
   totalItems,
   isAdmin,
+  isAuthenticated,
 }: SidebarNavContentProps) {
   const itemClassName = mobile
     ? "flex w-full items-center gap-3 px-3 py-3"
@@ -96,11 +99,24 @@ function SidebarNavContent({
           <CollapsibleContent>
             <SidebarGroupContent>
               <SidebarMenu>
+                {isAuthenticated ? (
+                  <SidebarNavItem
+                    href="/"
+                    label="Dashboard"
+                    icon={House}
+                    isActive={isPathActive(pathname, "/")}
+                    itemClassName={itemClassName}
+                    iconClassName={iconClassName}
+                    labelClassName={labelClassName}
+                    itemWrapperClassName={itemWrapperClassName}
+                    buttonClassName={buttonClassName}
+                  />
+                ) : null}
                 <SidebarNavItem
-                  href="/"
-                  label="Dashboard"
-                  icon={House}
-                  isActive={isPathActive(pathname, "/")}
+                  href="/explore"
+                  label="Explore"
+                  icon={Store}
+                  isActive={isPathActive(pathname, "/explore")}
                   itemClassName={itemClassName}
                   iconClassName={iconClassName}
                   labelClassName={labelClassName}
@@ -119,28 +135,45 @@ function SidebarNavContent({
                   buttonClassName={buttonClassName}
                   badgeCount={totalItems}
                 />
-                <SidebarNavItem
-                  href="/payments"
-                  label="Payments"
-                  icon={CreditCard}
-                  isActive={isPathActive(pathname, "/payments")}
-                  itemClassName={itemClassName}
-                  iconClassName={iconClassName}
-                  labelClassName={labelClassName}
-                  itemWrapperClassName={itemWrapperClassName}
-                  buttonClassName={buttonClassName}
-                />
-                <SidebarNavItem
-                  href="/reservations"
-                  label="Reservations"
-                  icon={CalendarCheck}
-                  isActive={isPathActive(pathname, "/reservations")}
-                  itemClassName={itemClassName}
-                  iconClassName={iconClassName}
-                  labelClassName={labelClassName}
-                  itemWrapperClassName={itemWrapperClassName}
-                  buttonClassName={buttonClassName}
-                />
+                <SidebarMenu>
+                  <SidebarNavItem
+                    href="/ai-scout"
+                    label="AI Scout"
+                    icon={Sparkles}
+                    isActive={isPathActive(pathname, "/ai-scout")}
+                    itemClassName={itemClassName}
+                    iconClassName={iconClassName}
+                    labelClassName={labelClassName}
+                    itemWrapperClassName={itemWrapperClassName}
+                    buttonClassName={buttonClassName}
+                  />
+                </SidebarMenu>
+                {isAuthenticated ? (
+                  <>
+                    <SidebarNavItem
+                      href="/payments"
+                      label="Payments"
+                      icon={CreditCard}
+                      isActive={isPathActive(pathname, "/payments")}
+                      itemClassName={itemClassName}
+                      iconClassName={iconClassName}
+                      labelClassName={labelClassName}
+                      itemWrapperClassName={itemWrapperClassName}
+                      buttonClassName={buttonClassName}
+                    />
+                    <SidebarNavItem
+                      href="/reservations"
+                      label="Reservations"
+                      icon={CalendarCheck}
+                      isActive={isPathActive(pathname, "/reservations")}
+                      itemClassName={itemClassName}
+                      iconClassName={iconClassName}
+                      labelClassName={labelClassName}
+                      itemWrapperClassName={itemWrapperClassName}
+                      buttonClassName={buttonClassName}
+                    />
+                  </>
+                ) : null}
               </SidebarMenu>
             </SidebarGroupContent>
           </CollapsibleContent>
@@ -213,29 +246,6 @@ function SidebarNavContent({
                   label="Bundles"
                   icon={Package}
                   isActive={isPathActive(pathname, "/bundles")}
-                  itemClassName={itemClassName}
-                  iconClassName={iconClassName}
-                  labelClassName={labelClassName}
-                  itemWrapperClassName={itemWrapperClassName}
-                  buttonClassName={buttonClassName}
-                />
-              </SidebarMenu>
-            </SidebarGroupContent>
-          </CollapsibleContent>
-        </Collapsible>
-      </SidebarGroup>
-
-      <SidebarGroup className="px-1 pt-1">
-        <Collapsible defaultOpen className="group/collapsible">
-          <SidebarCollapsibleTrigger label="Tools" />
-          <CollapsibleContent>
-            <SidebarGroupContent>
-              <SidebarMenu>
-                <SidebarNavItem
-                  href="/ai-scout"
-                  label="AI Scout"
-                  icon={Sparkles}
-                  isActive={isPathActive(pathname, "/ai-scout")}
                   itemClassName={itemClassName}
                   iconClassName={iconClassName}
                   labelClassName={labelClassName}
@@ -549,7 +559,8 @@ export function AppSidebar() {
   const [open, setOpen] = useState(false);
   const pathname = usePathname();
   const { totalItems } = useCart();
-  const { isAdmin } = useAuth();
+  const { isAdmin, status } = useAuth();
+  const isAuthenticated = status === "authenticated";
 
   return (
     <>
@@ -563,6 +574,7 @@ export function AppSidebar() {
             pathname={pathname}
             totalItems={totalItems}
             isAdmin={isAdmin}
+            isAuthenticated={isAuthenticated}
           />
         </Sidebar>
       </div>
@@ -619,6 +631,7 @@ export function AppSidebar() {
               pathname={pathname}
               totalItems={totalItems}
               isAdmin={isAdmin}
+              isAuthenticated={isAuthenticated}
             />
           </div>
         </SheetContent>

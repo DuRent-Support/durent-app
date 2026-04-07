@@ -1,15 +1,13 @@
 "use client";
 
-import Image from "next/image";
-import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Check, Loader2, Search, ShoppingBag } from "lucide-react";
+import { Loader2, Search } from "lucide-react";
 
-import { Badge } from "@/components/ui/badge";
+import AppCard from "@/components/app-card/AppCard";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useCart } from "@/hooks/use-cart";
-import formatPrice from "@/lib/formatPrice";
+import { AppCardType } from "@/types/app-card";
 
 type RentalRelation = {
   id: number;
@@ -47,7 +45,6 @@ function getPrimaryImage(item: RentalItem) {
 }
 
 export default function RentalsPage() {
-  const router = useRouter();
   const { addItem, isInCart } = useCart();
   const [items, setItems] = useState<RentalItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -193,64 +190,27 @@ export default function RentalsPage() {
         ) : (
           <div className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-3">
             {filteredItems.map((item) => {
-              const added = isInCart(String(item.id), "rental");
+              const rentalId = String(item.id);
+              const added = isInCart(rentalId, "rental");
               return (
-                <div key={item.id} className="group w-full">
-                  <div className="relative aspect-[4/3] overflow-hidden rounded-xl">
-                    <Image
-                      src={getPrimaryImage(item)}
-                      alt={item.name}
-                      fill
-                      sizes="(max-width: 768px) 100vw, (max-width: 1280px) 50vw, 33vw"
-                      className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
-                    />
-                  </div>
-
-                  <div className="pb-1 pt-2.5 sm:pt-3">
-                    <div className="flex items-start justify-between gap-2">
-                      <h2 className="line-clamp-2 text-sm font-bold leading-tight text-foreground sm:text-base">
-                        {item.name}
-                      </h2>
-                      <span className="whitespace-nowrap text-sm font-bold text-primary sm:text-base">
-                        {formatPrice(item.price)}
-                      </span>
-                    </div>
-
-                    <p className="mt-1 line-clamp-2 text-xs text-muted-foreground sm:text-sm">
-                      {item.description}
-                    </p>
-
-                    <div className="mt-2 flex flex-wrap gap-1.5">
-                      {item.item_sub_categories.slice(0, 3).map((category) => (
-                        <Badge
-                          key={`${item.id}-${category.id}`}
-                          variant="secondary"
-                        >
-                          {category.name}
-                        </Badge>
-                      ))}
-                    </div>
-                  </div>
-
-                  <Button
-                    type="button"
-                    className="mt-3 w-full sm:mt-4"
-                    variant={added ? "secondary" : "default"}
-                    onClick={() => addToCart(item)}
-                  >
-                    {added ? (
-                      <>
-                        <Check className="h-4 w-4" />
-                        Sudah di keranjang
-                      </>
-                    ) : (
-                      <>
-                        <ShoppingBag className="h-4 w-4" />
-                        Tambah ke keranjang
-                      </>
-                    )}
-                  </Button>
-                </div>
+                <AppCard
+                  key={rentalId}
+                  type={AppCardType.Rental}
+                  name={item.name}
+                  description={item.description}
+                  price={item.price}
+                  imageUrl={getPrimaryImage(item)}
+                  action={
+                    <Button
+                      type="button"
+                      className="w-full"
+                      variant={added ? "secondary" : "default"}
+                      onClick={() => addToCart(item)}
+                    >
+                      {added ? "Sudah di keranjang" : "Tambah ke keranjang"}
+                    </Button>
+                  }
+                />
               );
             })}
           </div>

@@ -3,9 +3,11 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Loader2, Search } from "lucide-react";
 
-import LocationCard from "@/components/location-card/LocationCard";
+import AppCard from "@/components/app-card/AppCard";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { useCart } from "@/hooks/use-cart";
+import { AppCardType } from "@/types/app-card";
 import type { LocationWithTags } from "@/types/location";
 
 type LocationApiResponse = {
@@ -14,6 +16,7 @@ type LocationApiResponse = {
 };
 
 export default function LocationsPage() {
+  const { addItem, isInCart } = useCart();
   const [locations, setLocations] = useState<LocationWithTags[]>([]);
   const [loading, setLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState("");
@@ -135,22 +138,49 @@ export default function LocationsPage() {
           </div>
         ) : (
           <div className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-3">
-            {filteredLocations.map((location) => (
-              <LocationCard
-                key={location.shooting_location_id}
-                id={location.shooting_location_id}
-                name={location.shooting_location_name}
-                city={location.shooting_location_city}
-                price={location.shooting_location_price}
-                description={location.shooting_location_description}
-                area={location.shooting_location_area}
-                imageUrl={location.shooting_location_image_url}
-                pax={location.shooting_location_pax}
-                rate={location.shooting_location_rate}
-                tags={location.tags}
-                redirectToCartOnAdd
-              />
-            ))}
+            {filteredLocations.map((location) => {
+              const locationId = location.shooting_location_id;
+              const isAdded = isInCart(locationId, "location");
+              const primaryImage =
+                location.shooting_location_image_url?.[0] || null;
+
+              return (
+                <AppCard
+                  key={locationId}
+                  type={AppCardType.Location}
+                  name={location.shooting_location_name}
+                  city={location.shooting_location_city}
+                  price={location.shooting_location_price}
+                  description={location.shooting_location_description}
+                  area={location.shooting_location_area}
+                  pax={location.shooting_location_pax}
+                  rating={location.shooting_location_rate}
+                  tags={location.tags}
+                  imageUrl={primaryImage}
+                  action={
+                    <Button
+                      type="button"
+                      className="w-full"
+                      variant={isAdded ? "secondary" : "default"}
+                      onClick={() =>
+                        addItem({
+                          id: locationId,
+                          itemType: "location",
+                          name: location.shooting_location_name,
+                          subtitle: location.shooting_location_city,
+                          price: location.shooting_location_price,
+                          imageUrl: primaryImage || "/hero.webp",
+                          tags: location.tags,
+                          requiresDateRange: true,
+                        })
+                      }
+                    >
+                      {isAdded ? "Sudah di keranjang" : "Tambah ke keranjang"}
+                    </Button>
+                  }
+                />
+              );
+            })}
           </div>
         )}
       </section>

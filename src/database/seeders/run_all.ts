@@ -1,5 +1,6 @@
 import { seedBundleCategories } from "./bundle_categories";
 import { seedBundleTypes } from "./bundle_types";
+import { seedBundles } from "./bundles";
 import { seedCodeCounter } from "./code_counter";
 import { seedCrews } from "./crews";
 import { seedCrewItemCategory } from "./crew_item_category";
@@ -31,6 +32,7 @@ export async function runAllSeeders() {
   const results = [];
   results.push(await seedBundleCategories(supabase));
   results.push(await seedBundleTypes(supabase));
+  results.push(await seedBundles(supabase));
   results.push(await seedItemCategories(supabase));
   results.push(await seedItemSubCategories(supabase));
   results.push(await seedLocations(supabase));
