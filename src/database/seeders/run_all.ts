@@ -15,7 +15,7 @@ import { seedFoodAndBeverageItemCategory } from "./food_and_beverage_item_catego
 import { seedFoodAndBeverageItemSubCategory } from "./food_and_beverage_item_sub_category";
 import { seedFoodAndBeverageTagPivot } from "./food_and_beverage_tag";
 import { seedFoodAndBeverageTags } from "./food_and_beverage_tags";
-import { seedLocations } from "./locations";
+import { seedLocations, seedLocationEmbeddings } from "./locations";
 import { seedLocationTagPivot } from "./location_tag";
 import { seedLocationTags } from "./location_tags";
 import { seedPromoCodes } from "./promo_codes";
@@ -38,6 +38,7 @@ export async function runAllSeeders() {
   results.push(await seedLocations(supabase));
   results.push(await seedLocationTags(supabase));
   results.push(await seedLocationTagPivot(supabase));
+  results.push(await seedLocationEmbeddings(supabase));
   results.push(await seedCrews(supabase));
   results.push(await seedCrewSkills(supabase));
   results.push(await seedCrewSkillPivot(supabase));

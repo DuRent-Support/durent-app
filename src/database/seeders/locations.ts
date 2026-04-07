@@ -1,5 +1,6 @@
 import { randomUUID } from "crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { GoogleGenerativeAIEmbeddings } from "@langchain/google-genai";
 
 import { type SeederResult } from "./_shared";
 
@@ -78,6 +79,163 @@ const locationRows: LocationRow[] = [
   },
 ];
 
+const embeddings = new GoogleGenerativeAIEmbeddings({
+  model: "gemini-embedding-2-preview",
+  apiKey: process.env.GOOGLE_API_KEY,
+});
+
+function buildEmbeddingContent(row: LocationRow, tags: string[]) {
+  return {
+    name: row.name,
+    city: row.city,
+    price: String(row.price),
+    description: row.description,
+    area: row.area,
+    pax: row.pax,
+    rating: row.rating,
+    tags,
+    image_url: null as string | null,
+  };
+}
+
+function buildContentString(content: ReturnType<typeof buildEmbeddingContent>) {
+  const parts = [
+    `Nama: ${content.name}.`,
+    `Kota: ${content.city}.`,
+    `Deskripsi: ${content.description}.`,
+    content.tags.length > 0 ? `Tag: ${content.tags.join(", ")}.` : null,
+    `Area: ${content.area}m².`,
+    `Kapasitas: ${content.pax} orang.`,
+    `Harga: ${content.price}.`,
+    `Rating: ${content.rating}/5.`,
+  ].filter(Boolean);
+
+  return parts.join(" ");
+}
+
+async function loadTagsByLocationId(
+  supabase: SupabaseClient,
+  locationIds: number[],
+) {
+  const tagsByLocationId = new Map<number, string[]>();
+
+  if (locationIds.length === 0) {
+    return tagsByLocationId;
+  }
+
+  const { data: locationTags, error: locationTagsError } = await supabase
+    .from("location_tag")
+    .select("location_id, location_tag_id")
+    .in("location_id", locationIds);
+
+  if (locationTagsError) {
+    throw new Error(
+      `Select location tags failed: ${locationTagsError.message}`,
+    );
+  }
+
+  const tagIds = Array.from(
+    new Set((locationTags ?? []).map((row) => Number(row.location_tag_id))),
+  ).filter((id) => Number.isFinite(id));
+
+  if (tagIds.length === 0) {
+    return tagsByLocationId;
+  }
+
+  const { data: tagRows, error: tagRowsError } = await supabase
+    .from("location_tags")
+    .select("id, name")
+    .in("id", tagIds);
+
+  if (tagRowsError) {
+    throw new Error(`Select tags failed: ${tagRowsError.message}`);
+  }
+
+  const tagIdToName = new Map(
+    (tagRows ?? []).map((row) => [Number(row.id), String(row.name)]),
+  );
+
+  for (const row of locationTags ?? []) {
+    const locationId = Number(row.location_id);
+    const tagId = Number(row.location_tag_id);
+    const tagName = tagIdToName.get(tagId);
+    if (!tagName) continue;
+    const existing = tagsByLocationId.get(locationId) ?? [];
+    existing.push(tagName);
+    tagsByLocationId.set(locationId, existing);
+  }
+
+  return tagsByLocationId;
+}
+
+export async function seedLocationEmbeddings(
+  supabase: SupabaseClient,
+): Promise<SeederResult> {
+  if (locationRows.length === 0) {
+    return {
+      table: "location_embeddings",
+      total: 0,
+      inserted: 0,
+      skipped: 0,
+    };
+  }
+
+  const codes = locationRows.map((row) => row.code);
+  const { data: seededLocations, error: seededError } = await supabase
+    .from("locations")
+    .select("id, code")
+    .in("code", codes);
+
+  if (seededError) {
+    throw new Error(`Select seeded locations failed: ${seededError.message}`);
+  }
+
+  const codeToId = new Map(
+    (seededLocations ?? []).map((row) => [String(row.code), Number(row.id)]),
+  );
+
+  const locationIds = [...codeToId.values()];
+  const tagsByLocationId = await loadTagsByLocationId(supabase, locationIds);
+
+  let inserted = 0;
+
+  for (const row of locationRows) {
+    const locationId = codeToId.get(row.code);
+    if (!locationId) continue;
+
+    const tags = tagsByLocationId.get(locationId) ?? [];
+    const content = buildEmbeddingContent(row, tags);
+    const contentString = buildContentString(content);
+    const vector = await embeddings.embedQuery(contentString);
+
+    const { error: embeddingError } = await supabase
+      .from("location_embeddings")
+      .upsert(
+        {
+          location_id: locationId,
+          content,
+          embedding: vector,
+        },
+        { onConflict: "location_id" },
+      );
+
+    if (embeddingError) {
+      throw new Error(
+        `Insert location embedding failed (${row.code}): ${embeddingError.message}`,
+      );
+    }
+
+    inserted += 1;
+  }
+
+  return {
+    table: "location_embeddings",
+    total: locationRows.length,
+    inserted,
+    skipped: locationRows.length - inserted,
+  };
+}
+
 export async function seedLocations(
   supabase: SupabaseClient,
 ): Promise<SeederResult> {
@@ -128,6 +286,8 @@ export async function seedLocations(
       throw new Error(`Insert locations failed: ${insertError.message}`);
     }
   }
+
+  await seedLocationEmbeddings(supabase);
 
   return {
     table: "locations",

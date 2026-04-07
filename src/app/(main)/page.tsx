@@ -1,26 +1,28 @@
-"use client";
-
-import Image from "next/image";
+import { headers } from "next/headers";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
-import {
-  CalendarCheck,
-  Camera,
-  CreditCard,
-  Loader2,
-  MapPin,
-  ShoppingBag,
-  Star,
-  Users,
-} from "lucide-react";
+import { Calendar, Clock, MapPin, Wallet } from "lucide-react";
 
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import formatPrice from "@/lib/formatPrice";
 
-type DashboardBooking = {
+type BookingState = "upcoming" | "ongoing" | "finished";
+
+type DashboardSummary = {
+  totalBookings: number;
+  upcomingBookings: number;
+  ongoingBookings: number;
+  finishedBookings: number;
+  pendingPayments: number;
+  toReviewCount: number;
+  totalSpent: number;
+};
+
+type NextBooking = {
   id: string;
   orderId: string;
+  locationId: string;
   locationName: string;
   city: string;
   imageUrl: string;
@@ -28,11 +30,11 @@ type DashboardBooking = {
   bookingTo: string;
   days: number;
   subtotal: number;
-  state: "upcoming" | "ongoing" | "finished";
+  state: BookingState;
   paymentStatus: string;
 };
 
-type DashboardPendingPayment = {
+type PendingPayment = {
   orderId: string;
   totalPrice: number;
   createdAt: string | null;
@@ -40,37 +42,21 @@ type DashboardPendingPayment = {
 };
 
 type DashboardResponse = {
-  summary?: {
-    totalBookings?: number;
-    upcomingBookings?: number;
-    ongoingBookings?: number;
-    finishedBookings?: number;
-    pendingPayments?: number;
-    toReviewCount?: number;
-    totalSpent?: number;
-  };
-  nextBookings?: DashboardBooking[];
-  pendingPayments?: DashboardPendingPayment[];
+  summary?: Partial<DashboardSummary>;
+  nextBookings?: NextBooking[];
+  pendingPayments?: PendingPayment[];
   message?: string;
 };
 
-type DashboardState = {
-  summary: {
-    totalBookings: number;
-    upcomingBookings: number;
-    ongoingBookings: number;
-    finishedBookings: number;
-    pendingPayments: number;
-    toReviewCount: number;
-    totalSpent: number;
-  };
-  nextBookings: DashboardBooking[];
-  pendingPayments: DashboardPendingPayment[];
+const emptySummary: DashboardSummary = {
+  totalBookings: 0,
+  upcomingBookings: 0,
+  ongoingBookings: 0,
+  finishedBookings: 0,
+  pendingPayments: 0,
+  toReviewCount: 0,
+  totalSpent: 0,
 };
-
-function formatPrice(value: number) {
-  return `Rp ${value.toLocaleString("id-ID")}`;
-}
 
 function formatDateRange(start: string, end: string) {
   const startDate = new Date(start);
@@ -80,325 +66,271 @@ function formatDateRange(start: string, end: string) {
     return "-";
   }
 
-  const startLabel = startDate.toLocaleDateString("id-ID", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-  });
-  const endLabel = endDate.toLocaleDateString("id-ID", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-  });
-
-  return `${startLabel} - ${endLabel}`;
+  return `${startDate.toLocaleDateString("id-ID")} - ${endDate.toLocaleDateString("id-ID")}`;
 }
 
-function getStateLabel(state: DashboardBooking["state"]) {
-  if (state === "ongoing") {
-    return "Berlangsung";
-  }
-
-  if (state === "upcoming") {
-    return "Akan Datang";
-  }
-
-  return "Selesai";
+function formatDate(value: string | null) {
+  if (!value) return "-";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "-";
+  return date.toLocaleDateString("id-ID");
 }
 
-const DEFAULT_DASHBOARD: DashboardState = {
-  summary: {
-    totalBookings: 0,
-    upcomingBookings: 0,
-    ongoingBookings: 0,
-    finishedBookings: 0,
-    pendingPayments: 0,
-    toReviewCount: 0,
-    totalSpent: 0,
-  },
-  nextBookings: [],
-  pendingPayments: [],
-};
+function getBookingLabel(state: BookingState) {
+  if (state === "ongoing") return "Sedang Berjalan";
+  if (state === "finished") return "Selesai";
+  return "Akan Datang";
+}
 
-export default function HomePage() {
-  const router = useRouter();
-  const [dashboard, setDashboard] = useState<DashboardState>(DEFAULT_DASHBOARD);
-  const [loading, setLoading] = useState(true);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+function getBookingBadgeVariant(state: BookingState) {
+  if (state === "ongoing") return "secondary";
+  if (state === "finished") return "ghost";
+  return "outline";
+}
 
-  useEffect(() => {
-    const loadDashboard = async () => {
-      setLoading(true);
-      setErrorMessage(null);
+async function getDashboardData(): Promise<{
+  summary: DashboardSummary;
+  nextBookings: NextBooking[];
+  pendingPayments: PendingPayment[];
+  message: string;
+}> {
+  const headersList = await headers();
+  const host = headersList.get("x-forwarded-host") ?? headersList.get("host");
+  const protocol = headersList.get("x-forwarded-proto") ?? "http";
 
-      const response = await fetch("/api/dashboard/user", {
-        method: "GET",
-        cache: "no-store",
-      });
-
-      if (response.status === 401) {
-        router.push("/login");
-        return;
-      }
-
-      const result = (await response.json()) as DashboardResponse;
-
-      if (!response.ok) {
-        setErrorMessage(result.message || "Gagal memuat dashboard user.");
-        setLoading(false);
-        return;
-      }
-
-      setDashboard({
-        summary: {
-          ...DEFAULT_DASHBOARD.summary,
-          ...(result.summary ?? {}),
-        },
-        nextBookings: result.nextBookings ?? [],
-        pendingPayments: result.pendingPayments ?? [],
-      });
-      setLoading(false);
+  if (!host) {
+    return {
+      summary: emptySummary,
+      nextBookings: [],
+      pendingPayments: [],
+      message: "",
     };
+  }
 
-    void loadDashboard();
-  }, [router]);
+  try {
+    const response = await fetch(`${protocol}://${host}/api/dashboard/user`, {
+      method: "GET",
+      cache: "no-store",
+      headers: {
+        cookie: headersList.get("cookie") ?? "",
+      },
+    });
 
-  const quickLinks = [
-    {
-      title: "Cari Lokasi",
-      description: "Temukan lokasi untuk kebutuhan shooting Anda",
-      href: "/locations",
-      icon: MapPin,
-    },
-    {
-      title: "Pilih Crew",
-      description: "Tambah kru profesional sesuai kebutuhan produksi",
-      href: "/crews",
-      icon: Users,
-    },
-    {
-      title: "Sewa Equipment",
-      description: "Lengkapi produksi dengan peralatan terbaik",
-      href: "/equipment",
-      icon: Camera,
-    },
-  ];
+    if (!response.ok) {
+      return {
+        summary: emptySummary,
+        nextBookings: [],
+        pendingPayments: [],
+        message: "",
+      };
+    }
+
+    const data = (await response.json()) as DashboardResponse;
+
+    return {
+      summary: {
+        ...emptySummary,
+        ...data.summary,
+      },
+      nextBookings: data.nextBookings ?? [],
+      pendingPayments: data.pendingPayments ?? [],
+      message: data.message ?? "",
+    };
+  } catch (error) {
+    console.error("Fetch user dashboard error:", error);
+    return {
+      summary: emptySummary,
+      nextBookings: [],
+      pendingPayments: [],
+      message: "",
+    };
+  }
+}
+
+export default async function UserDashboardPage() {
+  const { summary, nextBookings, pendingPayments } = await getDashboardData();
 
   const stats = [
     {
       title: "Total Booking",
-      value: dashboard.summary.totalBookings,
-      icon: CalendarCheck,
+      value: summary.totalBookings,
+      helper: "Semua pesanan kamu",
     },
     {
       title: "Akan Datang",
-      value: dashboard.summary.upcomingBookings,
-      icon: MapPin,
+      value: summary.upcomingBookings,
+      helper: "Booking mendatang",
     },
     {
-      title: "Berlangsung",
-      value: dashboard.summary.ongoingBookings,
-      icon: ShoppingBag,
+      title: "Sedang Berjalan",
+      value: summary.ongoingBookings,
+      helper: "Booking aktif",
+    },
+    {
+      title: "Selesai",
+      value: summary.finishedBookings,
+      helper: "Booking selesai",
+    },
+    {
+      title: "Pembayaran Pending",
+      value: summary.pendingPayments,
+      helper: "Menunggu pembayaran",
     },
     {
       title: "Perlu Review",
-      value: dashboard.summary.toReviewCount,
-      icon: Star,
-    },
-    {
-      title: "Pending Payment",
-      value: dashboard.summary.pendingPayments,
-      icon: CreditCard,
-    },
-    {
-      title: "Total Belanja",
-      value: formatPrice(dashboard.summary.totalSpent),
-      icon: CreditCard,
+      value: summary.toReviewCount,
+      helper: "Berikan ulasan",
     },
   ];
 
   return (
-    <main className="mx-auto w-full max-w-6xl px-6 py-8">
-      <div className="fixed left-0 right-0 top-0 -z-10 h-[340px]">
-        <Image
-          src="/hero.webp"
-          alt="Background"
-          className="h-full w-full object-cover"
-          fill
-          priority
-        />
-        <div className="absolute inset-0 bg-gradient-to-b from-background/40 via-background/60 to-background" />
-      </div>
-
-      <div className="relative z-10 rounded-3xl border border-border/40 bg-card/60 p-6 shadow-sm backdrop-blur-sm md:p-8">
-        <p className="text-xs uppercase tracking-[0.3em] text-muted-foreground">
-          User Dashboard
-        </p>
-        <h1 className="mt-3 font-display text-3xl font-bold text-foreground md:text-4xl">
-          Ringkasan aktivitas booking Anda
+    <div className="p-6 md:p-8">
+      <div className="mb-8">
+        <h1 className="font-display text-3xl font-bold text-foreground mb-2">
+          Dashboard Kamu
         </h1>
-        <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
-          Pantau booking yang berlangsung, pembayaran pending, dan lanjutkan proses reservasi dengan cepat.
+        <p className="text-muted-foreground">
+          Ringkasan booking, pembayaran, dan aktivitas syuting kamu.
         </p>
-        <div className="mt-6 flex flex-wrap gap-3">
-          <Button asChild>
-            <Link href="/locations">Mulai booking lokasi</Link>
-          </Button>
-          <Button asChild variant="secondary">
-            <Link href="/reservations">Lihat semua reservasi</Link>
-          </Button>
-          <Button asChild variant="outline">
-            <Link href="/payments">Lanjutkan pembayaran</Link>
-          </Button>
-        </div>
       </div>
 
-      {loading ? (
-        <div className="mt-8 flex min-h-[280px] items-center justify-center rounded-3xl border border-border/40 bg-card/40">
-          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-        </div>
-      ) : errorMessage ? (
-        <Card className="mt-8 border-destructive/30 bg-destructive/5">
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3 mb-8">
+        {stats.map((stat) => (
+          <Card key={stat.title} className="border-border">
+            <CardContent className="pt-6">
+              <p className="text-xs text-muted-foreground">{stat.title}</p>
+              <p className="mt-2 text-2xl font-semibold text-foreground">
+                {stat.value}
+              </p>
+              <p className="text-xs text-muted-foreground mt-1">
+                {stat.helper}
+              </p>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+
+      <div className="mb-8 grid gap-4 md:grid-cols-3">
+        <Card className="border-border md:col-span-2">
           <CardHeader>
-            <CardTitle className="text-destructive">Gagal memuat dashboard</CardTitle>
+            <CardTitle className="font-display text-base">
+              Booking Selanjutnya
+            </CardTitle>
           </CardHeader>
-          <CardContent className="space-y-3">
-            <p className="text-sm text-muted-foreground">{errorMessage}</p>
-            <Button onClick={() => window.location.reload()}>Coba lagi</Button>
+          <CardContent className="space-y-4">
+            {nextBookings.length === 0 ? (
+              <p className="text-sm text-muted-foreground">
+                Belum ada booking aktif.
+              </p>
+            ) : (
+              nextBookings.map((booking) => (
+                <div
+                  key={booking.id}
+                  className="rounded-xl border border-border/60 bg-background p-4"
+                >
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div>
+                      <p className="text-sm font-semibold text-foreground">
+                        {booking.locationName}
+                      </p>
+                      <div className="mt-1 flex items-center gap-2 text-xs text-muted-foreground">
+                        <MapPin className="h-3.5 w-3.5" />
+                        <span>{booking.city}</span>
+                      </div>
+                    </div>
+                    <Badge variant={getBookingBadgeVariant(booking.state)}>
+                      {getBookingLabel(booking.state)}
+                    </Badge>
+                  </div>
+                  <div className="mt-3 flex flex-wrap items-center gap-4 text-xs text-muted-foreground">
+                    <span className="flex items-center gap-1">
+                      <Calendar className="h-3.5 w-3.5" />
+                      {formatDateRange(booking.bookingFrom, booking.bookingTo)}
+                    </span>
+                    <span className="flex items-center gap-1">
+                      <Clock className="h-3.5 w-3.5" />
+                      {booking.days} hari
+                    </span>
+                    <span className="flex items-center gap-1">
+                      <Wallet className="h-3.5 w-3.5" />
+                      {formatPrice(booking.subtotal)}
+                    </span>
+                  </div>
+                </div>
+              ))
+            )}
           </CardContent>
         </Card>
-      ) : (
-        <>
-          <section className="mt-8 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-            {stats.map((stat) => {
-              const Icon = stat.icon;
-              return (
-                <Card key={stat.title} className="border-border/40 bg-card/60">
-                  <CardHeader className="pb-2">
-                    <CardTitle className="flex items-center justify-between text-sm text-muted-foreground">
-                      <span>{stat.title}</span>
-                      <Icon className="h-4 w-4" />
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <p className="text-2xl font-semibold text-foreground">{stat.value}</p>
-                  </CardContent>
-                </Card>
-              );
-            })}
-          </section>
 
-          <section className="mt-8 grid gap-6 xl:grid-cols-2">
-            <Card className="border-border/40 bg-card/60">
-              <CardHeader>
-                <CardTitle>Booking Terdekat</CardTitle>
-              </CardHeader>
-              <CardContent>
-                {dashboard.nextBookings.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">
-                    Belum ada booking aktif atau upcoming.
-                  </p>
-                ) : (
-                  <div className="space-y-3">
-                    {dashboard.nextBookings.map((booking) => (
-                      <article
-                        key={booking.id}
-                        className="flex gap-3 rounded-xl border border-border/40 bg-background/40 p-3"
-                      >
-                        <Image
-                          src={booking.imageUrl}
-                          alt={booking.locationName}
-                          width={64}
-                          height={64}
-                          className="h-16 w-16 rounded-lg object-cover"
-                        />
-                        <div className="min-w-0 flex-1">
-                          <p className="truncate text-sm font-semibold text-foreground">
-                            {booking.locationName}
-                          </p>
-                          <p className="mt-0.5 text-xs text-muted-foreground">{booking.city}</p>
-                          <p className="mt-1 text-xs text-muted-foreground">
-                            {formatDateRange(booking.bookingFrom, booking.bookingTo)}
-                          </p>
-                          <div className="mt-2 flex items-center justify-between">
-                            <span className="rounded-md bg-secondary px-2 py-1 text-[10px] font-medium text-secondary-foreground">
-                              {getStateLabel(booking.state)}
-                            </span>
-                            <span className="text-xs font-semibold text-primary">
-                              {formatPrice(booking.subtotal)}
-                            </span>
-                          </div>
-                        </div>
-                      </article>
-                    ))}
+        <Card className="border-border">
+          <CardHeader>
+            <CardTitle className="font-display text-base">
+              Pembayaran Pending
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {pendingPayments.length === 0 ? (
+              <p className="text-sm text-muted-foreground">
+                Tidak ada pembayaran tertunda.
+              </p>
+            ) : (
+              pendingPayments.map((payment) => (
+                <div
+                  key={payment.orderId}
+                  className="rounded-xl border border-border/60 bg-background p-4 space-y-2"
+                >
+                  <div className="flex items-center justify-between">
+                    <p className="text-sm font-semibold text-foreground">
+                      Order #{payment.orderId}
+                    </p>
+                    <Badge variant="destructive">Pending</Badge>
                   </div>
-                )}
-                <Button asChild variant="outline" className="mt-4 w-full">
-                  <Link href="/reservations">Buka halaman reservasi</Link>
-                </Button>
-              </CardContent>
-            </Card>
-
-            <Card className="border-border/40 bg-card/60">
-              <CardHeader>
-                <CardTitle>Pembayaran Pending</CardTitle>
-              </CardHeader>
-              <CardContent>
-                {dashboard.pendingPayments.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">
-                    Tidak ada pembayaran yang menunggu.
+                  <p className="text-xs text-muted-foreground">
+                    Total: {formatPrice(payment.totalPrice)}
                   </p>
-                ) : (
-                  <div className="space-y-3">
-                    {dashboard.pendingPayments.map((payment) => (
-                      <div
-                        key={payment.orderId}
-                        className="rounded-xl border border-border/40 bg-background/40 p-3"
-                      >
-                        <p className="text-sm font-semibold text-foreground">
-                          Order {payment.orderId}
-                        </p>
-                        <p className="mt-1 text-xs text-muted-foreground">
-                          Total: {formatPrice(payment.totalPrice)}
-                        </p>
-                        <p className="mt-1 text-xs text-muted-foreground">
-                          Expired: {payment.expiresAt ? new Date(payment.expiresAt).toLocaleString("id-ID") : "-"}
-                        </p>
-                      </div>
-                    ))}
-                  </div>
-                )}
-                <Button asChild className="mt-4 w-full">
-                  <Link href="/payments">Lanjutkan pembayaran</Link>
-                </Button>
-              </CardContent>
-            </Card>
-          </section>
-
-          <section className="mt-8 grid gap-4 md:grid-cols-3">
-            {quickLinks.map((linkItem) => {
-              const Icon = linkItem.icon;
-
-              return (
-                <Card key={linkItem.href} className="border-border/40 bg-card/60">
-                  <CardHeader>
-                    <CardTitle className="flex items-center gap-2 text-base">
-                      <Icon className="h-5 w-5 text-primary" />
-                      {linkItem.title}
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-3">
-                    <p className="text-sm text-muted-foreground">{linkItem.description}</p>
-                    <Button asChild variant="outline" className="w-full">
-                      <Link href={linkItem.href}>Buka</Link>
+                  <p className="text-xs text-muted-foreground">
+                    Dibuat: {formatDate(payment.createdAt)}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    Kadaluarsa: {formatDate(payment.expiresAt)}
+                  </p>
+                  <Link href="/payments">
+                    <Button size="sm" className="mt-2 w-full">
+                      Lanjutkan Pembayaran
                     </Button>
-                  </CardContent>
-                </Card>
-              );
-            })}
-          </section>
-        </>
-      )}
-    </main>
+                  </Link>
+                </div>
+              ))
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      <Card className="border-border">
+        <CardHeader>
+          <CardTitle className="font-display text-base">Ringkasan</CardTitle>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-3 text-sm text-muted-foreground">
+          <div className="flex items-center justify-between">
+            <span>Total dibelanjakan</span>
+            <span className="font-semibold text-foreground">
+              {formatPrice(summary.totalSpent)}
+            </span>
+          </div>
+          <div className="flex items-center justify-between">
+            <span>Booking selesai</span>
+            <span className="font-semibold text-foreground">
+              {summary.finishedBookings}
+            </span>
+          </div>
+          <div className="flex items-center justify-between">
+            <span>Review tersisa</span>
+            <span className="font-semibold text-foreground">
+              {summary.toReviewCount}
+            </span>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
   );
 }

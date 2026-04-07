@@ -7,14 +7,14 @@ const embeddings = new GoogleGenerativeAIEmbeddings({
 });
 
 export interface LocationEmbeddingInput {
-  shooting_location_id: string;
+  location_id: string;
   name: string;
   city: string;
   price: string;
   description: string;
   area: number;
   pax: number;
-  rate: number;
+  rating: number;
   tags: string[];
   image_url?: string;
 }
@@ -28,13 +28,13 @@ function buildContentString(loc: LocationEmbeddingInput): string {
     `Area: ${loc.area}m².`,
     `Kapasitas: ${loc.pax} orang.`,
     `Harga: ${loc.price}.`,
-    `Rating: ${loc.rate}/5.`,
+    `Rating: ${loc.rating}/5.`,
   ].filter(Boolean);
   return parts.join(" ");
 }
 
 export interface LocationSearchResult {
-  shooting_location_id: string;
+  location_id: string;
   content: {
     name: string;
     city: string;
@@ -42,7 +42,7 @@ export interface LocationSearchResult {
     description: string;
     area: number;
     pax: number;
-    rate: number;
+    rating: number;
     tags: string[];
     image_url: string | null;
   };
@@ -90,7 +90,7 @@ export async function upsertLocationEmbedding(
       description: loc.description,
       area: loc.area,
       pax: loc.pax,
-      rate: loc.rate,
+      rating: loc.rating,
       tags: loc.tags,
       image_url: loc.image_url ?? null,
     };
@@ -98,11 +98,11 @@ export async function upsertLocationEmbedding(
     const supabase = await createClient();
     const { error } = await supabase.from("location_embeddings").upsert(
       {
-        shooting_location_id: loc.shooting_location_id,
+        location_id: loc.location_id,
         content: contentJson,
         embedding: vector,
       },
-      { onConflict: "shooting_location_id" },
+      { onConflict: "location_id" },
     );
 
     if (error) {

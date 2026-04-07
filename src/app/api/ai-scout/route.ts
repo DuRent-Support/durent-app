@@ -89,12 +89,22 @@ export async function POST(req: NextRequest) {
     if (relevantLocations.length > 0) {
       const locationList = relevantLocations
         .map((loc, i) => {
-          const c = loc.content;
+          const c = loc.content ?? {
+            name: "-",
+            city: "-",
+            description: "-",
+            tags: [],
+            area: 0,
+            pax: 0,
+            price: "0",
+            rating: 0,
+          };
+          const tags = Array.isArray(c.tags) ? c.tags : [];
           return [
             `${i + 1}. **${c.name}** (${c.city})`,
             `   Deskripsi: ${c.description}`,
-            `   Tag: ${c.tags.join(", ") || "-"}`,
-            `   Area: ${c.area}m² | Kapasitas: ${c.pax} orang | Harga: ${c.price} | Rating: ${c.rate}/5`,
+            `   Tag: ${tags.join(", ") || "-"}`,
+            `   Area: ${c.area}m² | Kapasitas: ${c.pax} orang | Harga: ${c.price} | Rating: ${c.rating}/5`,
           ].join("\n");
         })
         .join("\n\n");

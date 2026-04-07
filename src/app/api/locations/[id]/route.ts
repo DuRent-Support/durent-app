@@ -309,14 +309,14 @@ export async function PUT(
 
     // Generate and store embedding (non-blocking)
     upsertLocationEmbedding({
-      shooting_location_id: id,
+      location_id: id,
       name,
       city: city?.trim() || "",
       price: price?.trim() || "",
       description: description?.trim() || "",
       area,
       pax,
-      rate,
+      rating: rate,
       tags,
       image_url: newImageUrls[0],
     });
@@ -369,10 +369,7 @@ export async function DELETE(
       .eq("shooting_location_id", id);
 
     // Delete location embeddings (foreign key constraint)
-    await supabase
-      .from("location_embeddings")
-      .delete()
-      .eq("shooting_location_id", id);
+    await supabase.from("location_embeddings").delete().eq("location_id", id);
 
     console.log("Test 3");
 

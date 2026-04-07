@@ -810,34 +810,6 @@ const ExplorePage = () => {
             )}
           </div>
         </section>
-
-        {/* CTA */}
-        <section className="rounded-2xl border border-border/40 bg-card p-8 text-center">
-          <h2 className="font-display text-2xl font-bold text-foreground mb-2">
-            Siap Mulai Syuting?
-          </h2>
-          <p className="text-muted-foreground text-sm mb-6 max-w-md mx-auto">
-            Daftar sekarang untuk memesan lokasi, menyewa crew, dan mengatur
-            semua kebutuhan produksi kamu.
-          </p>
-          <div className="flex items-center justify-center gap-3">
-            <Button size="lg" onClick={() => router.push("/login")}>
-              Daftar Gratis
-            </Button>
-            <Button
-              size="lg"
-              variant="outline"
-              onClick={() => router.push("/login")}
-            >
-              Masuk
-            </Button>
-          </div>
-        </section>
-
-        {/* Footer */}
-        <footer className="border-t border-border/30 py-6 text-center text-xs text-muted-foreground">
-          © 2026 SceneRent. Semua hak dilindungi.
-        </footer>
       </div>
     </div>
   );

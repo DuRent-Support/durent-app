@@ -232,14 +232,14 @@ export async function POST(request: Request) {
 
     // Generate and store embedding (non-blocking)
     upsertLocationEmbedding({
-      shooting_location_id: newLocation.shooting_location_id,
+      location_id: newLocation.shooting_location_id,
       name,
       city: city?.trim() || "",
       price: price?.trim() || "",
       description: description?.trim() || "",
       area,
       pax,
-      rate,
+      rating: rate,
       tags,
       image_url: imageUrls[0],
     });
