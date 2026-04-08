@@ -280,10 +280,10 @@ function SidebarNavContent({
                       buttonClassName={buttonClassName}
                     />
                     <SidebarNavItem
-                      href="/admin/bookings"
-                      label="Bookings"
+                      href="/admin/orders"
+                      label="Orders"
                       icon={FileText}
-                      isActive={isPathActive(pathname, "/admin/bookings")}
+                      isActive={isPathActive(pathname, "/admin/orders")}
                       itemClassName={itemClassName}
                       iconClassName={iconClassName}
                       labelClassName={labelClassName}
@@ -295,6 +295,17 @@ function SidebarNavContent({
                       label="Reviews"
                       icon={Star}
                       isActive={isPathActive(pathname, "/admin/reviews")}
+                      itemClassName={itemClassName}
+                      iconClassName={iconClassName}
+                      labelClassName={labelClassName}
+                      itemWrapperClassName={itemWrapperClassName}
+                      buttonClassName={buttonClassName}
+                    />
+                    <SidebarNavItem
+                      href="/admin/inventory"
+                      label="Inventory"
+                      icon={Boxes}
+                      isActive={isPathActive(pathname, "/admin/inventory")}
                       itemClassName={itemClassName}
                       iconClassName={iconClassName}
                       labelClassName={labelClassName}
