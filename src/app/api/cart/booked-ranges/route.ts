@@ -6,6 +6,14 @@ type RequestBody = {
   locationIds?: string[];
 };
 
+const ACTIVE_BOOKING_STATUSES = [
+  "pending",
+  "paid",
+  "settlement",
+  "capture",
+  "challenge",
+];
+
 export async function POST(request: Request) {
   try {
     const { locationIds } = (await request.json()) as RequestBody;
@@ -17,8 +25,12 @@ export async function POST(request: Request) {
     const sanitizedLocationIds = [
       ...new Set(
         locationIds
-          .map((locationId) => String(locationId || "").trim())
-          .filter((locationId) => locationId.length > 0),
+          .map((locationId) =>
+            Number.parseInt(String(locationId || "").trim(), 10),
+          )
+          .filter(
+            (locationId) => Number.isInteger(locationId) && locationId > 0,
+          ),
       ),
     ];
 
@@ -28,10 +40,33 @@ export async function POST(request: Request) {
 
     const supabase = await createClient();
 
+    const { data: activeOrders, error: orderError } = await supabase
+      .from("orders")
+      .select("id")
+      .in("payment_status", ACTIVE_BOOKING_STATUSES);
+
+    if (orderError) {
+      console.error("Booked ranges orders fetch error:", orderError);
+      return NextResponse.json(
+        { message: "Gagal mengambil data order booking" },
+        { status: 500 },
+      );
+    }
+
+    const activeOrderIds = (activeOrders ?? [])
+      .map((row) => Number(row.id))
+      .filter((id) => Number.isFinite(id));
+
+    if (activeOrderIds.length === 0) {
+      return NextResponse.json({ rows: [] }, { status: 200 });
+    }
+
     const { data, error } = await supabase
       .from("order_items")
-      .select("location_id, booking_start, booking_end")
-      .in("location_id", sanitizedLocationIds);
+      .select("item_id, booking_start, booking_end")
+      .eq("item_type", "location")
+      .in("item_id", sanitizedLocationIds)
+      .in("order_id", activeOrderIds);
 
     if (error) {
       console.error("Booked ranges fetch error:", error);

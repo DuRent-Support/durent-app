@@ -90,6 +90,17 @@ type BundlePriceSnapshot = {
   finalPrice: number;
 };
 
+type BookedRangeRow = {
+  item_id?: string | number | null;
+  booking_start?: string | null;
+  booking_end?: string | null;
+};
+
+type BookedRange = {
+  from: Date;
+  to: Date;
+};
+
 function toNumberPrice(raw: string) {
   const normalized = String(raw)
     .replace(/[^\d.,-]/g, "")
@@ -112,6 +123,24 @@ function startOfDay(value: Date) {
   const next = new Date(value);
   next.setHours(0, 0, 0, 0);
   return next;
+}
+
+function rangesOverlap(
+  firstFrom: Date,
+  firstTo: Date,
+  secondFrom: Date,
+  secondTo: Date,
+) {
+  return firstFrom <= secondTo && secondFrom <= firstTo;
+}
+
+function hasBookedOverlap(from: Date, to: Date, ranges: BookedRange[]) {
+  const normalizedFrom = startOfDay(from);
+  const normalizedTo = startOfDay(to);
+
+  return ranges.some((range) =>
+    rangesOverlap(normalizedFrom, normalizedTo, range.from, range.to),
+  );
 }
 
 async function ensureSnapLoaded(snapUrl: string, clientKey: string) {
@@ -178,6 +207,9 @@ export default function CartPage() {
   const [checkoutError, setCheckoutError] = useState("");
   const [isPaying, setIsPaying] = useState(false);
   const [showMissingDateFrame, setShowMissingDateFrame] = useState(false);
+  const [bookedRangesByLocation, setBookedRangesByLocation] = useState<
+    Record<string, BookedRange[]>
+  >({});
   const minBookingDate = useMemo(() => startOfDay(new Date()), []);
 
   const checkoutItems = useMemo<CheckoutItem[]>(() => {
@@ -460,8 +492,130 @@ export default function CartPage() {
     }
   }, [promoCode, subtotal]);
 
+  useEffect(() => {
+    const locationIds = Array.from(
+      new Set(
+        checkoutItems
+          .filter((item) => item.isLocation)
+          .map((item) => String(item.sourceId || "").trim())
+          .filter((value) => value.length > 0),
+      ),
+    );
+
+    if (locationIds.length === 0) {
+      setBookedRangesByLocation({});
+      return;
+    }
+
+    let isActive = true;
+
+    const loadBookedRanges = async () => {
+      try {
+        const response = await fetch("/api/cart/booked-ranges", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ locationIds }),
+        });
+
+        const result = (await response.json()) as {
+          rows?: BookedRangeRow[];
+        };
+
+        if (!response.ok || !isActive) {
+          return;
+        }
+
+        const nextMap: Record<string, BookedRange[]> = {};
+
+        (result.rows ?? []).forEach((row) => {
+          const locationId = String(row.item_id || "").trim();
+          const bookingStart = row.booking_start
+            ? startOfDay(new Date(row.booking_start))
+            : null;
+          const bookingEnd = row.booking_end
+            ? startOfDay(new Date(row.booking_end))
+            : null;
+
+          if (
+            locationId.length === 0 ||
+            !bookingStart ||
+            !bookingEnd ||
+            Number.isNaN(bookingStart.getTime()) ||
+            Number.isNaN(bookingEnd.getTime())
+          ) {
+            return;
+          }
+
+          const rangeStart =
+            bookingStart <= bookingEnd ? bookingStart : bookingEnd;
+          const rangeEnd =
+            bookingEnd >= bookingStart ? bookingEnd : bookingStart;
+
+          if (!nextMap[locationId]) {
+            nextMap[locationId] = [];
+          }
+
+          nextMap[locationId].push({
+            from: rangeStart,
+            to: rangeEnd,
+          });
+        });
+
+        setBookedRangesByLocation(nextMap);
+      } catch (error) {
+        console.error("Booked ranges fetch error:", error);
+      }
+    };
+
+    void loadBookedRanges();
+
+    return () => {
+      isActive = false;
+    };
+  }, [checkoutItems]);
+
+  const getLocationBookedRanges = (item: CheckoutItem) => {
+    if (!item.isLocation) {
+      return [];
+    }
+
+    return bookedRangesByLocation[String(item.sourceId || "").trim()] ?? [];
+  };
+
+  const isLocationDateBooked = (item: CheckoutItem, date: Date) => {
+    if (!item.isLocation) {
+      return false;
+    }
+
+    const normalizedDate = startOfDay(date);
+    const bookedRanges = getLocationBookedRanges(item);
+
+    return bookedRanges.some(
+      (range) => normalizedDate >= range.from && normalizedDate <= range.to,
+    );
+  };
+
+  const hasLocationRangeOverlap = (
+    item: CheckoutItem,
+    from: Date,
+    to: Date,
+  ) => {
+    if (!item.isLocation) {
+      return false;
+    }
+
+    return hasBookedOverlap(from, to, getLocationBookedRanges(item));
+  };
+
   const handleMidtransCheckout = async () => {
     if (checkoutItems.length === 0 || isPaying) {
+      return;
+    }
+
+    if (!user) {
+      router.push("/login");
       return;
     }
 
@@ -487,6 +641,18 @@ export default function CartPage() {
       );
     });
 
+    const hasLocationBookingOverlap = checkoutItems.some((item) => {
+      if (!item.isLocation || !item.dateRange?.from || !item.dateRange?.to) {
+        return false;
+      }
+
+      return hasLocationRangeOverlap(
+        item,
+        item.dateRange.from,
+        item.dateRange.to,
+      );
+    });
+
     if (hasMissingDates) {
       setShowMissingDateFrame(true);
       setCheckoutError("Masih ada item tanpa tanggal booking.");
@@ -495,6 +661,13 @@ export default function CartPage() {
 
     if (hasPastBookingDate) {
       setCheckoutError("Tanggal booking yang sudah lewat tidak bisa dipilih.");
+      return;
+    }
+
+    if (hasLocationBookingOverlap) {
+      setCheckoutError(
+        "Range tanggal lokasi bentrok dengan booking lain. Pilih range yang benar-benar kosong.",
+      );
       return;
     }
 
@@ -521,11 +694,11 @@ export default function CartPage() {
       }));
 
       const checkoutUser = {
-        id: user?.id ?? null,
-        email: user?.email ?? null,
-        phone: user?.phone ?? null,
-        full_name: user?.user_metadata?.full_name ?? null,
-        name: user?.user_metadata?.name ?? null,
+        id: user.id ?? null,
+        email: user.email ?? null,
+        phone: user.phone ?? null,
+        full_name: user.user_metadata?.full_name ?? null,
+        name: user.user_metadata?.name ?? null,
       };
 
       console.log("Checkout items (client):", checkoutPayloadItems);
@@ -601,6 +774,13 @@ export default function CartPage() {
         ? normalizedSelectedDate
         : normalizedCurrentEnd;
 
+    if (hasLocationRangeOverlap(item, normalizedSelectedDate, nextEnd)) {
+      setCheckoutError(
+        "Tanggal lokasi ini sudah ter-booking. Pilih tanggal yang berwarna normal.",
+      );
+      return;
+    }
+
     updateDateRange(item.id, {
       from: normalizedSelectedDate,
       to: nextEnd,
@@ -627,6 +807,13 @@ export default function CartPage() {
       normalizedCurrentStart > normalizedSelectedDate
         ? normalizedSelectedDate
         : normalizedCurrentStart;
+
+    if (hasLocationRangeOverlap(item, nextStart, normalizedSelectedDate)) {
+      setCheckoutError(
+        "Range tanggal lokasi bentrok dengan booking lain. Pilih range tanpa tanggal merah.",
+      );
+      return;
+    }
 
     updateDateRange(item.id, {
       from: nextStart,
@@ -735,8 +922,17 @@ export default function CartPage() {
                               handleSelectStartDate(item, date)
                             }
                             disabled={(date) =>
-                              startOfDay(date) < minBookingDate
+                              startOfDay(date) < minBookingDate ||
+                              isLocationDateBooked(item, date)
                             }
+                            modifiers={{
+                              booked: (date) =>
+                                isLocationDateBooked(item, date),
+                            }}
+                            modifiersClassNames={{
+                              booked:
+                                "!bg-red-200 !text-red-700 !opacity-100 line-through aria-disabled:!bg-red-200 aria-disabled:!text-red-700 aria-disabled:!opacity-100",
+                            }}
                             initialFocus
                           />
                         </PopoverContent>
@@ -760,8 +956,17 @@ export default function CartPage() {
                             selected={item.dateRange?.to ?? undefined}
                             onSelect={(date) => handleSelectEndDate(item, date)}
                             disabled={(date) =>
-                              startOfDay(date) < minBookingDate
+                              startOfDay(date) < minBookingDate ||
+                              isLocationDateBooked(item, date)
                             }
+                            modifiers={{
+                              booked: (date) =>
+                                isLocationDateBooked(item, date),
+                            }}
+                            modifiersClassNames={{
+                              booked:
+                                "!bg-red-200 !text-red-700 !opacity-100 line-through aria-disabled:!bg-red-200 aria-disabled:!text-red-700 aria-disabled:!opacity-100",
+                            }}
                             initialFocus
                           />
                         </PopoverContent>

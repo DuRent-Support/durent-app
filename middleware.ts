@@ -7,7 +7,7 @@ export async function middleware(request: NextRequest) {
 
   const url = request.nextUrl.clone();
 
-  const publicRoutes = new Set(["/login", "/register"]);
+  const publicRoutes = new Set(["/login"]);
   const guestRoutes = new Set([
     "/explore",
     "/cart",
@@ -19,22 +19,13 @@ export async function middleware(request: NextRequest) {
     "/bundles",
     "/rentals",
   ]);
-  const blockedRoutes = ["/payments", "/reservations", "/dashboard"];
-
   const isPublicRoute = publicRoutes.has(url.pathname);
   const isGuestRoute = guestRoutes.has(url.pathname);
-  const isBlockedRoute = blockedRoutes.some((route) =>
-    url.pathname.startsWith(route),
-  );
 
   // Admin routes
   const isAdminRoute = url.pathname.startsWith("/admin");
-  if (isBlockedRoute) {
-    url.pathname = "/explore";
-    return NextResponse.redirect(url);
-  }
 
-  // Jika user sudah login dan mencoba akses login/register
+  // Jika user sudah login dan mencoba akses login
   if (user && isPublicRoute) {
     // Cek role user dari profiles
     const { data: profile } = await supabase

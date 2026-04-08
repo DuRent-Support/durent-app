@@ -1,75 +1,107 @@
 "use client";
 
-import { ArrowLeft, CalendarCheck, Star } from "lucide-react";
-import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
-
-import ReservationCard, {
-  type ReservationCardData,
-} from "@/components/reservation-card/ReservationCard";
-import { Button } from "@/components/ui/button";
+import Image from "next/image";
 import {
-  Dialog,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import { toast } from "sonner";
+  ArrowLeft,
+  CalendarDays,
+  ChevronDown,
+  Package2,
+  ReceiptText,
+} from "lucide-react";
+import { useRouter } from "next/navigation";
+import { useEffect, useMemo, useState } from "react";
 
-function getStatusLabel(from: Date, to: Date) {
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
+import { Separator } from "@/components/ui/separator";
 
-  if (to < today) {
-    return { text: "Selesai", cls: "bg-muted text-muted-foreground" };
-  }
-
-  if (from <= today && to >= today) {
-    return { text: "Berlangsung", cls: "bg-primary/20 text-primary" };
-  }
-
-  return { text: "Akan Datang", cls: "bg-accent text-accent-foreground" };
-}
-
-type ReservationApiRow = {
+type ReservationItem = {
   id: string;
-  orderId: string;
-  locationId: string;
-  name: string;
-  city: string;
-  imageUrl: string;
-  bookingFrom: string;
-  bookingTo: string;
-  days: number;
-  subtotal: number;
+  orderDbId: number;
+  orderCode: string;
+  itemType: string;
+  itemTypeLabel: string;
+  itemId: number;
+  itemName: string;
+  quantity: number;
+  unitPrice: number;
+  lineTotal: number;
+  bookingStart: string | null;
+  bookingEnd: string | null;
+  isFromBundle: boolean;
+  bundleId: number | null;
+  bundleName: string | null;
+  imageUrl: string | null;
+};
+
+type ReservationOrder = {
+  id: number;
+  orderCode: string;
+  purpose: string;
   paymentStatus: string;
+  createdAt: string | null;
+  totalAmount: number;
+  itemCount: number;
+  items: ReservationItem[];
 };
 
 type ReservationsResponse = {
-  reservations?: ReservationApiRow[];
-  reviewedKeys?: string[];
+  reservations?: ReservationOrder[];
   message?: string;
 };
 
-type SubmitReviewResponse = {
-  message?: string;
-};
+function formatPrice(value: number) {
+  return `Rp ${Number(value || 0).toLocaleString("id-ID")}`;
+}
+
+function formatDate(value: string | null) {
+  if (!value) return "-";
+
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return "-";
+
+  return new Intl.DateTimeFormat("id-ID", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  }).format(parsed);
+}
+
+function getPaymentStatusBadgeClass(status: string) {
+  const normalized = String(status || "")
+    .trim()
+    .toLowerCase();
+
+  if (normalized === "paid" || normalized === "settlement") {
+    return "bg-emerald-100 text-emerald-700 border border-emerald-200";
+  }
+
+  if (normalized === "pending") {
+    return "bg-amber-100 text-amber-700 border border-amber-200";
+  }
+
+  if (
+    normalized === "deny" ||
+    normalized === "cancel" ||
+    normalized === "expire"
+  ) {
+    return "bg-rose-100 text-rose-700 border border-rose-200";
+  }
+
+  return "bg-secondary text-secondary-foreground";
+}
 
 export default function ReservationsPage() {
   const router = useRouter();
-  const [reservations, setReservations] = useState<ReservationCardData[]>([]);
+  const [orders, setOrders] = useState<ReservationOrder[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [reviewDialogOpen, setReviewDialogOpen] = useState(false);
-  const [selectedReservation, setSelectedReservation] =
-    useState<ReservationCardData | null>(null);
-  const [rating, setRating] = useState(0);
-  const [comment, setComment] = useState("");
-  const [isSubmittingReview, setIsSubmittingReview] = useState(false);
-  const [reviewedKeys, setReviewedKeys] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     const loadReservations = async () => {
@@ -89,259 +121,206 @@ export default function ReservationsPage() {
       const result = (await response.json()) as ReservationsResponse;
 
       if (!response.ok) {
-        setErrorMessage(result.message || "Gagal memuat data reservasi.");
+        setErrorMessage(result.message || "Gagal memuat riwayat reservasi.");
+        setOrders([]);
         setIsLoading(false);
         return;
       }
 
-      const reservationItems = (result.reservations ?? [])
-        .map((item) => {
-          const bookingFrom = new Date(item.bookingFrom);
-          const bookingTo = new Date(item.bookingTo);
-
-          if (
-            Number.isNaN(bookingFrom.getTime()) ||
-            Number.isNaN(bookingTo.getTime())
-          ) {
-            return null;
-          }
-
-          return {
-            ...item,
-            bookingFrom,
-            bookingTo,
-          } as ReservationCardData;
-        })
-        .filter((item): item is ReservationCardData => item !== null);
-
-      setReviewedKeys(new Set(result.reviewedKeys ?? []));
-      setReservations(reservationItems);
+      setOrders(result.reservations ?? []);
       setIsLoading(false);
     };
 
     void loadReservations();
   }, [router]);
 
-  const handleOpenReviewDialog = (reservation: ReservationCardData) => {
-    setSelectedReservation(reservation);
-    setRating(0);
-    setComment("");
-    setReviewDialogOpen(true);
-  };
-
-  const handleSubmitReview = async () => {
-    if (!selectedReservation) {
-      return;
-    }
-
-    if (rating < 1 || rating > 5) {
-      toast.error("Pilih rating 1 sampai 5.");
-      return;
-    }
-
-    const trimmedComment = comment.trim();
-
-    if (!trimmedComment) {
-      toast.error("Komentar wajib diisi.");
-      return;
-    }
-
-    setIsSubmittingReview(true);
-
-    const response = await fetch("/api/reservations/reviews", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        order_id: selectedReservation.orderId,
-        location_id: selectedReservation.locationId,
-        rating,
-        comment: trimmedComment,
-      }),
-    });
-
-    const result = (await response.json()) as SubmitReviewResponse;
-
-    if (!response.ok) {
-      if (response.status === 401) {
-        router.push("/login");
-      }
-
-      toast.error(result.message || "Gagal mengirim review.");
-      setIsSubmittingReview(false);
-      return;
-    }
-
-    setReviewedKeys((prev) => {
-      const next = new Set(prev);
-      next.add(`${selectedReservation.orderId}-${selectedReservation.locationId}`);
-      return next;
-    });
-
-    toast.success("Review berhasil dikirim.");
-    setReviewDialogOpen(false);
-    setSelectedReservation(null);
-    setRating(0);
-    setComment("");
-    setIsSubmittingReview(false);
-  };
+  const totalItems = useMemo(
+    () => orders.reduce((sum, order) => sum + order.itemCount, 0),
+    [orders],
+  );
 
   return (
-    <div className="mx-auto w-full max-w-5xl px-6 py-8">
-      <div className="mb-8 flex items-center gap-4">
-        <button
-          type="button"
-          onClick={() => router.push("/")}
-          className="flex h-10 w-10 items-center justify-center rounded-xl bg-secondary text-secondary-foreground transition-colors hover:bg-accent"
-        >
-          <ArrowLeft className="h-5 w-5" />
-        </button>
-        <h1 className="font-display text-2xl font-bold text-foreground">
-          Reservasi Saya
-        </h1>
-        {reservations.length > 0 ? (
-          <span className="rounded-lg bg-primary px-3 py-1 text-xs font-semibold text-primary-foreground">
-            {reservations.length} booking
-          </span>
-        ) : null}
+    <div className="mx-auto w-full max-w-6xl px-6 py-8">
+      <div className="mb-6 flex items-center justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <Button
+            type="button"
+            variant="outline"
+            size="icon"
+            onClick={() => router.push("/")}
+            aria-label="Kembali"
+          >
+            <ArrowLeft className="h-4 w-4" />
+          </Button>
+          <div>
+            <h1 className="font-display text-2xl font-bold text-foreground md:text-3xl">
+              Reservations
+            </h1>
+            <p className="text-sm text-muted-foreground">
+              Riwayat semua order Anda dari orders dan order_items.
+            </p>
+          </div>
+        </div>
+
+        <Badge variant="outline">{orders.length} order</Badge>
       </div>
 
       {isLoading ? (
-        <div className="space-y-4">
-          {Array.from({ length: 3 }).map((_, index) => (
-            <div
-              key={index}
-              className="h-36 animate-pulse rounded-2xl border border-border/40 bg-card/40"
-            />
-          ))}
-        </div>
+        <Card>
+          <CardContent className="py-10 text-center text-sm text-muted-foreground">
+            Memuat riwayat reservasi...
+          </CardContent>
+        </Card>
       ) : errorMessage ? (
-        <div className="flex min-h-[320px] flex-col items-center justify-center rounded-3xl border border-dashed border-destructive/40 bg-destructive/5 px-6 py-12 text-center">
-          <h2 className="font-display text-lg font-semibold text-foreground">
-            Gagal Memuat Reservasi
-          </h2>
-          <p className="mb-6 mt-2 text-sm text-muted-foreground">
-            {errorMessage}
-          </p>
-          <Button onClick={() => window.location.reload()}>Coba lagi</Button>
-        </div>
-      ) : reservations.length === 0 ? (
-        <div className="flex min-h-[420px] flex-col items-center justify-center rounded-3xl border border-dashed border-border/50 bg-card/30 px-6 py-16 text-center">
-          <CalendarCheck className="mb-4 h-16 w-16 text-muted-foreground" />
-          <h2 className="font-display text-lg font-semibold text-foreground">
-            Belum Ada Reservasi
-          </h2>
-          <p className="mb-6 mt-2 text-sm text-muted-foreground">
-            Anda belum memiliki booking lokasi apapun.
-          </p>
-          <Button onClick={() => router.push("/locations")}>Jelajahi Lokasi</Button>
-        </div>
+        <Card className="border-destructive/50">
+          <CardContent className="py-10 text-center">
+            <p className="text-sm text-destructive">{errorMessage}</p>
+            <Button className="mt-4" onClick={() => window.location.reload()}>
+              Coba Lagi
+            </Button>
+          </CardContent>
+        </Card>
+      ) : orders.length === 0 ? (
+        <Card>
+          <CardContent className="py-10 text-center">
+            <p className="text-sm text-muted-foreground">
+              Belum ada order sebelumnya.
+            </p>
+            <Button className="mt-4" onClick={() => router.push("/explore")}>
+              Mulai Booking
+            </Button>
+          </CardContent>
+        </Card>
       ) : (
         <div className="space-y-4">
-          {reservations.map((reservation) => {
-            const status = getStatusLabel(
-              reservation.bookingFrom,
-              reservation.bookingTo,
-            );
-            const reviewKey = `${reservation.orderId}-${reservation.locationId}`;
-            const hasReviewed = reviewedKeys.has(reviewKey);
-            const canReview = status.text === "Selesai";
+          <Card>
+            <CardContent className="flex flex-wrap items-center justify-between gap-3 py-2">
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <ReceiptText className="h-4 w-4" />
+                Total order:{" "}
+                <span className="font-semibold text-foreground">
+                  {orders.length}
+                </span>
+              </div>
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Package2 className="h-4 w-4" />
+                Total item:{" "}
+                <span className="font-semibold text-foreground">
+                  {totalItems}
+                </span>
+              </div>
+            </CardContent>
+          </Card>
 
-            return (
-              <ReservationCard
-                key={reservation.id}
-                reservation={reservation}
-                status={status}
-                action={
-                  canReview ? (
-                    hasReviewed ? (
-                      <span className="rounded-md bg-emerald-100 px-2 py-1 text-xs font-medium text-emerald-700">
-                        Sudah direview
-                      </span>
-                    ) : (
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="secondary"
-                        onClick={() => handleOpenReviewDialog(reservation)}
+          {orders.map((order) => (
+            <Card key={order.id}>
+              <CardHeader className="gap-3">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <CardTitle className="text-base md:text-lg">
+                    Order {order.orderCode}
+                  </CardTitle>
+                  <Badge
+                    className={getPaymentStatusBadgeClass(order.paymentStatus)}
+                  >
+                    {order.paymentStatus}
+                  </Badge>
+                </div>
+                <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                  <Badge variant="outline">Tujuan: {order.purpose}</Badge>
+                  <Badge variant="outline">
+                    Tanggal order: {formatDate(order.createdAt)}
+                  </Badge>
+                  <Badge variant="outline">{order.itemCount} item</Badge>
+                </div>
+              </CardHeader>
+
+              <CardContent className="space-y-3">
+                <Collapsible>
+                  <CollapsibleTrigger asChild>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="flex w-full items-center justify-between"
+                    >
+                      <span>Lihat detail item ({order.items.length})</span>
+                      <ChevronDown className="h-4 w-4 transition-transform group-data-[state=open]/collapsible:rotate-180" />
+                    </Button>
+                  </CollapsibleTrigger>
+
+                  <CollapsibleContent className="space-y-3 pt-3">
+                    {order.items.map((item) => (
+                      <div
+                        key={item.id}
+                        className="rounded-lg border border-border/60 p-3"
                       >
-                        Review
-                      </Button>
-                    )
-                  ) : null
-                }
-              />
-            );
-          })}
+                        <div className="flex flex-wrap items-start justify-between gap-3">
+                          <div className="flex min-w-0 items-start gap-3">
+                            <div className="relative h-16 w-24 shrink-0 overflow-hidden rounded-md border border-border/60 bg-muted/30">
+                              <Image
+                                src={item.imageUrl || "/hero.webp"}
+                                alt={item.itemName}
+                                fill
+                                sizes="96px"
+                                className="object-cover"
+                              />
+                            </div>
+
+                            <div className="space-y-1">
+                              <p className="text-sm font-semibold text-foreground">
+                                {item.itemName}
+                              </p>
+                              <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                                <Badge variant="secondary">
+                                  {item.itemTypeLabel}
+                                </Badge>
+
+                                <span>Qty: {item.quantity}</span>
+                                {item.isFromBundle ? (
+                                  <Badge
+                                    variant="outline"
+                                    className="text-[10px]"
+                                  >
+                                    Dari bundle: {item.bundleName ?? "Bundle"}
+                                  </Badge>
+                                ) : null}
+                              </div>
+                              {item.bookingStart || item.bookingEnd ? (
+                                <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                                  <CalendarDays className="h-3.5 w-3.5" />
+                                  <span>
+                                    {formatDate(item.bookingStart)} -{" "}
+                                    {formatDate(item.bookingEnd)}
+                                  </span>
+                                </div>
+                              ) : null}
+                            </div>
+                          </div>
+
+                          <div className="text-right text-sm">
+                            <p className="text-muted-foreground">
+                              {formatPrice(item.unitPrice)} x {item.quantity}
+                            </p>
+                            <p className="font-semibold text-primary">
+                              {formatPrice(item.lineTotal)}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </CollapsibleContent>
+                </Collapsible>
+
+                <Separator />
+
+                <div className="flex items-center justify-between text-sm font-semibold">
+                  <span>Total Order</span>
+                  <span>{formatPrice(order.totalAmount)}</span>
+                </div>
+              </CardContent>
+            </Card>
+          ))}
         </div>
       )}
-
-      <Dialog open={reviewDialogOpen} onOpenChange={setReviewDialogOpen}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>
-              Review: {selectedReservation?.name ?? "Lokasi"}
-            </DialogTitle>
-          </DialogHeader>
-
-          <div className="space-y-4">
-            <div>
-              <Label className="mb-2 block">Rating</Label>
-              <div className="flex items-center gap-1">
-                {[1, 2, 3, 4, 5].map((value) => (
-                  <button
-                    key={value}
-                    type="button"
-                    onClick={() => setRating(value)}
-                    className="rounded-md p-1 transition-colors hover:bg-accent"
-                    aria-label={`Pilih rating ${value}`}
-                  >
-                    <Star
-                      className={`h-6 w-6 ${
-                        value <= rating
-                          ? "fill-primary text-primary"
-                          : "text-muted-foreground/40"
-                      }`}
-                    />
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <div>
-              <Label htmlFor="review-comment" className="mb-2 block">
-                Komentar
-              </Label>
-              <Textarea
-                id="review-comment"
-                value={comment}
-                onChange={(event) => setComment(event.target.value)}
-                placeholder="Tulis pengalaman kamu tentang lokasi ini"
-                rows={4}
-              />
-            </div>
-          </div>
-
-          <DialogFooter>
-            <Button
-              type="button"
-              variant="secondary"
-              onClick={() => setReviewDialogOpen(false)}
-              disabled={isSubmittingReview}
-            >
-              Batal
-            </Button>
-            <Button
-              type="button"
-              onClick={() => void handleSubmitReview()}
-              disabled={isSubmittingReview}
-            >
-              {isSubmittingReview ? "Mengirim..." : "Kirim Review"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }

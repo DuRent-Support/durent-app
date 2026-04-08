@@ -153,7 +153,7 @@ export default function AppHeaderProfile() {
 
       <PopoverContent className="w-52 p-2" align="end">
         <div className="flex flex-col gap-1">
-          <button
+          {/* <button
             onClick={() => {
               setOpen(false);
               router.push("/settings");
@@ -162,7 +162,7 @@ export default function AppHeaderProfile() {
           >
             <Settings className="h-4 w-4" />
             <span>Settings</span>
-          </button>
+          </button> */}
           <Separator />
           <button
             onClick={handleLogout}

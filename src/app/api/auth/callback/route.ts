@@ -24,7 +24,7 @@ function resolveSafeNext(nextParam: string | null) {
     return "/";
   }
 
-  if (nextParam.startsWith("/login") || nextParam.startsWith("/register")) {
+  if (nextParam.startsWith("/login")) {
     return "/";
   }
 

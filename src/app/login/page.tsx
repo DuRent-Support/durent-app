@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Film } from "lucide-react";
 import Image from "next/image";
 import { Button } from "@/components/ui/button";
 import { createClient } from "@/lib/supabase/client";
@@ -76,7 +75,7 @@ export default function LoginPage() {
               className="h-10 w-10 object-contain"
               width={50}
               height={50}
-              />
+            />
           </div>
           <h1 className="font-display text-2xl font-bold tracking-tight text-foreground">
             DuRent
@@ -116,18 +115,6 @@ export default function LoginPage() {
             autentikasi.
           </p>
         </div>
-
-        {/* <div className="mt-6 text-center"> */}
-          {/* <span className="text-sm text-muted-foreground">
-            Belum punya akun?{" "}
-          </span>
-          <Link
-            href="/register"
-            className="text-sm font-medium text-foreground hover:underline"
-          >
-            Daftar
-          </Link> */}
-        {/* </div> */}
       </div>
     </div>
   );

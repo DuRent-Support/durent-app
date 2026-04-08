@@ -4,40 +4,34 @@ import { createClient, createServiceRoleClient } from "@/lib/supabase/server";
 import type { Profile } from "@/types";
 
 type OrderRow = {
-  order_id: string;
-  user_id: string;
-  created_at: string;
-};
-
-type OrderSummaryRow = {
+  id: number;
+  code: string;
+  user_uuid: string;
   payment_status: string | null;
-  total_price: string | number | null;
+  grand_total_amount: string | number | null;
+  created_at: string | null;
 };
 
 type OrderItemRow = {
-  order_id: string;
-  location_id: string;
-  booking_start: string;
-  booking_end: string;
+  order_id: number;
+  item_id: number;
+  booking_start: string | null;
+  booking_end: string | null;
 };
 
 type LocationRow = {
-  shooting_location_id: string;
-  shooting_location_name: string;
+  id: number;
+  name: string | null;
+  city: string | null;
 };
 
 type ReviewRow = {
-  review_id: string;
-  user_id: string;
-  location_id: string;
-  rating: number;
+  id: number;
+  user_uuid: string;
+  location_id: number;
+  rating: number | null;
   comment: string | null;
-};
-
-type ReviewLocationRow = {
-  shooting_location_id: string;
-  shooting_location_name: string;
-  shooting_location_city: string | null;
+  created_at: string | null;
 };
 
 type RecentBookingRow = {
@@ -54,6 +48,11 @@ type ReviewSummaryRow = {
   location: string;
   rating: number;
   comment: string;
+};
+
+type ProfileNameRow = {
+  user_uuid: string;
+  full_name: string | null;
 };
 
 function formatDateRange(start: string, end: string) {
@@ -87,6 +86,28 @@ function isPaidStatus(value: string | null | undefined) {
   return status === "paid" || status === "settlement";
 }
 
+async function getTagsCount() {
+  const serviceRoleClient = createServiceRoleClient();
+
+  const locationTagsResult = await serviceRoleClient
+    .from("location_tags")
+    .select("id", { count: "exact", head: true });
+
+  if (!locationTagsResult.error) {
+    return locationTagsResult.count ?? 0;
+  }
+
+  const legacyTagsResult = await serviceRoleClient
+    .from("tags")
+    .select("tag_id", { count: "exact", head: true });
+
+  if (!legacyTagsResult.error) {
+    return legacyTagsResult.count ?? 0;
+  }
+
+  return 0;
+}
+
 export async function GET() {
   try {
     const supabase = await createClient();
@@ -115,55 +136,60 @@ export async function GET() {
     const [
       profilesCountResult,
       locationsCountResult,
-      tagsCountResult,
       ordersCountResult,
       ordersSummaryResult,
-      orderItemsCountResult,
+      orderLocationItemsCountResult,
       recentOrdersResult,
       reviewsResult,
+      tagsCount,
     ] = await Promise.all([
       serviceRoleClient
         .from("profiles")
         .select("user_uuid", { count: "exact", head: true }),
       serviceRoleClient
-        .from("shooting_locations")
-        .select("shooting_location_id", { count: "exact", head: true }),
-      serviceRoleClient
-        .from("tags")
-        .select("tag_id", { count: "exact", head: true }),
+        .from("locations")
+        .select("id", { count: "exact", head: true }),
       serviceRoleClient
         .from("orders")
-        .select("order_id", { count: "exact", head: true }),
-      serviceRoleClient.from("orders").select("payment_status, total_price"),
+        .select("id", { count: "exact", head: true }),
+      serviceRoleClient
+        .from("orders")
+        .select(
+          "id, code, user_uuid, payment_status, grand_total_amount, created_at",
+        ),
       serviceRoleClient
         .from("order_items")
-        .select("order_id", { count: "exact", head: true }),
+        .select("id", { count: "exact", head: true })
+        .eq("item_type", "location"),
       serviceRoleClient
         .from("orders")
-        .select("order_id, user_id, created_at")
+        .select(
+          "id, code, user_uuid, payment_status, grand_total_amount, created_at",
+        )
         .order("created_at", { ascending: false })
         .limit(5),
       serviceRoleClient
-        .from("reviews")
-        .select("review_id, user_id, location_id, rating, comment"),
+        .from("location_reviews")
+        .select("id, user_uuid, location_id, rating, comment, created_at")
+        .order("created_at", { ascending: false }),
+      getTagsCount(),
     ]);
 
     const totalUsers = profilesCountResult.count ?? 0;
     const totalLocations = locationsCountResult.count ?? 0;
-    const totalTags = tagsCountResult.count ?? 0;
+    const totalTags = tagsCount;
     const totalBookings = ordersCountResult.count ?? 0;
 
-    const orderSummaryRows = (ordersSummaryResult.data ??
-      []) as OrderSummaryRow[];
+    const orderSummaryRows = (ordersSummaryResult.data ?? []) as OrderRow[];
 
     const bookingSummary = {
       totalOrder: orderSummaryRows.length,
       paidOrders: orderSummaryRows.filter((order) =>
         isPaidStatus(order.payment_status),
       ).length,
-      totalLocations: orderItemsCountResult.count ?? 0,
+      totalLocations: orderLocationItemsCountResult.count ?? 0,
       totalRevenue: orderSummaryRows.reduce(
-        (acc, order) => acc + parseNumber(order.total_price),
+        (acc, order) => acc + parseNumber(order.grand_total_amount),
         0,
       ),
     };
@@ -172,35 +198,52 @@ export async function GET() {
     const reviewLocationIds = [
       ...new Set(reviewRows.map((review) => review.location_id)),
     ];
+    const reviewUserIds = [
+      ...new Set(reviewRows.map((review) => review.user_uuid)),
+    ];
 
-    let reviewLocationsMap = new Map<string, ReviewLocationRow>();
-
+    let reviewLocationsMap = new Map<number, LocationRow>();
     if (reviewLocationIds.length > 0) {
       const { data: reviewLocationsData } = await serviceRoleClient
-        .from("shooting_locations")
-        .select(
-          "shooting_location_id, shooting_location_name, shooting_location_city",
-        )
-        .in("shooting_location_id", reviewLocationIds);
+        .from("locations")
+        .select("id, name, city")
+        .in("id", reviewLocationIds);
 
       reviewLocationsMap = new Map(
-        ((reviewLocationsData ?? []) as ReviewLocationRow[]).map((location) => [
-          location.shooting_location_id,
+        ((reviewLocationsData ?? []) as LocationRow[]).map((location) => [
+          location.id,
           location,
         ]),
       );
     }
 
+    const profileNameMap = new Map<string, string>();
+    if (reviewUserIds.length > 0) {
+      const { data: profileNamesData } = await serviceRoleClient
+        .from("profiles")
+        .select("user_uuid, full_name")
+        .in("user_uuid", reviewUserIds);
+
+      ((profileNamesData ?? []) as ProfileNameRow[]).forEach((row) => {
+        const fullName = String(row.full_name ?? "").trim();
+        if (fullName) {
+          profileNameMap.set(row.user_uuid, fullName);
+        }
+      });
+    }
+
     const reviews: ReviewSummaryRow[] = reviewRows.map((review) => {
       const location = reviewLocationsMap.get(review.location_id);
+      const userName =
+        profileNameMap.get(review.user_uuid) ??
+        `User ${String(review.user_uuid).slice(0, 8)}`;
 
       return {
-        id: review.review_id,
-        userName: `User ${review.user_id.slice(0, 8)}`,
-        locationTitle:
-          location?.shooting_location_name ?? "Lokasi tidak ditemukan",
-        location: location?.shooting_location_city ?? "-",
-        rating: Number(review.rating) || 0,
+        id: String(review.id),
+        userName,
+        locationTitle: String(location?.name ?? "Lokasi tidak ditemukan"),
+        location: String(location?.city ?? "-"),
+        rating: Math.max(0, Number(review.rating ?? 0)),
         comment: review.comment?.trim() || "-",
       };
     });
@@ -213,16 +256,14 @@ export async function GET() {
           ).toFixed(1)
         : "0.0";
 
-    const ratingDist = [5, 4, 3, 2, 1].map((star) => ({
-      star,
-      count: reviews.filter((review) => review.rating === star).length,
-      pct:
-        reviews.length > 0
-          ? (reviews.filter((review) => review.rating === star).length /
-              reviews.length) *
-            100
-          : 0,
-    }));
+    const ratingDist = [5, 4, 3, 2, 1].map((star) => {
+      const count = reviews.filter((review) => review.rating === star).length;
+      return {
+        star,
+        count,
+        pct: reviews.length > 0 ? (count / reviews.length) * 100 : 0,
+      };
+    });
 
     const recentReviews = [...reviews].slice(0, 6);
     const recentOrders = (recentOrdersResult.data ?? []) as OrderRow[];
@@ -230,58 +271,80 @@ export async function GET() {
     let recentBookings: RecentBookingRow[] = [];
 
     if (recentOrders.length > 0) {
-      const orderIds = recentOrders.map((order) => order.order_id);
-
-      const { data: orderItemsData } = await serviceRoleClient
-        .from("order_items")
-        .select("order_id, location_id, booking_start, booking_end")
-        .in("order_id", orderIds);
-
-      const orderItems = (orderItemsData ?? []) as OrderItemRow[];
-      const locationIds = [
-        ...new Set(orderItems.map((item) => item.location_id)),
+      const orderIds = recentOrders.map((order) => order.id);
+      const recentUserIds = [
+        ...new Set(recentOrders.map((order) => order.user_uuid)),
       ];
 
-      const { data: locationsData } = await serviceRoleClient
-        .from("shooting_locations")
-        .select("shooting_location_id, shooting_location_name")
-        .in("shooting_location_id", locationIds);
+      const [orderItemsDataResult, locationsDataResult, recentProfilesResult] =
+        await Promise.all([
+          serviceRoleClient
+            .from("order_items")
+            .select("order_id, item_id, booking_start, booking_end")
+            .eq("item_type", "location")
+            .in("order_id", orderIds),
+          serviceRoleClient.from("locations").select("id, name, city"),
+          serviceRoleClient
+            .from("profiles")
+            .select("user_uuid, full_name")
+            .in("user_uuid", recentUserIds),
+        ]);
 
-      const locations = (locationsData ?? []) as LocationRow[];
-      const locationMap = new Map(
-        locations.map((location) => [
-          location.shooting_location_id,
-          location.shooting_location_name,
+      const orderItems = (orderItemsDataResult.data ?? []) as OrderItemRow[];
+      const allLocations = (locationsDataResult.data ?? []) as LocationRow[];
+      const recentProfiles = (recentProfilesResult.data ??
+        []) as ProfileNameRow[];
+
+      const locationMap = new Map<number, string>(
+        allLocations.map((location) => [
+          location.id,
+          String(location.name ?? "-"),
         ]),
       );
 
+      const recentProfileMap = new Map<string, string>();
+      recentProfiles.forEach((profileRow) => {
+        const fullName = String(profileRow.full_name ?? "").trim();
+        if (fullName) {
+          recentProfileMap.set(profileRow.user_uuid, fullName);
+        }
+      });
+
       recentBookings = recentOrders.map((order) => {
         const itemsForOrder = orderItems.filter(
-          (item) => item.order_id === order.order_id,
+          (item) => item.order_id === order.id,
         );
 
         const locationNames = itemsForOrder
           .map(
             (item) =>
-              locationMap.get(item.location_id) ?? "Lokasi tidak ditemukan",
+              locationMap.get(Number(item.item_id)) ?? "Lokasi tidak ditemukan",
           )
           .filter((name, index, array) => array.indexOf(name) === index);
 
-        const sortedByStart = [...itemsForOrder].sort((a, b) =>
-          a.booking_start.localeCompare(b.booking_start),
-        );
+        const bookingStarts = itemsForOrder
+          .map((item) => item.booking_start)
+          .filter((value): value is string => Boolean(value))
+          .sort((a, b) => a.localeCompare(b));
 
-        const firstItem = sortedByStart[0];
-        const lastItem = sortedByStart[sortedByStart.length - 1];
+        const bookingEnds = itemsForOrder
+          .map((item) => item.booking_end)
+          .filter((value): value is string => Boolean(value))
+          .sort((a, b) => a.localeCompare(b));
 
         const dateRange =
-          firstItem && lastItem
-            ? formatDateRange(firstItem.booking_start, lastItem.booking_end)
+          bookingStarts.length > 0 && bookingEnds.length > 0
+            ? formatDateRange(
+                bookingStarts[0],
+                bookingEnds[bookingEnds.length - 1],
+              )
             : "-";
 
         return {
-          orderId: order.order_id,
-          userLabel: order.user_id,
+          orderId: order.code,
+          userLabel:
+            recentProfileMap.get(order.user_uuid) ??
+            `User ${String(order.user_uuid).slice(0, 8)}`,
           locationNames:
             locationNames.length > 0 ? locationNames.join(", ") : "-",
           dateRange,

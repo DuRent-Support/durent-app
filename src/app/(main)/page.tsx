@@ -1,37 +1,28 @@
 import { headers } from "next/headers";
 import Link from "next/link";
-import { Calendar, Clock, MapPin, Wallet } from "lucide-react";
+import { Calendar, ReceiptText, Wallet } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import formatPrice from "@/lib/formatPrice";
 
-type BookingState = "upcoming" | "ongoing" | "finished";
-
 type DashboardSummary = {
-  totalBookings: number;
-  upcomingBookings: number;
-  ongoingBookings: number;
-  finishedBookings: number;
+  totalOrders: number;
+  paidOrders: number;
+  pendingOrders: number;
+  paidLocationBookings: number;
+  reviewedLocations: number;
   pendingPayments: number;
-  toReviewCount: number;
   totalSpent: number;
 };
 
-type NextBooking = {
-  id: string;
+type RecentOrder = {
   orderId: string;
-  locationId: string;
-  locationName: string;
-  city: string;
-  imageUrl: string;
-  bookingFrom: string;
-  bookingTo: string;
-  days: number;
-  subtotal: number;
-  state: BookingState;
   paymentStatus: string;
+  totalAmount: number;
+  createdAt: string | null;
+  locationItemCount: number;
 };
 
 type PendingPayment = {
@@ -43,31 +34,20 @@ type PendingPayment = {
 
 type DashboardResponse = {
   summary?: Partial<DashboardSummary>;
-  nextBookings?: NextBooking[];
+  recentOrders?: RecentOrder[];
   pendingPayments?: PendingPayment[];
   message?: string;
 };
 
 const emptySummary: DashboardSummary = {
-  totalBookings: 0,
-  upcomingBookings: 0,
-  ongoingBookings: 0,
-  finishedBookings: 0,
+  totalOrders: 0,
+  paidOrders: 0,
+  pendingOrders: 0,
+  paidLocationBookings: 0,
+  reviewedLocations: 0,
   pendingPayments: 0,
-  toReviewCount: 0,
   totalSpent: 0,
 };
-
-function formatDateRange(start: string, end: string) {
-  const startDate = new Date(start);
-  const endDate = new Date(end);
-
-  if (Number.isNaN(startDate.getTime()) || Number.isNaN(endDate.getTime())) {
-    return "-";
-  }
-
-  return `${startDate.toLocaleDateString("id-ID")} - ${endDate.toLocaleDateString("id-ID")}`;
-}
 
 function formatDate(value: string | null) {
   if (!value) return "-";
@@ -76,21 +56,16 @@ function formatDate(value: string | null) {
   return date.toLocaleDateString("id-ID");
 }
 
-function getBookingLabel(state: BookingState) {
-  if (state === "ongoing") return "Sedang Berjalan";
-  if (state === "finished") return "Selesai";
-  return "Akan Datang";
-}
-
-function getBookingBadgeVariant(state: BookingState) {
-  if (state === "ongoing") return "secondary";
-  if (state === "finished") return "ghost";
-  return "outline";
+function getPaymentBadgeVariant(paymentStatus: string) {
+  const normalized = String(paymentStatus).trim().toLowerCase();
+  if (normalized === "paid" || normalized === "settlement") return "secondary";
+  if (normalized === "pending") return "outline";
+  return "ghost";
 }
 
 async function getDashboardData(): Promise<{
   summary: DashboardSummary;
-  nextBookings: NextBooking[];
+  recentOrders: RecentOrder[];
   pendingPayments: PendingPayment[];
   message: string;
 }> {
@@ -101,7 +76,7 @@ async function getDashboardData(): Promise<{
   if (!host) {
     return {
       summary: emptySummary,
-      nextBookings: [],
+      recentOrders: [],
       pendingPayments: [],
       message: "",
     };
@@ -119,7 +94,7 @@ async function getDashboardData(): Promise<{
     if (!response.ok) {
       return {
         summary: emptySummary,
-        nextBookings: [],
+        recentOrders: [],
         pendingPayments: [],
         message: "",
       };
@@ -132,7 +107,7 @@ async function getDashboardData(): Promise<{
         ...emptySummary,
         ...data.summary,
       },
-      nextBookings: data.nextBookings ?? [],
+      recentOrders: data.recentOrders ?? [],
       pendingPayments: data.pendingPayments ?? [],
       message: data.message ?? "",
     };
@@ -140,7 +115,7 @@ async function getDashboardData(): Promise<{
     console.error("Fetch user dashboard error:", error);
     return {
       summary: emptySummary,
-      nextBookings: [],
+      recentOrders: [],
       pendingPayments: [],
       message: "",
     };
@@ -148,38 +123,33 @@ async function getDashboardData(): Promise<{
 }
 
 export default async function UserDashboardPage() {
-  const { summary, nextBookings, pendingPayments } = await getDashboardData();
+  const { summary, recentOrders, pendingPayments } = await getDashboardData();
 
   const stats = [
     {
-      title: "Total Booking",
-      value: summary.totalBookings,
-      helper: "Semua pesanan kamu",
+      title: "Total Orders",
+      value: summary.totalOrders,
+      helper: "Semua order kamu",
     },
     {
-      title: "Akan Datang",
-      value: summary.upcomingBookings,
-      helper: "Booking mendatang",
+      title: "Orders Lunas",
+      value: summary.paidOrders,
+      helper: "Status paid/settlement",
     },
     {
-      title: "Sedang Berjalan",
-      value: summary.ongoingBookings,
-      helper: "Booking aktif",
-    },
-    {
-      title: "Selesai",
-      value: summary.finishedBookings,
-      helper: "Booking selesai",
-    },
-    {
-      title: "Pembayaran Pending",
-      value: summary.pendingPayments,
+      title: "Orders Pending",
+      value: summary.pendingOrders,
       helper: "Menunggu pembayaran",
     },
     {
-      title: "Perlu Review",
-      value: summary.toReviewCount,
-      helper: "Berikan ulasan",
+      title: "Location Booking",
+      value: summary.paidLocationBookings,
+      helper: "Booking lokasi yang sudah lunas",
+    },
+    {
+      title: "Location Direview",
+      value: summary.reviewedLocations,
+      helper: "Jumlah lokasi yang sudah diulas",
     },
   ];
 
@@ -214,46 +184,42 @@ export default async function UserDashboardPage() {
         <Card className="border-border md:col-span-2">
           <CardHeader>
             <CardTitle className="font-display text-base">
-              Booking Selanjutnya
+              Orders Terbaru
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            {nextBookings.length === 0 ? (
-              <p className="text-sm text-muted-foreground">
-                Belum ada booking aktif.
-              </p>
+            {recentOrders.length === 0 ? (
+              <p className="text-sm text-muted-foreground">Belum ada order.</p>
             ) : (
-              nextBookings.map((booking) => (
+              recentOrders.map((order) => (
                 <div
-                  key={booking.id}
+                  key={order.orderId}
                   className="rounded-xl border border-border/60 bg-background p-4"
                 >
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <div>
                       <p className="text-sm font-semibold text-foreground">
-                        {booking.locationName}
+                        Order #{order.orderId}
                       </p>
                       <div className="mt-1 flex items-center gap-2 text-xs text-muted-foreground">
-                        <MapPin className="h-3.5 w-3.5" />
-                        <span>{booking.city}</span>
+                        <Calendar className="h-3.5 w-3.5" />
+                        <span>{formatDate(order.createdAt)}</span>
                       </div>
                     </div>
-                    <Badge variant={getBookingBadgeVariant(booking.state)}>
-                      {getBookingLabel(booking.state)}
+                    <Badge
+                      variant={getPaymentBadgeVariant(order.paymentStatus)}
+                    >
+                      {order.paymentStatus}
                     </Badge>
                   </div>
                   <div className="mt-3 flex flex-wrap items-center gap-4 text-xs text-muted-foreground">
                     <span className="flex items-center gap-1">
-                      <Calendar className="h-3.5 w-3.5" />
-                      {formatDateRange(booking.bookingFrom, booking.bookingTo)}
-                    </span>
-                    <span className="flex items-center gap-1">
-                      <Clock className="h-3.5 w-3.5" />
-                      {booking.days} hari
+                      <ReceiptText className="h-3.5 w-3.5" />
+                      {order.locationItemCount} item lokasi
                     </span>
                     <span className="flex items-center gap-1">
                       <Wallet className="h-3.5 w-3.5" />
-                      {formatPrice(booking.subtotal)}
+                      {formatPrice(order.totalAmount)}
                     </span>
                   </div>
                 </div>
@@ -318,15 +284,15 @@ export default async function UserDashboardPage() {
             </span>
           </div>
           <div className="flex items-center justify-between">
-            <span>Booking selesai</span>
+            <span>Orders lunas</span>
             <span className="font-semibold text-foreground">
-              {summary.finishedBookings}
+              {summary.paidOrders}
             </span>
           </div>
           <div className="flex items-center justify-between">
-            <span>Review tersisa</span>
+            <span>Lokasi direview</span>
             <span className="font-semibold text-foreground">
-              {summary.toReviewCount}
+              {summary.reviewedLocations}
             </span>
           </div>
         </CardContent>
