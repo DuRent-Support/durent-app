@@ -1,10 +1,24 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { Loader2, Pencil, Plus, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
+import {
+  Combobox,
+  ComboboxChip,
+  ComboboxChips,
+  ComboboxChipsInput,
+  ComboboxContent,
+  ComboboxEmpty,
+  ComboboxInput,
+  ComboboxItem,
+  ComboboxList,
+  ComboboxValue,
+  useComboboxAnchor,
+} from "@/components/ui/combobox";
 import {
   Dialog,
   DialogClose,
@@ -50,6 +64,8 @@ type BundleItemForm = {
   quantity: number;
   notes: string;
 };
+
+type BundleItemKey = "crews" | "rentals" | "food_and_beverages" | "expendables";
 
 type BundleItem = {
   id: number;
@@ -123,6 +139,12 @@ const normalizeImages = (images?: BundleImage[]) =>
     }));
 
 export default function AdminBundlesPage() {
+  const searchParams = useSearchParams();
+  const crewComboboxAnchor = useComboboxAnchor();
+  const rentalComboboxAnchor = useComboboxAnchor();
+  const foodComboboxAnchor = useComboboxAnchor();
+  const expendableComboboxAnchor = useComboboxAnchor();
+  const bundleDialogRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [pendingImageIndex, setPendingImageIndex] = useState<number | null>(
     null,
@@ -142,8 +164,22 @@ export default function AdminBundlesPage() {
   const [saving, setSaving] = useState(false);
   const [uploadingImage, setUploadingImage] = useState(false);
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
+  const [searchQuery, setSearchQuery] = useState("");
 
   const formImages = Array.isArray(formData.images) ? formData.images : [];
+
+  const visibleRecords = useMemo(() => {
+    const keyword = searchQuery.trim().toLowerCase();
+    if (!keyword) {
+      return records;
+    }
+
+    return records.filter((item) => {
+      const code = String(item.code ?? "").toLowerCase();
+      const name = String(item.name ?? "").toLowerCase();
+      return code.includes(keyword) || name.includes(keyword);
+    });
+  }, [records, searchQuery]);
 
   const optionPriceMaps = useMemo(
     () => ({
@@ -202,6 +238,15 @@ export default function AdminBundlesPage() {
     formData.bundle_type_ids,
     formData.bundle_category_ids,
   ]);
+
+  useEffect(() => {
+    const fromCode = searchParams.get("code")?.trim() ?? "";
+    const fromSearch = searchParams.get("search")?.trim() ?? "";
+    const initialKeyword = fromCode || fromSearch;
+    if (initialKeyword) {
+      setSearchQuery(initialKeyword);
+    }
+  }, [searchParams]);
 
   const fetchRecords = useCallback(async () => {
     try {
@@ -539,25 +584,52 @@ export default function AdminBundlesPage() {
     }));
   };
 
-  const toggleBundleItem = (
-    key: "crews" | "rentals" | "food_and_beverages" | "expendables",
-    itemId: number,
+  const removeBundleItem = (key: BundleItemKey, itemId: number) => {
+    setFormData((prev) => ({
+      ...prev,
+      [key]: prev[key].filter((item) => Number(item.id) !== Number(itemId)),
+    }));
+  };
+
+  const syncBundleItemsFromSelection = (
+    key: BundleItemKey,
+    selectedValues: string[],
   ) => {
     setFormData((prev) => {
-      const current = prev[key];
-      const exists = current.some((item) => item.id === itemId);
+      const normalizedIds = Array.from(
+        new Set(
+          selectedValues
+            .map((value) => Number(value))
+            .filter((value) => Number.isInteger(value)),
+        ),
+      );
+
+      const currentMap = new Map(
+        prev[key].map((item) => [Number(item.id), item]),
+      );
+
+      const nextItems = normalizedIds.map((id) => {
+        const existing = currentMap.get(id);
+        if (existing) {
+          return existing;
+        }
+
+        return {
+          id,
+          quantity: 1,
+          notes: "",
+        };
+      });
 
       return {
         ...prev,
-        [key]: exists
-          ? current.filter((item) => item.id !== itemId)
-          : [...current, { id: itemId, quantity: 1, notes: "" }],
+        [key]: nextItems,
       };
     });
   };
 
   const updateBundleItem = (
-    key: "crews" | "rentals" | "food_and_beverages" | "expendables",
+    key: BundleItemKey,
     itemId: number,
     changes: Partial<BundleItemForm>,
   ) => {
@@ -707,36 +779,75 @@ export default function AdminBundlesPage() {
 
   const renderItemSelector = (
     title: string,
-    key: "crews" | "rentals" | "food_and_beverages" | "expendables",
+    key: BundleItemKey,
     options: ItemOption[],
+    anchor: ReturnType<typeof useComboboxAnchor>,
   ) => {
-    const selectedIds = formData[key].map((item) => item.id);
+    const selectedIds = formData[key].map((item) => String(item.id));
+    const optionMap = new Map(options.map((item) => [String(item.id), item]));
+    const comboboxItems = options.map((item) => String(item.id));
+
     return (
       <div className="grid gap-2">
         <Label>{title}</Label>
-        <div className="flex flex-wrap gap-2">
-          {options.map((item) => (
-            <button
-              key={item.id}
-              type="button"
-              onClick={() => toggleBundleItem(key, item.id)}
-              className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
-                selectedIds.includes(item.id)
-                  ? "bg-primary text-primary-foreground"
-                  : "bg-secondary text-secondary-foreground hover:bg-secondary/80"
-              }`}
-            >
-              {item.name} ({formatPrice(item.price)})
-            </button>
-          ))}
-        </div>
+        <Combobox
+          multiple
+          autoHighlight
+          items={comboboxItems}
+          itemToStringValue={(id) => optionMap.get(String(id))?.name ?? ""}
+          value={selectedIds}
+          onValueChange={(values) => {
+            const nextValues = Array.isArray(values)
+              ? values.map((value) => String(value))
+              : [];
+            syncBundleItemsFromSelection(key, nextValues);
+          }}
+        >
+          <ComboboxChips ref={anchor} className="w-full">
+            <ComboboxValue>
+              {(values) => (
+                <>
+                  {(Array.isArray(values) ? values : []).map((value) => {
+                    const option = optionMap.get(String(value));
+                    if (!option) return null;
+
+                    return (
+                      <ComboboxChip key={String(value)}>
+                        {option.name}
+                      </ComboboxChip>
+                    );
+                  })}
+                  <ComboboxChipsInput
+                    placeholder={`Pilih ${title.toLowerCase()}`}
+                    aria-label={title}
+                  />
+                </>
+              )}
+            </ComboboxValue>
+          </ComboboxChips>
+          <ComboboxContent anchor={anchor} container={bundleDialogRef}>
+            <ComboboxEmpty>Tidak ada item tersedia.</ComboboxEmpty>
+            <ComboboxList>
+              {(id) => {
+                const option = optionMap.get(String(id));
+                if (!option) return null;
+
+                return (
+                  <ComboboxItem key={option.id} value={String(option.id)}>
+                    {option.name} ({formatPrice(option.price)})
+                  </ComboboxItem>
+                );
+              }}
+            </ComboboxList>
+          </ComboboxContent>
+        </Combobox>
 
         {formData[key].length > 0 && (
           <div className="grid gap-2 rounded-md border border-border p-3">
             {formData[key].map((item) => (
               <div
                 key={item.id}
-                className="grid grid-cols-1 md:grid-cols-3 gap-2"
+                className="grid grid-cols-1 gap-2 md:grid-cols-[1fr_120px_1fr_auto]"
               >
                 <Input
                   value={
@@ -762,6 +873,16 @@ export default function AdminBundlesPage() {
                   }
                   placeholder="Catatan"
                 />
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="h-10 w-10 text-destructive hover:text-destructive"
+                  onClick={() => removeBundleItem(key, item.id)}
+                  aria-label="Hapus item"
+                >
+                  <Trash2 className="h-4 w-4" />
+                </Button>
               </div>
             ))}
           </div>
@@ -785,11 +906,22 @@ export default function AdminBundlesPage() {
 
         <div className="flex items-center justify-between mb-4">
           <span className="text-sm text-muted-foreground">
-            {records.length} bundle
+            {visibleRecords.length} dari {records.length} bundle
           </span>
           <Button size="sm" onClick={openAddDialog} className="gap-1.5">
             <Plus className="h-4 w-4" /> Tambah Bundle
           </Button>
+        </div>
+
+        <div className="mb-4">
+          <Input
+            value={searchQuery}
+            onChange={(event: React.ChangeEvent<HTMLInputElement>) =>
+              setSearchQuery(event.target.value)
+            }
+            placeholder="Cari berdasarkan code atau nama bundle"
+            className="sm:max-w-sm"
+          />
         </div>
 
         <div className="rounded-lg border border-border bg-card overflow-hidden">
@@ -815,18 +947,19 @@ export default function AdminBundlesPage() {
                     <Loader2 className="h-6 w-6 animate-spin text-muted-foreground mx-auto" />
                   </TableCell>
                 </TableRow>
-              ) : records.length === 0 ? (
+              ) : visibleRecords.length === 0 ? (
                 <TableRow>
                   <TableCell
                     colSpan={6}
                     className="text-center py-12 text-sm text-muted-foreground"
                   >
-                    Belum ada bundle. Klik &quot;Tambah Bundle&quot; untuk
-                    menambahkan.
+                    {searchQuery.trim()
+                      ? "Tidak ada data bundle yang cocok dengan pencarian."
+                      : 'Belum ada bundle. Klik "Tambah Bundle" untuk menambahkan.'}
                   </TableCell>
                 </TableRow>
               ) : (
-                records.map((item) => (
+                visibleRecords.map((item) => (
                   <TableRow key={item.id} className="border-border/50">
                     <TableCell className="font-mono text-xs text-muted-foreground">
                       {item.code}
@@ -872,7 +1005,10 @@ export default function AdminBundlesPage() {
       </div>
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="border-border sm:max-w-4xl max-h-[90vh] overflow-y-auto">
+        <DialogContent
+          ref={bundleDialogRef}
+          className="border-border sm:max-w-4xl max-h-[90vh] overflow-y-auto"
+        >
           <DialogHeader>
             <DialogTitle className="font-display">
               {editingRecord ? "Edit Bundle" : "Tambah Bundle"}
@@ -920,24 +1056,50 @@ export default function AdminBundlesPage() {
                     {formErrors.bundle_type_ids}
                   </p>
                 )}
-                <div className="flex flex-wrap gap-2">
-                  {bundleTypes.map((item) => (
-                    <button
-                      key={item.id}
-                      type="button"
-                      onClick={() =>
-                        selectSingleRelation("bundle_type_ids", Number(item.id))
-                      }
-                      className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
-                        formData.bundle_type_ids.includes(Number(item.id))
-                          ? "bg-primary text-primary-foreground"
-                          : "bg-secondary text-secondary-foreground hover:bg-secondary/80"
-                      }`}
-                    >
-                      {item.name}
-                    </button>
-                  ))}
-                </div>
+                <Combobox
+                  autoHighlight
+                  items={bundleTypes.map((item) => String(item.id))}
+                  itemToStringValue={(id) =>
+                    bundleTypes.find((item) => String(item.id) === id)?.name ??
+                    ""
+                  }
+                  value={
+                    formData.bundle_type_ids[0]
+                      ? String(formData.bundle_type_ids[0])
+                      : null
+                  }
+                  onValueChange={(value) => {
+                    if (!value) return;
+                    selectSingleRelation("bundle_type_ids", Number(value));
+                  }}
+                >
+                  <ComboboxInput
+                    className="w-full"
+                    placeholder="Pilih bundle type"
+                    aria-label="Bundle Type"
+                    showClear
+                  />
+                  <ComboboxContent container={bundleDialogRef}>
+                    <ComboboxEmpty>Data tidak ditemukan.</ComboboxEmpty>
+                    <ComboboxList>
+                      {(id) => {
+                        const option = bundleTypes.find(
+                          (item) => String(item.id) === id,
+                        );
+                        if (!option) return null;
+
+                        return (
+                          <ComboboxItem
+                            key={option.id}
+                            value={String(option.id)}
+                          >
+                            {option.name}
+                          </ComboboxItem>
+                        );
+                      }}
+                    </ComboboxList>
+                  </ComboboxContent>
+                </Combobox>
               </div>
 
               <div className="grid gap-1.5">
@@ -947,27 +1109,50 @@ export default function AdminBundlesPage() {
                     {formErrors.bundle_category_ids}
                   </p>
                 )}
-                <div className="flex flex-wrap gap-2">
-                  {bundleCategories.map((item) => (
-                    <button
-                      key={item.id}
-                      type="button"
-                      onClick={() =>
-                        selectSingleRelation(
-                          "bundle_category_ids",
-                          Number(item.id),
-                        )
-                      }
-                      className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
-                        formData.bundle_category_ids.includes(Number(item.id))
-                          ? "bg-primary text-primary-foreground"
-                          : "bg-secondary text-secondary-foreground hover:bg-secondary/80"
-                      }`}
-                    >
-                      {item.name}
-                    </button>
-                  ))}
-                </div>
+                <Combobox
+                  autoHighlight
+                  items={bundleCategories.map((item) => String(item.id))}
+                  itemToStringValue={(id) =>
+                    bundleCategories.find((item) => String(item.id) === id)
+                      ?.name ?? ""
+                  }
+                  value={
+                    formData.bundle_category_ids[0]
+                      ? String(formData.bundle_category_ids[0])
+                      : null
+                  }
+                  onValueChange={(value) => {
+                    if (!value) return;
+                    selectSingleRelation("bundle_category_ids", Number(value));
+                  }}
+                >
+                  <ComboboxInput
+                    className="w-full"
+                    placeholder="Pilih bundle category"
+                    aria-label="Bundle Category"
+                    showClear
+                  />
+                  <ComboboxContent container={bundleDialogRef}>
+                    <ComboboxEmpty>Data tidak ditemukan.</ComboboxEmpty>
+                    <ComboboxList>
+                      {(id) => {
+                        const option = bundleCategories.find(
+                          (item) => String(item.id) === id,
+                        );
+                        if (!option) return null;
+
+                        return (
+                          <ComboboxItem
+                            key={option.id}
+                            value={String(option.id)}
+                          >
+                            {option.name}
+                          </ComboboxItem>
+                        );
+                      }}
+                    </ComboboxList>
+                  </ComboboxContent>
+                </Combobox>
               </div>
             </div>
 
@@ -1049,17 +1234,29 @@ export default function AdminBundlesPage() {
               </div>
             </div>
 
-            {renderItemSelector("Crew Items", "crews", crewOptions)}
-            {renderItemSelector("Rental Items", "rentals", rentalOptions)}
+            {renderItemSelector(
+              "Crew Items",
+              "crews",
+              crewOptions,
+              crewComboboxAnchor,
+            )}
+            {renderItemSelector(
+              "Rental Items",
+              "rentals",
+              rentalOptions,
+              rentalComboboxAnchor,
+            )}
             {renderItemSelector(
               "Food & Beverage Items",
               "food_and_beverages",
               foodOptions,
+              foodComboboxAnchor,
             )}
             {renderItemSelector(
               "Expendable Items",
               "expendables",
               expendableOptions,
+              expendableComboboxAnchor,
             )}
 
             <div className="grid gap-2">

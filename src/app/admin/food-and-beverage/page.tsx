@@ -1,9 +1,11 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
-import { Loader2, Pencil, Plus, Trash2, X } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
+import { Loader2, Pencil, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
+import ImageUploadCards from "@/components/admin/ImageUploadCards";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -25,6 +27,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
+import SingleRelationSelector from "@/components/admin/SingleRelationSelector";
 import formatPrice from "@/lib/formatPrice";
 
 type RelationItem = {
@@ -94,6 +97,7 @@ const normalizeImages = (images?: FoodAndBeverageImageItem[]) =>
     }));
 
 export default function AdminFoodAndBeveragePage() {
+  const searchParams = useSearchParams();
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [pendingImageIndex, setPendingImageIndex] = useState<number | null>(
     null,
@@ -116,7 +120,54 @@ export default function AdminFoodAndBeveragePage() {
   const [saving, setSaving] = useState(false);
   const [uploadingImage, setUploadingImage] = useState(false);
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
+  const [searchQuery, setSearchQuery] = useState("");
+  const [sortBy, setSortBy] = useState<
+    "default" | "price-asc" | "price-desc" | "status-asc" | "status-desc"
+  >("default");
   const formImages = Array.isArray(formData.images) ? formData.images : [];
+
+  const visibleRecords = useMemo(() => {
+    const keyword = searchQuery.trim().toLowerCase();
+    const filtered = keyword
+      ? records.filter((item) => {
+          const code = String(item.code ?? "").toLowerCase();
+          const name = String(item.name ?? "").toLowerCase();
+          return code.includes(keyword) || name.includes(keyword);
+        })
+      : [...records];
+
+    switch (sortBy) {
+      case "price-asc":
+        filtered.sort((a, b) => Number(a.price) - Number(b.price));
+        break;
+      case "price-desc":
+        filtered.sort((a, b) => Number(b.price) - Number(a.price));
+        break;
+      case "status-asc":
+        filtered.sort(
+          (a, b) => Number(a.is_available) - Number(b.is_available),
+        );
+        break;
+      case "status-desc":
+        filtered.sort(
+          (a, b) => Number(b.is_available) - Number(a.is_available),
+        );
+        break;
+      default:
+        break;
+    }
+
+    return filtered;
+  }, [records, searchQuery, sortBy]);
+
+  useEffect(() => {
+    const fromCode = searchParams.get("code")?.trim() ?? "";
+    const fromSearch = searchParams.get("search")?.trim() ?? "";
+    const initialKeyword = fromCode || fromSearch;
+    if (initialKeyword) {
+      setSearchQuery(initialKeyword);
+    }
+  }, [searchParams]);
 
   const fetchRecords = useCallback(async () => {
     try {
@@ -360,13 +411,7 @@ export default function AdminFoodAndBeveragePage() {
     fileInputRef.current?.click();
   };
 
-  const handleImageFileChange = async (
-    e: React.ChangeEvent<HTMLInputElement>,
-  ) => {
-    const file = e.target.files?.[0];
-    e.target.value = "";
-    if (!file) return;
-
+  const handleImageFileChange = async (file: File) => {
     try {
       setUploadingImage(true);
       const uploadForm = new FormData();
@@ -507,13 +552,44 @@ export default function AdminFoodAndBeveragePage() {
           </p>
         </div>
 
-        <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center justify-between mb-3">
           <span className="text-sm text-muted-foreground">
-            {records.length} item
+            {visibleRecords.length} dari {records.length} item
           </span>
           <Button size="sm" onClick={openAddDialog} className="gap-1.5">
             <Plus className="h-4 w-4" /> Tambah Item
           </Button>
+        </div>
+
+        <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center">
+          <Input
+            value={searchQuery}
+            onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+              setSearchQuery(e.target.value)
+            }
+            placeholder="Cari berdasarkan nama atau code"
+            className="sm:max-w-sm"
+          />
+          <select
+            value={sortBy}
+            onChange={(e) =>
+              setSortBy(
+                e.target.value as
+                  | "default"
+                  | "price-asc"
+                  | "price-desc"
+                  | "status-asc"
+                  | "status-desc",
+              )
+            }
+            className="h-9 rounded-md border border-input bg-background px-3 text-sm"
+          >
+            <option value="default">Urutkan: Default</option>
+            <option value="price-asc">Harga: Termurah</option>
+            <option value="price-desc">Harga: Termahal</option>
+            <option value="status-desc">Status: Available dulu</option>
+            <option value="status-asc">Status: Unavailable dulu</option>
+          </select>
         </div>
 
         <div className="rounded-lg border border-border bg-card overflow-hidden">
@@ -535,18 +611,19 @@ export default function AdminFoodAndBeveragePage() {
                     <Loader2 className="h-6 w-6 animate-spin text-muted-foreground mx-auto" />
                   </TableCell>
                 </TableRow>
-              ) : records.length === 0 ? (
+              ) : visibleRecords.length === 0 ? (
                 <TableRow>
                   <TableCell
                     colSpan={6}
                     className="text-center py-12 text-sm text-muted-foreground"
                   >
-                    Belum ada item. Klik &quot;Tambah Item&quot; untuk
-                    menambahkan.
+                    {searchQuery.trim()
+                      ? "Tidak ada data yang cocok dengan pencarian."
+                      : 'Belum ada item. Klik "Tambah Item" untuk menambahkan.'}
                   </TableCell>
                 </TableRow>
               ) : (
-                records.map((item) => (
+                visibleRecords.map((item) => (
                   <TableRow key={item.id} className="border-border/50">
                     <TableCell className="font-mono text-xs text-muted-foreground">
                       {item.code}
@@ -724,147 +801,34 @@ export default function AdminFoodAndBeveragePage() {
               </div>
             </div>
 
-            <div className="grid gap-1.5">
-              <Label>Item Categories</Label>
-              <div className="flex flex-wrap gap-2">
-                {availableItemCategories.map((item) => (
-                  <button
-                    key={item.id}
-                    type="button"
-                    onClick={() =>
-                      selectSingleRelation("item_category_ids", Number(item.id))
-                    }
-                    className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
-                      formData.item_category_ids.includes(Number(item.id))
-                        ? "bg-primary text-primary-foreground"
-                        : "bg-secondary text-secondary-foreground hover:bg-secondary/80"
-                    }`}
-                  >
-                    {item.name}
-                  </button>
-                ))}
-              </div>
-            </div>
+            <SingleRelationSelector
+              label="Item Categories"
+              options={availableItemCategories}
+              selectedIds={formData.item_category_ids}
+              onSelect={(value) =>
+                selectSingleRelation("item_category_ids", value)
+              }
+            />
 
-            <div className="grid gap-1.5">
-              <Label>Item Sub Categories</Label>
-              <div className="flex flex-wrap gap-2">
-                {availableItemSubCategories.map((item) => (
-                  <button
-                    key={item.id}
-                    type="button"
-                    onClick={() =>
-                      selectSingleRelation(
-                        "item_sub_category_ids",
-                        Number(item.id),
-                      )
-                    }
-                    className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
-                      formData.item_sub_category_ids.includes(Number(item.id))
-                        ? "bg-primary text-primary-foreground"
-                        : "bg-secondary text-secondary-foreground hover:bg-secondary/80"
-                    }`}
-                  >
-                    {item.name}
-                  </button>
-                ))}
-              </div>
-            </div>
+            <SingleRelationSelector
+              label="Item Sub Categories"
+              options={availableItemSubCategories}
+              selectedIds={formData.item_sub_category_ids}
+              onSelect={(value) =>
+                selectSingleRelation("item_sub_category_ids", value)
+              }
+            />
 
-            <div className="grid gap-2">
-              <Label>Gambar Food & Beverage</Label>
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="image/*"
-                className="hidden"
-                onChange={handleImageFileChange}
-              />
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                {formImages.map((image, index) => (
-                  <div
-                    key={`${image.id ?? "new"}-${index}`}
-                    className="rounded-lg border border-border bg-card p-3"
-                  >
-                    <div
-                      role="button"
-                      tabIndex={0}
-                      onClick={() => openImagePicker(index)}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter" || e.key === " ") {
-                          e.preventDefault();
-                          openImagePicker(index);
-                        }
-                      }}
-                      className="relative h-28 w-full rounded-md border border-border bg-muted cursor-pointer"
-                      style={
-                        image.preview_url || image.url
-                          ? {
-                              backgroundImage: `url(${image.preview_url || image.url})`,
-                              backgroundSize: "cover",
-                              backgroundPosition: "center",
-                            }
-                          : undefined
-                      }
-                    >
-                      {!image.url && (
-                        <div className="h-full w-full flex items-center justify-center text-xs text-muted-foreground">
-                          Belum ada gambar
-                        </div>
-                      )}
-                      <button
-                        type="button"
-                        onClick={() => removeImageCard(index)}
-                        className="absolute right-1 top-1 rounded-full bg-background/90 p-1 text-muted-foreground hover:text-destructive"
-                        aria-label="Hapus gambar"
-                      >
-                        <X className="h-3.5 w-3.5" />
-                      </button>
-                    </div>
-
-                    <div className="mt-3 grid gap-2">
-                      <p className="text-[11px] text-muted-foreground truncate">
-                        {image.url || "Belum ada path gambar"}
-                      </p>
-                      <div className="grid gap-1">
-                        <Label className="text-[11px] text-muted-foreground">
-                          Order
-                        </Label>
-                        <Input
-                          type="number"
-                          min={1}
-                          max={Math.max(formImages.length, 1)}
-                          value={image.position}
-                          onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
-                            updateImageOrder(index, Number(e.target.value) || 1)
-                          }
-                        />
-                      </div>
-                    </div>
-                  </div>
-                ))}
-
-                <button
-                  type="button"
-                  onClick={() => openImagePicker(null)}
-                  disabled={uploadingImage}
-                  className="rounded-lg border border-dashed border-border bg-muted/30 hover:bg-muted/50 transition-colors p-3 disabled:opacity-60"
-                >
-                  <div className="h-full min-h-[180px] flex items-center justify-center">
-                    <div className="flex flex-col items-center gap-1 text-muted-foreground">
-                      {uploadingImage ? (
-                        <Loader2 className="h-6 w-6 animate-spin" />
-                      ) : (
-                        <Plus className="h-6 w-6" />
-                      )}
-                      <span className="text-xs font-medium">
-                        {uploadingImage ? "Uploading..." : "Tambah gambar"}
-                      </span>
-                    </div>
-                  </div>
-                </button>
-              </div>
-            </div>
+            <ImageUploadCards
+              label="Gambar Food & Beverage"
+              fileInputRef={fileInputRef}
+              images={formImages}
+              uploading={uploadingImage}
+              onFileChangeAction={handleImageFileChange}
+              onPickImageAction={openImagePicker}
+              onRemoveImageAction={removeImageCard}
+              onUpdateOrderAction={updateImageOrder}
+            />
           </div>
           <DialogFooter>
             <DialogClose asChild>

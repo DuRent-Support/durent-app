@@ -6,6 +6,7 @@ import { requireAdmin } from "../../../master-data/_shared";
 
 const MEDIA_BUCKET = "media";
 const MEDIA_FOLDER = "private/food-and-beverage-images";
+const MAX_FILE_SIZE_BYTES = 1024 * 1024;
 
 export async function POST(request: Request) {
   try {
@@ -20,6 +21,13 @@ export async function POST(request: Request) {
     if (!(file instanceof File) || file.size === 0) {
       return NextResponse.json(
         { message: "File gambar wajib diisi." },
+        { status: 400 },
+      );
+    }
+
+    if (file.size > MAX_FILE_SIZE_BYTES) {
+      return NextResponse.json(
+        { message: "ada gambar yang terlalu besar" },
         { status: 400 },
       );
     }

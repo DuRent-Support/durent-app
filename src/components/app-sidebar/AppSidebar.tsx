@@ -396,17 +396,6 @@ function SidebarNavContent({
                       itemWrapperClassName={itemWrapperClassName}
                       buttonClassName={buttonClassName}
                     />
-                    <SidebarNavItem
-                      href="/admin/crews/skills"
-                      label="Skills"
-                      icon={Sparkles}
-                      isActive={isPathActive(pathname, "/admin/crews/skills")}
-                      itemClassName={itemClassName}
-                      iconClassName={iconClassName}
-                      labelClassName={labelClassName}
-                      itemWrapperClassName={itemWrapperClassName}
-                      buttonClassName={buttonClassName}
-                    />
                   </SidebarMenu>
                 </SidebarGroupContent>
               </CollapsibleContent>

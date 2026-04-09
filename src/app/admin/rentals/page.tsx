@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { Loader2, Pencil, Plus, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 
@@ -15,6 +16,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import ImageUploadCards from "@/components/admin/ImageUploadCards";
 import {
   Table,
   TableBody,
@@ -24,6 +26,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
+import SingleRelationSelector from "@/components/admin/SingleRelationSelector";
 import formatPrice from "@/lib/formatPrice";
 
 type RelationItem = {
@@ -116,6 +119,7 @@ const specificationsRowsToPayload = (rows: SpecificationRow[]) =>
     .filter((row) => row.key.length > 0);
 
 export default function RentalsPage() {
+  const searchParams = useSearchParams();
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [pendingImageIndex, setPendingImageIndex] = useState<number | null>(
     null,
@@ -135,7 +139,54 @@ export default function RentalsPage() {
   const [saving, setSaving] = useState(false);
   const [uploadingImage, setUploadingImage] = useState(false);
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
+  const [searchQuery, setSearchQuery] = useState("");
+  const [sortBy, setSortBy] = useState<
+    "default" | "price-asc" | "price-desc" | "status-asc" | "status-desc"
+  >("default");
   const formImages = Array.isArray(formData.images) ? formData.images : [];
+
+  const visibleRentals = useMemo(() => {
+    const keyword = searchQuery.trim().toLowerCase();
+    const filtered = keyword
+      ? rentals.filter((item) => {
+          const code = String(item.code ?? "").toLowerCase();
+          const name = String(item.name ?? "").toLowerCase();
+          return code.includes(keyword) || name.includes(keyword);
+        })
+      : [...rentals];
+
+    switch (sortBy) {
+      case "price-asc":
+        filtered.sort((a, b) => Number(a.price) - Number(b.price));
+        break;
+      case "price-desc":
+        filtered.sort((a, b) => Number(b.price) - Number(a.price));
+        break;
+      case "status-asc":
+        filtered.sort(
+          (a, b) => Number(a.is_available) - Number(b.is_available),
+        );
+        break;
+      case "status-desc":
+        filtered.sort(
+          (a, b) => Number(b.is_available) - Number(a.is_available),
+        );
+        break;
+      default:
+        break;
+    }
+
+    return filtered;
+  }, [rentals, searchQuery, sortBy]);
+
+  useEffect(() => {
+    const fromCode = searchParams.get("code")?.trim() ?? "";
+    const fromSearch = searchParams.get("search")?.trim() ?? "";
+    const initialKeyword = fromCode || fromSearch;
+    if (initialKeyword) {
+      setSearchQuery(initialKeyword);
+    }
+  }, [searchParams]);
 
   const fetchRentals = useCallback(async () => {
     try {
@@ -395,13 +446,7 @@ export default function RentalsPage() {
     fileInputRef.current?.click();
   };
 
-  const handleImageFileChange = async (
-    e: React.ChangeEvent<HTMLInputElement>,
-  ) => {
-    const file = e.target.files?.[0];
-    e.target.value = "";
-    if (!file) return;
-
+  const handleImageFileChange = async (file: File) => {
     try {
       setUploadingImage(true);
       const uploadForm = new FormData();
@@ -539,13 +584,44 @@ export default function RentalsPage() {
           </p>
         </div>
 
-        <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center justify-between mb-3">
           <span className="text-sm text-muted-foreground">
-            {rentals.length} rental
+            {visibleRentals.length} dari {rentals.length} rental
           </span>
           <Button size="sm" onClick={openAddDialog} className="gap-1.5">
             <Plus className="h-4 w-4" /> Tambah Rental
           </Button>
+        </div>
+
+        <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center">
+          <Input
+            value={searchQuery}
+            onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+              setSearchQuery(e.target.value)
+            }
+            placeholder="Cari berdasarkan nama atau code"
+            className="sm:max-w-sm"
+          />
+          <select
+            value={sortBy}
+            onChange={(e) =>
+              setSortBy(
+                e.target.value as
+                  | "default"
+                  | "price-asc"
+                  | "price-desc"
+                  | "status-asc"
+                  | "status-desc",
+              )
+            }
+            className="h-9 rounded-md border border-input bg-background px-3 text-sm"
+          >
+            <option value="default">Urutkan: Default</option>
+            <option value="price-asc">Harga: Termurah</option>
+            <option value="price-desc">Harga: Termahal</option>
+            <option value="status-desc">Status: Available dulu</option>
+            <option value="status-asc">Status: Unavailable dulu</option>
+          </select>
         </div>
 
         <div className="rounded-lg border border-border bg-card overflow-hidden">
@@ -569,18 +645,19 @@ export default function RentalsPage() {
                     <Loader2 className="h-6 w-6 animate-spin text-muted-foreground mx-auto" />
                   </TableCell>
                 </TableRow>
-              ) : rentals.length === 0 ? (
+              ) : visibleRentals.length === 0 ? (
                 <TableRow>
                   <TableCell
                     colSpan={6}
                     className="text-center py-12 text-sm text-muted-foreground"
                   >
-                    Belum ada data rental. Klik &quot;Tambah Rental&quot; untuk
-                    menambahkan.
+                    {searchQuery.trim()
+                      ? "Tidak ada data yang cocok dengan pencarian."
+                      : 'Belum ada data rental. Klik "Tambah Rental" untuk menambahkan.'}
                   </TableCell>
                 </TableRow>
               ) : (
-                rentals.map((rental) => (
+                visibleRentals.map((rental) => (
                   <TableRow key={rental.id} className="border-border/50">
                     <TableCell className="font-mono text-xs text-muted-foreground">
                       {rental.code}
@@ -751,14 +828,14 @@ export default function RentalsPage() {
                       onChange={(e) =>
                         updateSpecificationRow(index, "key", e.target.value)
                       }
-                      placeholder="Key (contoh: focal_length)"
+                      placeholder="Warna"
                     />
                     <Input
                       value={spec.value}
                       onChange={(e) =>
                         updateSpecificationRow(index, "value", e.target.value)
                       }
-                      placeholder="Value (contoh: 24-70mm)"
+                      placeholder="Merah"
                     />
                     <Button
                       type="button"
@@ -774,161 +851,38 @@ export default function RentalsPage() {
               </div>
             </div>
 
-            <div className="grid gap-1.5">
-              <Label>
-                Item Category <span className="text-destructive">*</span>
-              </Label>
-              {formErrors.item_category_ids && (
-                <p className="text-xs text-destructive">
-                  {formErrors.item_category_ids}
-                </p>
-              )}
-              <div className="flex flex-wrap gap-2">
-                {availableItemCategories.map((item) => (
-                  <button
-                    key={item.id}
-                    type="button"
-                    onClick={() =>
-                      selectSingleRelation("item_category_ids", Number(item.id))
-                    }
-                    className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
-                      formData.item_category_ids.includes(Number(item.id))
-                        ? "bg-primary text-primary-foreground"
-                        : "bg-secondary text-secondary-foreground hover:bg-secondary/80"
-                    }`}
-                  >
-                    {item.name}
-                  </button>
-                ))}
-              </div>
-            </div>
+            <SingleRelationSelector
+              label="Item Category"
+              required
+              error={formErrors.item_category_ids}
+              options={availableItemCategories}
+              selectedIds={formData.item_category_ids}
+              onSelect={(value) =>
+                selectSingleRelation("item_category_ids", value)
+              }
+            />
 
-            <div className="grid gap-1.5">
-              <Label>
-                Item Sub Category <span className="text-destructive">*</span>
-              </Label>
-              {formErrors.item_sub_category_ids && (
-                <p className="text-xs text-destructive">
-                  {formErrors.item_sub_category_ids}
-                </p>
-              )}
-              <div className="flex flex-wrap gap-2">
-                {availableItemSubCategories.map((item) => (
-                  <button
-                    key={item.id}
-                    type="button"
-                    onClick={() =>
-                      selectSingleRelation(
-                        "item_sub_category_ids",
-                        Number(item.id),
-                      )
-                    }
-                    className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
-                      formData.item_sub_category_ids.includes(Number(item.id))
-                        ? "bg-primary text-primary-foreground"
-                        : "bg-secondary text-secondary-foreground hover:bg-secondary/80"
-                    }`}
-                  >
-                    {item.name}
-                  </button>
-                ))}
-              </div>
-            </div>
+            <SingleRelationSelector
+              label="Item Sub Category"
+              required
+              error={formErrors.item_sub_category_ids}
+              options={availableItemSubCategories}
+              selectedIds={formData.item_sub_category_ids}
+              onSelect={(value) =>
+                selectSingleRelation("item_sub_category_ids", value)
+              }
+            />
 
-            <div className="grid gap-2">
-              <Label>Gambar Rental</Label>
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="image/*"
-                className="hidden"
-                onChange={handleImageFileChange}
-              />
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                {formImages.map((image, index) => (
-                  <div
-                    key={`${image.id ?? "new"}-${index}`}
-                    className="rounded-lg border border-border bg-card p-3"
-                  >
-                    <div
-                      role="button"
-                      tabIndex={0}
-                      onClick={() => openImagePicker(index)}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter" || e.key === " ") {
-                          e.preventDefault();
-                          openImagePicker(index);
-                        }
-                      }}
-                      className="relative h-28 w-full rounded-md border border-border bg-muted cursor-pointer"
-                      style={
-                        image.preview_url || image.url
-                          ? {
-                              backgroundImage: `url(${image.preview_url || image.url})`,
-                              backgroundSize: "cover",
-                              backgroundPosition: "center",
-                            }
-                          : undefined
-                      }
-                    >
-                      {!image.url && (
-                        <div className="h-full w-full flex items-center justify-center text-xs text-muted-foreground">
-                          Belum ada gambar
-                        </div>
-                      )}
-                      <button
-                        type="button"
-                        onClick={() => removeImageCard(index)}
-                        className="absolute right-1 top-1 rounded-full bg-background/90 p-1 text-muted-foreground hover:text-destructive"
-                        aria-label="Hapus gambar"
-                      >
-                        <X className="h-3.5 w-3.5" />
-                      </button>
-                    </div>
-
-                    <div className="mt-3 grid gap-2">
-                      <p className="text-[11px] text-muted-foreground truncate">
-                        {image.url || "Belum ada path gambar"}
-                      </p>
-                      <div className="grid gap-1">
-                        <Label className="text-[11px] text-muted-foreground">
-                          Order
-                        </Label>
-                        <Input
-                          type="number"
-                          min={1}
-                          max={Math.max(formImages.length, 1)}
-                          value={image.position}
-                          onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
-                            updateImageOrder(index, Number(e.target.value) || 1)
-                          }
-                        />
-                      </div>
-                    </div>
-                  </div>
-                ))}
-
-                <button
-                  type="button"
-                  onClick={() => openImagePicker(null)}
-                  disabled={uploadingImage}
-                  className="rounded-lg border border-dashed border-border bg-muted/30 hover:bg-muted/50 transition-colors p-3 disabled:opacity-60"
-                >
-                  <div className="h-full min-h-[180px] flex items-center justify-center">
-                    <div className="flex flex-col items-center gap-1 text-muted-foreground">
-                      {uploadingImage ? (
-                        <Loader2 className="h-6 w-6 animate-spin" />
-                      ) : (
-                        <Plus className="h-6 w-6" />
-                      )}
-                      <span className="text-xs font-medium">
-                        {uploadingImage ? "Uploading..." : "Tambah gambar"}
-                      </span>
-                    </div>
-                  </div>
-                </button>
-              </div>
-            </div>
+            <ImageUploadCards
+              label="Gambar Rental"
+              fileInputRef={fileInputRef}
+              images={formImages}
+              uploading={uploadingImage}
+              onFileChangeAction={handleImageFileChange}
+              onPickImageAction={openImagePicker}
+              onRemoveImageAction={removeImageCard}
+              onUpdateOrderAction={updateImageOrder}
+            />
           </div>
 
           <DialogFooter>

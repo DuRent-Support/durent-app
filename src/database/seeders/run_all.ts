@@ -5,7 +5,6 @@ import { seedCodeCounter } from "./code_counter";
 import { seedCrews } from "./crews";
 import { seedCrewItemCategory } from "./crew_item_category";
 import { seedCrewItemSubCategory } from "./crew_item_sub_category";
-import { seedCrewSkills } from "./crew_skills";
 import { seedCrewSkillPivot } from "./crew_skill";
 import { seedExpendableItemCategory } from "./expendable_item_category";
 import { seedExpendableItemSubCategory } from "./expendable_item_sub_category";
@@ -40,7 +39,6 @@ export async function runAllSeeders() {
   results.push(await seedLocationTagPivot(supabase));
   results.push(await seedLocationEmbeddings(supabase));
   results.push(await seedCrews(supabase));
-  results.push(await seedCrewSkills(supabase));
   results.push(await seedCrewSkillPivot(supabase));
   results.push(await seedRentals(supabase));
   results.push(await seedFoodAndBeverage(supabase));
