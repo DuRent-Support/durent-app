@@ -239,6 +239,23 @@ export default function AdminBundlesPage() {
     formData.bundle_category_ids,
   ]);
 
+  const bundleTypeNameById = useMemo(
+    () => new Map(bundleTypes.map((item) => [item.id, item.name])),
+    [bundleTypes],
+  );
+  const bundleTypeByName = useMemo(
+    () => new Map(bundleTypes.map((item) => [item.name, item])),
+    [bundleTypes],
+  );
+  const bundleCategoryNameById = useMemo(
+    () => new Map(bundleCategories.map((item) => [item.id, item.name])),
+    [bundleCategories],
+  );
+  const bundleCategoryByName = useMemo(
+    () => new Map(bundleCategories.map((item) => [item.name, item])),
+    [bundleCategories],
+  );
+
   useEffect(() => {
     const fromCode = searchParams.get("code")?.trim() ?? "";
     const fromSearch = searchParams.get("search")?.trim() ?? "";
@@ -1058,19 +1075,19 @@ export default function AdminBundlesPage() {
                 )}
                 <Combobox
                   autoHighlight
-                  items={bundleTypes.map((item) => String(item.id))}
-                  itemToStringValue={(id) =>
-                    bundleTypes.find((item) => String(item.id) === id)?.name ??
-                    ""
-                  }
+                  items={bundleTypes.map((item) => item.name)}
+                  itemToStringValue={(name) => String(name ?? "")}
                   value={
-                    formData.bundle_type_ids[0]
-                      ? String(formData.bundle_type_ids[0])
+                    formData.bundle_type_ids[0] != null
+                      ? (bundleTypeNameById.get(formData.bundle_type_ids[0]) ??
+                        null)
                       : null
                   }
                   onValueChange={(value) => {
                     if (!value) return;
-                    selectSingleRelation("bundle_type_ids", Number(value));
+                    const selected = bundleTypeByName.get(String(value));
+                    if (!selected) return;
+                    selectSingleRelation("bundle_type_ids", selected.id);
                   }}
                 >
                   <ComboboxInput
@@ -1082,17 +1099,12 @@ export default function AdminBundlesPage() {
                   <ComboboxContent container={bundleDialogRef}>
                     <ComboboxEmpty>Data tidak ditemukan.</ComboboxEmpty>
                     <ComboboxList>
-                      {(id) => {
-                        const option = bundleTypes.find(
-                          (item) => String(item.id) === id,
-                        );
+                      {(name) => {
+                        const option = bundleTypeByName.get(String(name));
                         if (!option) return null;
 
                         return (
-                          <ComboboxItem
-                            key={option.id}
-                            value={String(option.id)}
-                          >
+                          <ComboboxItem key={option.id} value={option.name}>
                             {option.name}
                           </ComboboxItem>
                         );
@@ -1111,19 +1123,20 @@ export default function AdminBundlesPage() {
                 )}
                 <Combobox
                   autoHighlight
-                  items={bundleCategories.map((item) => String(item.id))}
-                  itemToStringValue={(id) =>
-                    bundleCategories.find((item) => String(item.id) === id)
-                      ?.name ?? ""
-                  }
+                  items={bundleCategories.map((item) => item.name)}
+                  itemToStringValue={(name) => String(name ?? "")}
                   value={
-                    formData.bundle_category_ids[0]
-                      ? String(formData.bundle_category_ids[0])
+                    formData.bundle_category_ids[0] != null
+                      ? (bundleCategoryNameById.get(
+                          formData.bundle_category_ids[0],
+                        ) ?? null)
                       : null
                   }
                   onValueChange={(value) => {
                     if (!value) return;
-                    selectSingleRelation("bundle_category_ids", Number(value));
+                    const selected = bundleCategoryByName.get(String(value));
+                    if (!selected) return;
+                    selectSingleRelation("bundle_category_ids", selected.id);
                   }}
                 >
                   <ComboboxInput
@@ -1135,17 +1148,12 @@ export default function AdminBundlesPage() {
                   <ComboboxContent container={bundleDialogRef}>
                     <ComboboxEmpty>Data tidak ditemukan.</ComboboxEmpty>
                     <ComboboxList>
-                      {(id) => {
-                        const option = bundleCategories.find(
-                          (item) => String(item.id) === id,
-                        );
+                      {(name) => {
+                        const option = bundleCategoryByName.get(String(name));
                         if (!option) return null;
 
                         return (
-                          <ComboboxItem
-                            key={option.id}
-                            value={String(option.id)}
-                          >
+                          <ComboboxItem key={option.id} value={option.name}>
                             {option.name}
                           </ComboboxItem>
                         );
