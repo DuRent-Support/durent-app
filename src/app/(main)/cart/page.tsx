@@ -75,6 +75,7 @@ type CheckoutItem = {
   subtitle: string;
   itemType: string;
   isLocation: boolean;
+  isExpendable: boolean;
   tags: string[];
   dateRange: { from: Date; to: Date } | null;
   requiresDateRange: boolean;
@@ -190,13 +191,18 @@ async function ensureSnapLoaded(snapUrl: string, clientKey: string) {
 
 export default function CartPage() {
   const router = useRouter();
-  const { items, totalItems, clearCart, getDays, updateDateRange } = useCart();
+  const { items, totalItems, clearCart, removeItem, getDays, updateDateRange } =
+    useCart();
   const { user } = useAuth();
   const supabase = useMemo(() => createClient(), []);
   const [itemQuantities, setItemQuantities] = useState<Record<string, number>>(
     {},
   );
   const [rentPurpose, setRentPurpose] = useState("");
+  const [shootingAddress, setShootingAddress] = useState("");
+  const [phoneNumber, setPhoneNumber] = useState("");
+  const [isPhoneSameAsProfile, setIsPhoneSameAsProfile] = useState(false);
+  const [profilePhone, setProfilePhone] = useState("");
   const [referralInput, setReferralInput] = useState("");
   const [appliedReferral, setAppliedReferral] = useState("");
   const [referralError, setReferralError] = useState("");
@@ -216,7 +222,10 @@ export default function CartPage() {
     return items.map((item) => {
       const itemType = String(item.itemType).toLowerCase();
       const isLocation = itemType === "location";
-      const multiplier = Math.max(1, Number(getDays(item) || 1));
+      const isExpendable = itemType === "expendable";
+      const multiplier = isExpendable
+        ? 1
+        : Math.max(1, Number(getDays(item) || 1));
       const unitPrice = toNumberPrice(item.price);
       const quantity = isLocation
         ? 1
@@ -231,9 +240,10 @@ export default function CartPage() {
         subtitle: item.subtitle,
         itemType: String(item.itemType),
         isLocation,
+        isExpendable,
         tags: item.tags,
-        dateRange: item.dateRange,
-        requiresDateRange: item.requiresDateRange,
+        dateRange: isExpendable ? null : item.dateRange,
+        requiresDateRange: isExpendable ? false : item.requiresDateRange,
         multiplier,
         quantity,
         effectiveUnits,
@@ -576,6 +586,52 @@ export default function CartPage() {
     };
   }, [checkoutItems]);
 
+  useEffect(() => {
+    if (!user) {
+      setProfilePhone("");
+      if (isPhoneSameAsProfile) {
+        setPhoneNumber("");
+      }
+      return;
+    }
+
+    let isActive = true;
+
+    const loadProfilePhone = async () => {
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("phone")
+        .eq("user_uuid", user.id)
+        .maybeSingle<{ phone: string | null }>();
+
+      if (!isActive) {
+        return;
+      }
+
+      if (error) {
+        console.error("Profile phone fetch error:", error.message);
+        setProfilePhone("");
+        if (isPhoneSameAsProfile) {
+          setPhoneNumber("");
+        }
+        return;
+      }
+
+      const normalizedPhone = String(data?.phone ?? "").trim();
+      setProfilePhone(normalizedPhone);
+
+      if (isPhoneSameAsProfile) {
+        setPhoneNumber(normalizedPhone);
+      }
+    };
+
+    void loadProfilePhone();
+
+    return () => {
+      isActive = false;
+    };
+  }, [isPhoneSameAsProfile, supabase, user]);
+
   const getLocationBookedRanges = (item: CheckoutItem) => {
     if (!item.isLocation) {
       return [];
@@ -671,6 +727,31 @@ export default function CartPage() {
       return;
     }
 
+    const normalizedPurpose = rentPurpose.trim();
+    const normalizedShootingAddress = shootingAddress.trim();
+    const normalizedPhone = (
+      isPhoneSameAsProfile ? profilePhone : phoneNumber
+    ).trim();
+
+    if (!normalizedPurpose) {
+      setCheckoutError("Rent purpose wajib diisi.");
+      return;
+    }
+
+    if (!normalizedShootingAddress) {
+      setCheckoutError("Shooting address wajib diisi.");
+      return;
+    }
+
+    if (!normalizedPhone) {
+      setCheckoutError(
+        isPhoneSameAsProfile
+          ? "Nomor telepon pada profile belum tersedia. Lengkapi dulu profile Anda atau matikan opsi nomor sama dengan profile."
+          : "Nomor telepon wajib diisi.",
+      );
+      return;
+    }
+
     setShowMissingDateFrame(false);
     setCheckoutError("");
     setIsPaying(true);
@@ -712,7 +793,10 @@ export default function CartPage() {
         body: JSON.stringify({
           items: checkoutPayloadItems,
           checkoutUser,
-          purpose: rentPurpose,
+          purpose: normalizedPurpose,
+          shootingAddress: normalizedShootingAddress,
+          phone: normalizedPhone,
+          useProfilePhone: isPhoneSameAsProfile,
         }),
       });
 
@@ -756,59 +840,28 @@ export default function CartPage() {
     }
   };
 
-  const handleSelectStartDate = (item: CheckoutItem, selectedDate?: Date) => {
-    if (!selectedDate) {
+  const handleSelectDateRange = (
+    item: CheckoutItem,
+    range?: { from?: Date; to?: Date },
+  ) => {
+    if (!range?.from) {
       return;
     }
 
-    const normalizedSelectedDate = startOfDay(selectedDate);
-    if (normalizedSelectedDate < minBookingDate) {
+    const normalizedFrom = startOfDay(range.from);
+    const normalizedTo = startOfDay(range.to ?? range.from);
+
+    if (normalizedFrom < minBookingDate || normalizedTo < minBookingDate) {
       setCheckoutError("Tanggal booking yang sudah lewat tidak bisa dipilih.");
       return;
     }
 
-    const currentEnd = item.dateRange?.to ?? normalizedSelectedDate;
-    const normalizedCurrentEnd = startOfDay(currentEnd);
-    const nextEnd =
-      normalizedCurrentEnd < normalizedSelectedDate
-        ? normalizedSelectedDate
-        : normalizedCurrentEnd;
+    const nextFrom =
+      normalizedFrom <= normalizedTo ? normalizedFrom : normalizedTo;
+    const nextTo =
+      normalizedTo >= normalizedFrom ? normalizedTo : normalizedFrom;
 
-    if (hasLocationRangeOverlap(item, normalizedSelectedDate, nextEnd)) {
-      setCheckoutError(
-        "Tanggal lokasi ini sudah ter-booking. Pilih tanggal yang berwarna normal.",
-      );
-      return;
-    }
-
-    updateDateRange(item.id, {
-      from: normalizedSelectedDate,
-      to: nextEnd,
-    });
-
-    setShowMissingDateFrame(false);
-    setCheckoutError("");
-  };
-
-  const handleSelectEndDate = (item: CheckoutItem, selectedDate?: Date) => {
-    if (!selectedDate) {
-      return;
-    }
-
-    const normalizedSelectedDate = startOfDay(selectedDate);
-    if (normalizedSelectedDate < minBookingDate) {
-      setCheckoutError("Tanggal booking yang sudah lewat tidak bisa dipilih.");
-      return;
-    }
-
-    const currentStart = item.dateRange?.from ?? normalizedSelectedDate;
-    const normalizedCurrentStart = startOfDay(currentStart);
-    const nextStart =
-      normalizedCurrentStart > normalizedSelectedDate
-        ? normalizedSelectedDate
-        : normalizedCurrentStart;
-
-    if (hasLocationRangeOverlap(item, nextStart, normalizedSelectedDate)) {
+    if (hasLocationRangeOverlap(item, nextFrom, nextTo)) {
       setCheckoutError(
         "Range tanggal lokasi bentrok dengan booking lain. Pilih range tanpa tanggal merah.",
       );
@@ -816,8 +869,8 @@ export default function CartPage() {
     }
 
     updateDateRange(item.id, {
-      from: nextStart,
-      to: normalizedSelectedDate,
+      from: nextFrom,
+      to: nextTo,
     });
 
     setShowMissingDateFrame(false);
@@ -833,6 +886,30 @@ export default function CartPage() {
       [itemId]: nextQuantity,
     }));
   };
+
+  const handleRemoveSingleItem = (itemId: string) => {
+    removeItem(itemId);
+
+    setItemQuantities((prev) => {
+      if (!(itemId in prev)) {
+        return prev;
+      }
+
+      const next = { ...prev };
+      delete next[itemId];
+      return next;
+    });
+
+    setCheckoutError("");
+  };
+
+  const normalizedPurpose = rentPurpose.trim();
+  const normalizedShootingAddress = shootingAddress.trim();
+  const normalizedPhone = (
+    isPhoneSameAsProfile ? profilePhone : phoneNumber
+  ).trim();
+  const isRequiredCheckoutFieldsMissing =
+    !normalizedPurpose || !normalizedShootingAddress || !normalizedPhone;
 
   const renderGroup = (title: string, sectionItems: CheckoutItem[]) => (
     <section className="rounded-xl border border-border bg-card p-4">
@@ -856,31 +933,43 @@ export default function CartPage() {
                   : "border-border/60"
               }`}
             >
-              <div className="flex items-start justify-between gap-3">
-                <div className="flex items-start gap-3">
-                  <div className="relative h-24 w-36 shrink-0 overflow-hidden rounded-md border border-border/60">
-                    <Image
-                      src={item.imageUrl || "/hero.webp"}
-                      alt={item.name}
-                      fill
-                      sizes="(max-width: 768px) 40vw, 160px"
-                      className="object-cover"
-                    />
-                  </div>
-                  <div>
-                    <p className="text-sm font-semibold">{item.name}</p>
-                    <p className="text-xs text-muted-foreground">
-                      {item.subtitle}
-                    </p>
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      Start: {formatDateLabel(item.dateRange?.from)}
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      End: {formatDateLabel(item.dateRange?.to)}
-                    </p>
+              <div className="flex gap-3">
+                <div className="relative h-24 w-32 shrink-0 overflow-hidden rounded-md border border-border/60">
+                  <Image
+                    src={item.imageUrl || "/hero.webp"}
+                    alt={item.name}
+                    fill
+                    sizes="(max-width: 768px) 40vw, 160px"
+                    className="object-cover"
+                  />
+                </div>
 
+                <div className="min-w-0 flex-1 space-y-2">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-semibold">
+                        {item.name}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        {item.subtitle}
+                      </p>
+                    </div>
+
+                    <Button
+                      type="button"
+                      size="icon"
+                      variant="destructive"
+                      aria-label="Hapus item"
+                      className="h-8 w-8 shrink-0 bg-red-600 text-white hover:bg-red-700"
+                      onClick={() => handleRemoveSingleItem(item.id)}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
+
+                  <div className="grid gap-2 sm:grid-cols-[auto_1fr_auto] sm:items-end">
                     {!item.isLocation ? (
-                      <div className="mt-2 flex items-center gap-2">
+                      <div className="flex items-center gap-2">
                         <label
                           htmlFor={`quantity-${item.id}`}
                           className="text-xs text-muted-foreground"
@@ -899,9 +988,26 @@ export default function CartPage() {
                           }
                         />
                       </div>
-                    ) : null}
+                    ) : (
+                      <div />
+                    )}
 
-                    <div className="mt-2 flex flex-wrap gap-2">
+                    {!item.isExpendable ? (
+                      <div className="text-xs text-muted-foreground">
+                        <p>Start: {formatDateLabel(item.dateRange?.from)}</p>
+                        <p>End: {formatDateLabel(item.dateRange?.to)}</p>
+                      </div>
+                    ) : (
+                      <div />
+                    )}
+
+                    <div className="shrink-0 rounded-md border border-border/60 bg-muted px-3 py-1.5 text-sm font-semibold text-primary">
+                      {formatPrice(item.lineTotal)}
+                    </div>
+                  </div>
+
+                  {!item.isExpendable ? (
+                    <div className="flex flex-wrap gap-2">
                       <Popover>
                         <PopoverTrigger asChild>
                           <Button
@@ -911,50 +1017,23 @@ export default function CartPage() {
                             className="h-7 gap-1.5 px-2 text-xs"
                           >
                             <CalendarDays className="h-3.5 w-3.5" />
-                            Pilih Start
+                            Pilih Range Tanggal
                           </Button>
                         </PopoverTrigger>
                         <PopoverContent className="w-auto p-0" align="start">
                           <Calendar
-                            mode="single"
-                            selected={item.dateRange?.from ?? undefined}
-                            onSelect={(date) =>
-                              handleSelectStartDate(item, date)
+                            mode="range"
+                            selected={
+                              item.dateRange?.from
+                                ? {
+                                    from: item.dateRange.from,
+                                    to: item.dateRange.to,
+                                  }
+                                : undefined
                             }
-                            disabled={(date) =>
-                              startOfDay(date) < minBookingDate ||
-                              isLocationDateBooked(item, date)
+                            onSelect={(range) =>
+                              handleSelectDateRange(item, range)
                             }
-                            modifiers={{
-                              booked: (date) =>
-                                isLocationDateBooked(item, date),
-                            }}
-                            modifiersClassNames={{
-                              booked:
-                                "!bg-red-200 !text-red-700 !opacity-100 line-through aria-disabled:!bg-red-200 aria-disabled:!text-red-700 aria-disabled:!opacity-100",
-                            }}
-                            initialFocus
-                          />
-                        </PopoverContent>
-                      </Popover>
-
-                      <Popover>
-                        <PopoverTrigger asChild>
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="outline"
-                            className="h-7 gap-1.5 px-2 text-xs"
-                          >
-                            <CalendarDays className="h-3.5 w-3.5" />
-                            Pilih End
-                          </Button>
-                        </PopoverTrigger>
-                        <PopoverContent className="w-auto p-0" align="start">
-                          <Calendar
-                            mode="single"
-                            selected={item.dateRange?.to ?? undefined}
-                            onSelect={(date) => handleSelectEndDate(item, date)}
                             disabled={(date) =>
                               startOfDay(date) < minBookingDate ||
                               isLocationDateBooked(item, date)
@@ -972,11 +1051,8 @@ export default function CartPage() {
                         </PopoverContent>
                       </Popover>
                     </div>
-                  </div>
+                  ) : null}
                 </div>
-                <p className="text-sm font-semibold text-primary">
-                  {formatPrice(item.lineTotal)}
-                </p>
               </div>
             </div>
           );
@@ -1072,7 +1148,9 @@ export default function CartPage() {
                         <span className="text-zinc-400">
                           {item.isLocation
                             ? ` x ${item.multiplier} hari`
-                            : ` x ${item.quantity} qty x ${item.multiplier} hari`}
+                            : item.isExpendable
+                              ? ` x ${item.quantity} qty`
+                              : ` x ${item.quantity} qty x ${item.multiplier} hari`}
                         </span>
                       </span>
                       <div className="flex flex-col items-end">
@@ -1146,7 +1224,7 @@ export default function CartPage() {
 
             <div className="mt-4 space-y-2">
               <label htmlFor="rent-purpose" className="text-sm font-medium">
-                Rent Purpose
+                Rent Purpose <span className="text-red-500">*</span>
               </label>
               <Input
                 id="rent-purpose"
@@ -1154,6 +1232,56 @@ export default function CartPage() {
                 onChange={(event) => setRentPurpose(event.target.value)}
                 placeholder="Contoh: dokumentasi produk"
               />
+            </div>
+
+            <div className="mt-4 space-y-2">
+              <label htmlFor="shooting-address" className="text-sm font-medium">
+                Shooting Address <span className="text-red-500">*</span>
+              </label>
+              <Input
+                id="shooting-address"
+                value={shootingAddress}
+                onChange={(event) => setShootingAddress(event.target.value)}
+                placeholder="Contoh: Jl. Sudirman No. 123, Jakarta"
+              />
+            </div>
+
+            <div className="mt-4 space-y-2">
+              <div className="flex items-center justify-between gap-3">
+                <label htmlFor="phone-number" className="text-sm font-medium">
+                  Nomor Telepon <span className="text-red-500">*</span>
+                </label>
+                <label
+                  htmlFor="same-as-profile"
+                  className="flex items-center gap-2 text-xs text-muted-foreground"
+                >
+                  <input
+                    id="same-as-profile"
+                    type="checkbox"
+                    checked={isPhoneSameAsProfile}
+                    onChange={(event) => {
+                      const checked = event.target.checked;
+                      setIsPhoneSameAsProfile(checked);
+                      if (!checked) {
+                        setPhoneNumber("");
+                      }
+                    }}
+                  />
+                  Nomor sama dengan profile
+                </label>
+              </div>
+              <Input
+                id="phone-number"
+                value={phoneNumber}
+                onChange={(event) => setPhoneNumber(event.target.value)}
+                placeholder="Contoh: 081234567890"
+                disabled={isPhoneSameAsProfile}
+              />
+              {isPhoneSameAsProfile && !profilePhone ? (
+                <p className="text-xs text-destructive">
+                  Nomor telepon pada profile belum tersedia.
+                </p>
+              ) : null}
             </div>
 
             <div className="mt-5 rounded-lg border border-border/60 p-3">
@@ -1186,7 +1314,11 @@ export default function CartPage() {
                 type="button"
                 className="w-full bg-green-500 text-white hover:bg-green-600"
                 onClick={() => void handleMidtransCheckout()}
-                disabled={checkoutItems.length === 0 || isPaying}
+                disabled={
+                  checkoutItems.length === 0 ||
+                  isPaying ||
+                  isRequiredCheckoutFieldsMissing
+                }
               >
                 {isPaying ? "Memproses pembayaran..." : "Pembayaran"}
               </Button>

@@ -269,6 +269,9 @@ export async function POST(request: Request) {
       Array.isArray(body?.items) ? body.items : []
     ) as CheckoutItem[];
     const purpose = String(body?.purpose ?? "").trim();
+    const shootingAddress = String(body?.shootingAddress ?? "").trim();
+    const phoneFromBody = String(body?.phone ?? "").trim();
+    const useProfilePhone = body?.useProfilePhone === true;
 
     const {
       data: { user: authUser },
@@ -296,6 +299,47 @@ export async function POST(request: Request) {
       );
     }
 
+    if (!purpose) {
+      return NextResponse.json(
+        { message: "Rent purpose wajib diisi" },
+        { status: 400 },
+      );
+    }
+
+    if (!shootingAddress) {
+      return NextResponse.json(
+        { message: "Shooting address wajib diisi" },
+        { status: 400 },
+      );
+    }
+
+    let checkoutPhone = phoneFromBody;
+
+    if (useProfilePhone) {
+      const { data: profileData, error: profileError } = await serviceRoleClient
+        .from("profiles")
+        .select("phone")
+        .eq("user_uuid", authUser.id)
+        .maybeSingle<{ phone: string | null }>();
+
+      if (profileError) {
+        console.error("Profile phone fetch error:", profileError);
+        return NextResponse.json(
+          { message: "Gagal mengambil nomor telepon dari profile" },
+          { status: 500 },
+        );
+      }
+
+      checkoutPhone = String(profileData?.phone ?? "").trim();
+    }
+
+    if (!checkoutPhone) {
+      return NextResponse.json(
+        { message: "Nomor telepon wajib diisi" },
+        { status: 400 },
+      );
+    }
+
     // console.log("Midtrans checkout user:", {
     //   id: authUser.id,
     //   email: authUser.email,
@@ -306,13 +350,28 @@ export async function POST(request: Request) {
 
     console.log("Midtrans checkout items:", items);
 
+    const todayDateOnly = getTodayDateOnly();
+    if (!todayDateOnly) {
+      return NextResponse.json(
+        { message: "Gagal membaca waktu lokal Indonesia" },
+        { status: 500 },
+      );
+    }
+
     const normalizedItems = items.map((item) => {
       const itemId = Number.parseInt(String(item.id ?? "").trim(), 10);
       const itemType = normalizeItemType(item.itemType);
-      const bookingStart = toDateOnly(item.dateRange?.from);
-      const bookingEnd = toDateOnly(item.dateRange?.to ?? item.dateRange?.from);
+      const isExpendable = itemType === "expendable";
+      const bookingStart = isExpendable
+        ? todayDateOnly
+        : toDateOnly(item.dateRange?.from);
+      const bookingEnd = isExpendable
+        ? todayDateOnly
+        : toDateOnly(item.dateRange?.to ?? item.dateRange?.from);
       const baseQuantity = Math.max(1, Number(item.quantity ?? 1));
-      const bookingDays = Math.max(1, Number(item.days ?? 1));
+      const bookingDays = isExpendable
+        ? 1
+        : Math.max(1, Number(item.days ?? 1));
       const chargeUnits =
         itemType === "location" ? bookingDays : baseQuantity * bookingDays;
       const unitPriceSnapshot = Math.max(
@@ -342,14 +401,6 @@ export async function POST(request: Request) {
         booking_end: bookingEnd,
       };
     });
-
-    const todayDateOnly = getTodayDateOnly();
-    if (!todayDateOnly) {
-      return NextResponse.json(
-        { message: "Gagal membaca waktu lokal Indonesia" },
-        { status: 500 },
-      );
-    }
 
     const hasPastBookingDate = normalizedItems.some(
       (item) =>
@@ -804,7 +855,7 @@ export async function POST(request: Request) {
         first_name: firstName,
         last_name: lastName,
         email: authUser.email,
-        phone: authUser.phone || undefined,
+        phone: checkoutPhone,
       },
       page_expiry: {
         duration: pageExpiryMinutes,
@@ -826,26 +877,48 @@ export async function POST(request: Request) {
         { status: 500 },
       );
     }
-    const { data: createdOrder, error: orderInsertError } =
-      await serviceRoleClient
+    const baseOrderInsertPayload = {
+      uuid: orderUuid,
+      code: orderCode,
+      user_uuid: authUser.id,
+      purpose,
+      shooting_address: shootingAddress,
+      payment_status: "pending",
+      subtotal_amount: grossAmount,
+      bundle_discount_amount: 0,
+      promo_discount_amount: 0,
+      total_discount_amount: 0,
+      grand_total_amount: grossAmount,
+      midtrans_token: token.token,
+      midtrans_expires_at: expiresAt,
+    };
+
+    let createdOrder: { id: number; code: string } | null = null;
+    let orderInsertError: { code?: string } | null = null;
+
+    const orderInsertWithPhone = await serviceRoleClient
+      .from("orders")
+      .insert({
+        ...baseOrderInsertPayload,
+        phone: checkoutPhone,
+      })
+      .select("id, code")
+      .single();
+
+    createdOrder = orderInsertWithPhone.data;
+    orderInsertError = orderInsertWithPhone.error;
+
+    // Support both schemas: some deployments have orders.phone, some do not.
+    if (orderInsertError?.code === "PGRST204") {
+      const orderInsertWithoutPhone = await serviceRoleClient
         .from("orders")
-        .insert({
-          uuid: orderUuid,
-          code: orderCode,
-          user_uuid: authUser.id,
-          purpose: purpose || "Shooting",
-          shooting_address: "Alamat shooting akan dikonfirmasi",
-          payment_status: "pending",
-          subtotal_amount: grossAmount,
-          bundle_discount_amount: 0,
-          promo_discount_amount: 0,
-          total_discount_amount: 0,
-          grand_total_amount: grossAmount,
-          midtrans_token: token.token,
-          midtrans_expires_at: expiresAt,
-        })
+        .insert(baseOrderInsertPayload)
         .select("id, code")
         .single();
+
+      createdOrder = orderInsertWithoutPhone.data;
+      orderInsertError = orderInsertWithoutPhone.error;
+    }
 
     if (orderInsertError || !createdOrder) {
       console.error("Insert orders error:", orderInsertError);
