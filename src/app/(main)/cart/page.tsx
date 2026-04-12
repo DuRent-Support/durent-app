@@ -10,6 +10,14 @@ import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
 import { Input } from "@/components/ui/input";
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
   Popover,
   PopoverContent,
   PopoverTrigger,
@@ -191,8 +199,15 @@ async function ensureSnapLoaded(snapUrl: string, clientKey: string) {
 
 export default function CartPage() {
   const router = useRouter();
-  const { items, totalItems, clearCart, removeItem, getDays, updateDateRange } =
-    useCart();
+  const {
+    items,
+    totalItems,
+    clearCart,
+    removeItem,
+    getDays,
+    updateDateRange,
+    updateDateRangeBulk,
+  } = useCart();
   const { user } = useAuth();
   const supabase = useMemo(() => createClient(), []);
   const [itemQuantities, setItemQuantities] = useState<Record<string, number>>(
@@ -213,10 +228,36 @@ export default function CartPage() {
   const [checkoutError, setCheckoutError] = useState("");
   const [isPaying, setIsPaying] = useState(false);
   const [showMissingDateFrame, setShowMissingDateFrame] = useState(false);
+  const [selectedItemIds, setSelectedItemIds] = useState<
+    Record<string, boolean>
+  >({});
+  const [globalDateRange, setGlobalDateRange] = useState<BookedRange | null>(
+    null,
+  );
+  const [bulkDateRange, setBulkDateRange] = useState<BookedRange | null>(null);
+  const [isConfirmGlobalDialogOpen, setIsConfirmGlobalDialogOpen] =
+    useState(false);
+  const [isConfirmBulkDialogOpen, setIsConfirmBulkDialogOpen] = useState(false);
+  const [manualConflictItemIds, setManualConflictItemIds] = useState<string[]>(
+    [],
+  );
   const [bookedRangesByLocation, setBookedRangesByLocation] = useState<
     Record<string, BookedRange[]>
   >({});
   const minBookingDate = useMemo(() => startOfDay(new Date()), []);
+  const todayRange = useMemo<BookedRange>(() => {
+    const today = startOfDay(new Date());
+    return {
+      from: today,
+      to: today,
+    };
+  }, []);
+
+  const buildBookingIdentityKey = (
+    item: Pick<CheckoutItem, "itemType" | "sourceId">,
+  ) => {
+    return `${String(item.itemType).toLowerCase()}:${String(item.sourceId).trim()}`;
+  };
 
   const checkoutItems = useMemo<CheckoutItem[]>(() => {
     return items.map((item) => {
@@ -242,7 +283,9 @@ export default function CartPage() {
         isLocation,
         isExpendable,
         tags: item.tags,
-        dateRange: isExpendable ? null : item.dateRange,
+        dateRange: isExpendable
+          ? (item.dateRange ?? todayRange)
+          : item.dateRange,
         requiresDateRange: isExpendable ? false : item.requiresDateRange,
         multiplier,
         quantity,
@@ -251,7 +294,7 @@ export default function CartPage() {
         lineTotal: unitPrice * effectiveUnits,
       };
     });
-  }, [items, getDays, itemQuantities]);
+  }, [items, getDays, itemQuantities, todayRange]);
 
   const grouped = useMemo<GroupedItems>(() => {
     const locations: CheckoutItem[] = [];
@@ -313,6 +356,106 @@ export default function CartPage() {
       bundles,
     };
   }, [checkoutItems]);
+
+  const dateMutableItems = useMemo(
+    () => checkoutItems.filter((item) => item.requiresDateRange),
+    [checkoutItems],
+  );
+
+  const selectedDateMutableItems = useMemo(
+    () => dateMutableItems.filter((item) => selectedItemIds[item.id]),
+    [dateMutableItems, selectedItemIds],
+  );
+
+  const areAllDateMutableItemsSelected =
+    dateMutableItems.length > 0 &&
+    selectedDateMutableItems.length === dateMutableItems.length;
+
+  const sameItemConflictItemIds = useMemo(() => {
+    const ids = new Set<string>();
+    const itemsWithDate = checkoutItems.filter(
+      (item) => item.requiresDateRange && item.dateRange,
+    );
+
+    for (let i = 0; i < itemsWithDate.length; i += 1) {
+      for (let j = i + 1; j < itemsWithDate.length; j += 1) {
+        const first = itemsWithDate[i];
+        const second = itemsWithDate[j];
+
+        if (
+          buildBookingIdentityKey(first) !== buildBookingIdentityKey(second)
+        ) {
+          continue;
+        }
+
+        if (
+          rangesOverlap(
+            first.dateRange!.from,
+            first.dateRange!.to,
+            second.dateRange!.from,
+            second.dateRange!.to,
+          )
+        ) {
+          ids.add(first.id);
+          ids.add(second.id);
+        }
+      }
+    }
+
+    return Array.from(ids);
+  }, [checkoutItems]);
+
+  const invalidBookingItemIdSet = useMemo(() => {
+    return new Set([...sameItemConflictItemIds, ...manualConflictItemIds]);
+  }, [manualConflictItemIds, sameItemConflictItemIds]);
+
+  const collectSameItemConflictIdsForUpdates = (
+    updatesById: Record<string, BookedRange>,
+  ) => {
+    const ids = new Set<string>();
+    const updatedIdSet = new Set(Object.keys(updatesById));
+    const itemsWithDate = checkoutItems.filter(
+      (item) => item.requiresDateRange,
+    );
+
+    for (let i = 0; i < itemsWithDate.length; i += 1) {
+      for (let j = i + 1; j < itemsWithDate.length; j += 1) {
+        const first = itemsWithDate[i];
+        const second = itemsWithDate[j];
+
+        if (
+          buildBookingIdentityKey(first) !== buildBookingIdentityKey(second)
+        ) {
+          continue;
+        }
+
+        const firstRange = updatesById[first.id] ?? first.dateRange;
+        const secondRange = updatesById[second.id] ?? second.dateRange;
+
+        if (!firstRange || !secondRange) {
+          continue;
+        }
+
+        if (
+          rangesOverlap(
+            firstRange.from,
+            firstRange.to,
+            secondRange.from,
+            secondRange.to,
+          )
+        ) {
+          if (!updatedIdSet.has(first.id) && !updatedIdSet.has(second.id)) {
+            continue;
+          }
+
+          ids.add(first.id);
+          ids.add(second.id);
+        }
+      }
+    }
+
+    return Array.from(ids);
+  };
 
   const subtotal = useMemo(
     () => checkoutItems.reduce((sum, item) => sum + item.lineTotal, 0),
@@ -632,6 +775,165 @@ export default function CartPage() {
     };
   }, [isPhoneSameAsProfile, supabase, user]);
 
+  useEffect(() => {
+    const availableIds = new Set(dateMutableItems.map((item) => item.id));
+
+    setSelectedItemIds((prev) => {
+      const next: Record<string, boolean> = {};
+      let changed = false;
+
+      Object.entries(prev).forEach(([id, selected]) => {
+        if (selected && availableIds.has(id)) {
+          next[id] = true;
+        } else if (selected) {
+          changed = true;
+        }
+      });
+
+      if (!changed && Object.keys(next).length === Object.keys(prev).length) {
+        return prev;
+      }
+
+      return next;
+    });
+  }, [dateMutableItems]);
+
+  const normalizeSelectedRange = (range?: { from?: Date; to?: Date }) => {
+    if (!range?.from) {
+      return null;
+    }
+
+    const normalizedFrom = startOfDay(range.from);
+    const normalizedTo = startOfDay(range.to ?? range.from);
+
+    if (normalizedFrom < minBookingDate || normalizedTo < minBookingDate) {
+      setCheckoutError("Tanggal booking yang sudah lewat tidak bisa dipilih.");
+      return null;
+    }
+
+    return {
+      from: normalizedFrom <= normalizedTo ? normalizedFrom : normalizedTo,
+      to: normalizedTo >= normalizedFrom ? normalizedTo : normalizedFrom,
+    };
+  };
+
+  const applyDateRangeToItems = (
+    targetItems: CheckoutItem[],
+    nextRange: { from: Date; to: Date },
+  ) => {
+    if (targetItems.length === 0) {
+      return;
+    }
+
+    const overlappingLocationNames = targetItems
+      .filter((item) => item.isLocation)
+      .filter((item) =>
+        hasLocationRangeOverlap(item, nextRange.from, nextRange.to),
+      )
+      .map((item) => item.name);
+
+    if (overlappingLocationNames.length > 0) {
+      setManualConflictItemIds(targetItems.map((item) => item.id));
+      setCheckoutError(
+        `Beberapa lokasi bentrok dengan booking lain (${overlappingLocationNames.slice(0, 2).join(", ")}${overlappingLocationNames.length > 2 ? ", ..." : ""}).`,
+      );
+      return;
+    }
+
+    const updatesById = targetItems.reduce<Record<string, BookedRange>>(
+      (acc, item) => {
+        acc[item.id] = {
+          from: nextRange.from,
+          to: nextRange.to,
+        };
+        return acc;
+      },
+      {},
+    );
+
+    const sameItemConflictIds =
+      collectSameItemConflictIdsForUpdates(updatesById);
+    if (sameItemConflictIds.length > 0) {
+      setManualConflictItemIds(sameItemConflictIds);
+      setCheckoutError(
+        "Item yang sama tidak boleh memiliki tanggal booking yang overlap. Ubah ke tanggal berbeda.",
+      );
+      return;
+    }
+
+    updateDateRangeBulk(
+      targetItems.map((item) => item.id),
+      {
+        from: nextRange.from,
+        to: nextRange.to,
+      },
+    );
+
+    setManualConflictItemIds([]);
+    setShowMissingDateFrame(false);
+    setCheckoutError("");
+  };
+
+  const toggleSelectDateMutableItem = (itemId: string, checked: boolean) => {
+    setSelectedItemIds((prev) => {
+      if (!checked) {
+        if (!prev[itemId]) {
+          return prev;
+        }
+
+        const next = { ...prev };
+        delete next[itemId];
+        return next;
+      }
+
+      return {
+        ...prev,
+        [itemId]: true,
+      };
+    });
+  };
+
+  const toggleSelectAllDateMutableItems = (checked: boolean) => {
+    if (!checked) {
+      setSelectedItemIds({});
+      return;
+    }
+
+    const next: Record<string, boolean> = {};
+    dateMutableItems.forEach((item) => {
+      next[item.id] = true;
+    });
+    setSelectedItemIds(next);
+  };
+
+  const handleGlobalDateApply = () => {
+    if (!globalDateRange) {
+      setCheckoutError("Pilih range global terlebih dahulu.");
+      return;
+    }
+
+    applyDateRangeToItems(dateMutableItems, globalDateRange);
+  };
+
+  const handleBulkSelectedApply = () => {
+    if (!bulkDateRange) {
+      setCheckoutError("Pilih range untuk item terpilih terlebih dahulu.");
+      return;
+    }
+
+    applyDateRangeToItems(selectedDateMutableItems, bulkDateRange);
+  };
+
+  const handleConfirmGlobalDateApply = () => {
+    setIsConfirmGlobalDialogOpen(false);
+    handleGlobalDateApply();
+  };
+
+  const handleConfirmBulkDateApply = () => {
+    setIsConfirmBulkDialogOpen(false);
+    handleBulkSelectedApply();
+  };
+
   const getLocationBookedRanges = (item: CheckoutItem) => {
     if (!item.isLocation) {
       return [];
@@ -709,6 +1011,8 @@ export default function CartPage() {
       );
     });
 
+    const hasSameItemOverlap = sameItemConflictItemIds.length > 0;
+
     if (hasMissingDates) {
       setShowMissingDateFrame(true);
       setCheckoutError("Masih ada item tanpa tanggal booking.");
@@ -723,6 +1027,14 @@ export default function CartPage() {
     if (hasLocationBookingOverlap) {
       setCheckoutError(
         "Range tanggal lokasi bentrok dengan booking lain. Pilih range yang benar-benar kosong.",
+      );
+      return;
+    }
+
+    if (hasSameItemOverlap) {
+      setManualConflictItemIds(sameItemConflictItemIds);
+      setCheckoutError(
+        "Ada item yang sama dengan range tanggal overlap. Item dengan ID sama harus pakai tanggal berbeda.",
       );
       return;
     }
@@ -844,35 +1156,43 @@ export default function CartPage() {
     item: CheckoutItem,
     range?: { from?: Date; to?: Date },
   ) => {
-    if (!range?.from) {
+    const normalizedRange = normalizeSelectedRange(range);
+
+    if (!normalizedRange) {
       return;
     }
 
-    const normalizedFrom = startOfDay(range.from);
-    const normalizedTo = startOfDay(range.to ?? range.from);
-
-    if (normalizedFrom < minBookingDate || normalizedTo < minBookingDate) {
-      setCheckoutError("Tanggal booking yang sudah lewat tidak bisa dipilih.");
-      return;
-    }
-
-    const nextFrom =
-      normalizedFrom <= normalizedTo ? normalizedFrom : normalizedTo;
-    const nextTo =
-      normalizedTo >= normalizedFrom ? normalizedTo : normalizedFrom;
-
-    if (hasLocationRangeOverlap(item, nextFrom, nextTo)) {
+    if (
+      hasLocationRangeOverlap(item, normalizedRange.from, normalizedRange.to)
+    ) {
+      setManualConflictItemIds([item.id]);
       setCheckoutError(
         "Range tanggal lokasi bentrok dengan booking lain. Pilih range tanpa tanggal merah.",
       );
       return;
     }
 
-    updateDateRange(item.id, {
-      from: nextFrom,
-      to: nextTo,
+    const sameItemConflictIds = collectSameItemConflictIdsForUpdates({
+      [item.id]: {
+        from: normalizedRange.from,
+        to: normalizedRange.to,
+      },
     });
 
+    if (sameItemConflictIds.length > 0) {
+      setManualConflictItemIds(sameItemConflictIds);
+      setCheckoutError(
+        "Item yang sama tidak boleh memiliki tanggal booking yang overlap.",
+      );
+      return;
+    }
+
+    updateDateRange(item.id, {
+      from: normalizedRange.from,
+      to: normalizedRange.to,
+    });
+
+    setManualConflictItemIds([]);
     setShowMissingDateFrame(false);
     setCheckoutError("");
   };
@@ -889,6 +1209,18 @@ export default function CartPage() {
 
   const handleRemoveSingleItem = (itemId: string) => {
     removeItem(itemId);
+
+    setManualConflictItemIds((prev) => prev.filter((id) => id !== itemId));
+
+    setSelectedItemIds((prev) => {
+      if (!prev[itemId]) {
+        return prev;
+      }
+
+      const next = { ...prev };
+      delete next[itemId];
+      return next;
+    });
 
     setItemQuantities((prev) => {
       if (!(itemId in prev)) {
@@ -908,6 +1240,19 @@ export default function CartPage() {
   const normalizedPhone = (
     isPhoneSameAsProfile ? profilePhone : phoneNumber
   ).trim();
+  const hasLiveLocationOverlap = checkoutItems.some((item) => {
+    if (!item.isLocation || !item.dateRange?.from || !item.dateRange?.to) {
+      return false;
+    }
+
+    return hasLocationRangeOverlap(
+      item,
+      item.dateRange.from,
+      item.dateRange.to,
+    );
+  });
+  const hasBookingConflicts =
+    sameItemConflictItemIds.length > 0 || hasLiveLocationOverlap;
   const isRequiredCheckoutFieldsMissing =
     !normalizedPurpose || !normalizedShootingAddress || !normalizedPhone;
 
@@ -923,12 +1268,15 @@ export default function CartPage() {
           const isMissingDateRange =
             item.requiresDateRange &&
             (!item.dateRange?.from || !item.dateRange?.to);
+          const hasInvalidBooking = invalidBookingItemIdSet.has(item.id);
+          const canBulkChangeDate = item.requiresDateRange;
+          const isSelected = Boolean(selectedItemIds[item.id]);
 
           return (
             <div
               key={item.id}
               className={`rounded-lg border bg-background p-3 ${
-                showMissingDateFrame && isMissingDateRange
+                isMissingDateRange || hasInvalidBooking
                   ? "border-red-500"
                   : "border-border/60"
               }`}
@@ -947,9 +1295,24 @@ export default function CartPage() {
                 <div className="min-w-0 flex-1 space-y-2">
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0">
-                      <p className="truncate text-sm font-semibold">
-                        {item.name}
-                      </p>
+                      <div className="flex items-center gap-2">
+                        {canBulkChangeDate ? (
+                          <input
+                            type="checkbox"
+                            checked={isSelected}
+                            onChange={(event) =>
+                              toggleSelectDateMutableItem(
+                                item.id,
+                                event.target.checked,
+                              )
+                            }
+                            aria-label={`Pilih ${item.name} untuk ubah tanggal bulk`}
+                          />
+                        ) : null}
+                        <p className="truncate text-sm font-semibold">
+                          {item.name}
+                        </p>
+                      </div>
                       <p className="text-xs text-muted-foreground">
                         {item.subtitle}
                       </p>
@@ -992,7 +1355,7 @@ export default function CartPage() {
                       <div />
                     )}
 
-                    {!item.isExpendable ? (
+                    {item.requiresDateRange ? (
                       <div className="text-xs text-muted-foreground">
                         <p>Start: {formatDateLabel(item.dateRange?.from)}</p>
                         <p>End: {formatDateLabel(item.dateRange?.to)}</p>
@@ -1006,7 +1369,7 @@ export default function CartPage() {
                     </div>
                   </div>
 
-                  {!item.isExpendable ? (
+                  {item.requiresDateRange ? (
                     <div className="flex flex-wrap gap-2">
                       <Popover>
                         <PopoverTrigger asChild>
@@ -1036,11 +1399,14 @@ export default function CartPage() {
                             }
                             disabled={(date) =>
                               startOfDay(date) < minBookingDate ||
-                              isLocationDateBooked(item, date)
+                              (item.isLocation &&
+                                isLocationDateBooked(item, date))
                             }
                             modifiers={{
                               booked: (date) =>
-                                isLocationDateBooked(item, date),
+                                item.isLocation
+                                  ? isLocationDateBooked(item, date)
+                                  : false,
                             }}
                             modifiersClassNames={{
                               booked:
@@ -1051,6 +1417,19 @@ export default function CartPage() {
                         </PopoverContent>
                       </Popover>
                     </div>
+                  ) : null}
+
+                  {hasInvalidBooking ? (
+                    <p className="text-xs text-destructive">
+                      Item yang sama tidak boleh memiliki tanggal booking yang
+                      overlap.
+                    </p>
+                  ) : null}
+
+                  {isMissingDateRange ? (
+                    <p className="text-xs text-destructive">
+                      Tanggal booking belum diatur. Silakan pilih range tanggal.
+                    </p>
                   ) : null}
                 </div>
               </div>
@@ -1086,6 +1465,161 @@ export default function CartPage() {
             Hapus Semua
           </Button>
         </div>
+
+        {checkoutItems.length > 0 ? (
+          <div className="mb-6 grid grid-cols-1 gap-4 lg:grid-cols-2">
+            <section className="rounded-xl border border-border bg-card p-4">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <h3 className="text-base font-semibold">Global Date Range</h3>
+                  <p className="text-xs text-muted-foreground">
+                    Pilih sekali, lalu terapkan ke semua item bertanggal.
+                  </p>
+                </div>
+                <Badge variant="secondary">
+                  {dateMutableItems.length} item
+                </Badge>
+              </div>
+
+              <div className="mt-3 flex flex-wrap gap-2">
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      className="h-8 gap-1.5"
+                    >
+                      <CalendarDays className="h-3.5 w-3.5" />
+                      Pilih Range Global
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0" align="start">
+                    <Calendar
+                      mode="range"
+                      selected={
+                        globalDateRange
+                          ? {
+                              from: globalDateRange.from,
+                              to: globalDateRange.to,
+                            }
+                          : undefined
+                      }
+                      onSelect={(range) => {
+                        const normalizedRange = normalizeSelectedRange(range);
+                        if (!normalizedRange) {
+                          return;
+                        }
+
+                        setGlobalDateRange(normalizedRange);
+                        setCheckoutError("");
+                      }}
+                      disabled={(date) => startOfDay(date) < minBookingDate}
+                      initialFocus
+                    />
+                  </PopoverContent>
+                </Popover>
+
+                <Button
+                  type="button"
+                  size="sm"
+                  onClick={() => setIsConfirmGlobalDialogOpen(true)}
+                  disabled={dateMutableItems.length === 0 || !globalDateRange}
+                >
+                  Terapkan ke semua item
+                </Button>
+              </div>
+
+              <p className="mt-2 text-xs text-muted-foreground">
+                Global: {formatDateLabel(globalDateRange?.from)} -{" "}
+                {formatDateLabel(globalDateRange?.to)}
+              </p>
+            </section>
+
+            <section className="rounded-xl border border-border bg-card p-4">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <h3 className="text-base font-semibold">
+                    Bulk Select & Apply
+                  </h3>
+                  <p className="text-xs text-muted-foreground">
+                    Pilih checkbox item, lalu ubah tanggal sekaligus.
+                  </p>
+                </div>
+                <Badge variant="secondary">
+                  {selectedDateMutableItems.length} terpilih
+                </Badge>
+              </div>
+
+              <div className="mt-3 flex flex-wrap items-center gap-2">
+                <label className="flex items-center gap-2 text-xs text-muted-foreground">
+                  <input
+                    type="checkbox"
+                    checked={areAllDateMutableItemsSelected}
+                    onChange={(event) =>
+                      toggleSelectAllDateMutableItems(event.target.checked)
+                    }
+                  />
+                  Pilih semua item yang bisa diubah tanggalnya
+                </label>
+
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      className="h-8 gap-1.5"
+                    >
+                      <CalendarDays className="h-3.5 w-3.5" />
+                      Pilih Range Bulk
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0" align="start">
+                    <Calendar
+                      mode="range"
+                      selected={
+                        bulkDateRange
+                          ? {
+                              from: bulkDateRange.from,
+                              to: bulkDateRange.to,
+                            }
+                          : undefined
+                      }
+                      onSelect={(range) => {
+                        const normalizedRange = normalizeSelectedRange(range);
+                        if (!normalizedRange) {
+                          return;
+                        }
+
+                        setBulkDateRange(normalizedRange);
+                        setCheckoutError("");
+                      }}
+                      disabled={(date) => startOfDay(date) < minBookingDate}
+                      initialFocus
+                    />
+                  </PopoverContent>
+                </Popover>
+
+                <Button
+                  type="button"
+                  size="sm"
+                  onClick={() => setIsConfirmBulkDialogOpen(true)}
+                  disabled={
+                    selectedDateMutableItems.length === 0 || !bulkDateRange
+                  }
+                >
+                  Ubah tanggal untuk item terpilih
+                </Button>
+              </div>
+
+              <p className="mt-2 text-xs text-muted-foreground">
+                Bulk: {formatDateLabel(bulkDateRange?.from)} -{" "}
+                {formatDateLabel(bulkDateRange?.to)}
+              </p>
+            </section>
+          </div>
+        ) : null}
 
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1.75fr_1fr]">
           <div className="space-y-4">
@@ -1133,12 +1667,15 @@ export default function CartPage() {
                   const isMissingDateRange =
                     item.requiresDateRange &&
                     (!item.dateRange?.from || !item.dateRange?.to);
+                  const hasInvalidBooking = invalidBookingItemIdSet.has(
+                    item.id,
+                  );
 
                   return (
                     <div
                       key={`summary-${item.id}`}
                       className={`flex items-start justify-between gap-3 rounded-md border p-2 text-sm ${
-                        showMissingDateFrame && isMissingDateRange
+                        isMissingDateRange || hasInvalidBooking
                           ? "border-red-500"
                           : "border-transparent"
                       }`}
@@ -1317,11 +1854,19 @@ export default function CartPage() {
                 disabled={
                   checkoutItems.length === 0 ||
                   isPaying ||
-                  isRequiredCheckoutFieldsMissing
+                  isRequiredCheckoutFieldsMissing ||
+                  hasBookingConflicts
                 }
               >
                 {isPaying ? "Memproses pembayaran..." : "Pembayaran"}
               </Button>
+
+              {hasBookingConflicts ? (
+                <p className="text-xs text-destructive">
+                  Pembayaran dinonaktifkan karena masih ada konflik tanggal.
+                  Ubah tanggal pada item yang ditandai merah.
+                </p>
+              ) : null}
 
               <Button
                 type="button"
@@ -1340,6 +1885,62 @@ export default function CartPage() {
             </div>
           </aside>
         </div>
+
+        <Dialog
+          open={isConfirmGlobalDialogOpen}
+          onOpenChange={setIsConfirmGlobalDialogOpen}
+        >
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Terapkan ke semua item?</DialogTitle>
+              <DialogDescription>
+                Semua item bertanggal ({dateMutableItems.length} item) akan
+                diganti ke range {formatDateLabel(globalDateRange?.from)} -{" "}
+                {formatDateLabel(globalDateRange?.to)}.
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setIsConfirmGlobalDialogOpen(false)}
+              >
+                Batal
+              </Button>
+              <Button type="button" onClick={handleConfirmGlobalDateApply}>
+                Ya, terapkan semua
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        <Dialog
+          open={isConfirmBulkDialogOpen}
+          onOpenChange={setIsConfirmBulkDialogOpen}
+        >
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Ubah tanggal item terpilih?</DialogTitle>
+              <DialogDescription>
+                {selectedDateMutableItems.length} item terpilih akan diubah ke
+                range {formatDateLabel(bulkDateRange?.from)} -{" "}
+                {formatDateLabel(bulkDateRange?.to)}.
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setIsConfirmBulkDialogOpen(false)}
+              >
+                Batal
+              </Button>
+              <Button type="button" onClick={handleConfirmBulkDateApply}>
+                Ya, ubah yang dipilih
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </section>
     </main>
   );

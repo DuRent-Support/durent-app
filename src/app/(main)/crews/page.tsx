@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Loader2, Search } from "lucide-react";
 
 import AppCard from "@/components/app-card/AppCard";
+import CartDefaultDateRangePicker from "@/components/cart/CartDefaultDateRangePicker";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useCart } from "@/hooks/use-cart";
@@ -153,6 +154,8 @@ export default function CrewsPage() {
           </div>
 
           <div className="mb-4 rounded-xl border border-border bg-card p-3 md:p-4">
+            <CartDefaultDateRangePicker className="mb-3" />
+
             <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
               <div className="relative w-full md:max-w-md">
                 <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />

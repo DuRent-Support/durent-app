@@ -34,6 +34,7 @@ export interface CartItemInput {
   imageUrl?: string;
   tags?: string[];
   requiresDateRange?: boolean;
+  dateRange?: Partial<CartDateRange> | null;
 }
 
 export interface CartContextValue {
@@ -42,6 +43,10 @@ export interface CartContextValue {
   addItem: (item: CartItemInput) => void;
   removeItem: (id: string) => void;
   updateDateRange: (id: string, dateRange: CartDateRange) => void;
+  updateDateRangeBulk: (ids: string[], dateRange: CartDateRange) => void;
+  updateDateRangeForLocations: (dateRange: CartDateRange) => void;
+  defaultDateRange: CartDateRange | null;
+  setDefaultDateRange: (dateRange: Partial<CartDateRange> | null) => void;
   clearCart: () => void;
   isInCart: (id: string, itemType?: CartItemType) => boolean;
   getDays: (item: CartItem) => number;

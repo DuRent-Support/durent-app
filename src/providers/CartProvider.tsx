@@ -14,6 +14,7 @@ import {
   type CartItemInput,
   type CartItemType,
 } from "@/types/cart";
+import { toast } from "sonner";
 
 const CART_STORAGE_KEY = "durent-cart";
 const cartListeners = new Set<() => void>();
@@ -21,6 +22,7 @@ const EMPTY_CART: CartItem[] = [];
 
 let cachedRawSnapshot: string | null = null;
 let cachedCartSnapshot: CartItem[] = EMPTY_CART;
+let inMemoryDefaultDateRangeSnapshot: CartDateRange | null = null;
 
 export const CartContext = createContext<CartContextValue | null>(null);
 
@@ -69,6 +71,11 @@ function normalizeItemType(value: unknown): CartItemType {
 
 function buildCartId(itemType: CartItemType, sourceId: string) {
   return `${itemType}:${sourceId}`;
+}
+
+function buildCartEntryId(itemType: CartItemType, sourceId: string) {
+  const nonce = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+  return `${itemType}:${sourceId}:${nonce}`;
 }
 
 function getDefaultSubtitle(itemType: CartItemType) {
@@ -124,8 +131,13 @@ function parseStoredCart(value: string | null): CartItem[] {
               ? item.city
               : getDefaultSubtitle(itemType);
 
+        const entryId =
+          typeof item.id === "string" && item.id.length > 0
+            ? item.id
+            : buildCartId(itemType, sourceId);
+
         return {
-          id: buildCartId(itemType, sourceId),
+          id: entryId,
           sourceId,
           itemType,
           subtitle: subtitleCandidate,
@@ -169,8 +181,16 @@ function readCartSnapshot() {
   return cachedCartSnapshot;
 }
 
+function readDefaultDateRangeSnapshot() {
+  return inMemoryDefaultDateRangeSnapshot;
+}
+
 function getServerCartSnapshot() {
   return EMPTY_CART;
+}
+
+function getServerDefaultDateRangeSnapshot() {
+  return null;
 }
 
 function subscribeCart(listener: () => void) {
@@ -183,7 +203,7 @@ function subscribeCart(listener: () => void) {
   }
 
   const handleStorage = (event: StorageEvent) => {
-    if (event.key === CART_STORAGE_KEY) {
+    if (event.key === CART_STORAGE_KEY || event.key === null) {
       listener();
     }
   };
@@ -206,6 +226,16 @@ function persistCart(items: CartItem[]) {
   cachedCartSnapshot = items;
   window.localStorage.setItem(CART_STORAGE_KEY, rawSnapshot);
 
+  notifyCartListeners();
+}
+
+function persistDefaultDateRange(dateRange: CartDateRange | null) {
+  inMemoryDefaultDateRangeSnapshot = dateRange;
+
+  notifyCartListeners();
+}
+
+function notifyCartListeners() {
   for (const listener of cartListeners) {
     listener();
   }
@@ -234,19 +264,24 @@ export function CartProvider({ children }: { children: ReactNode }) {
     readCartSnapshot,
     getServerCartSnapshot,
   );
+  const defaultDateRange = useSyncExternalStore(
+    subscribeCart,
+    readDefaultDateRangeSnapshot,
+    getServerDefaultDateRangeSnapshot,
+  );
 
   const value = useMemo<CartContextValue>(() => {
     const addItem = (item: CartItemInput) => {
       const currentItems = readCartSnapshot();
+      const currentDefaultDateRange = readDefaultDateRangeSnapshot();
       const itemType = item.itemType ?? "location";
       const sourceId = item.id;
-      const cartId = buildCartId(itemType, sourceId);
-
-      if (currentItems.some((currentItem) => currentItem.id === cartId)) {
-        return;
-      }
+      const cartId = buildCartEntryId(itemType, sourceId);
 
       const requiresDateRange = true;
+      const preferredDateRange = normalizeDateRange(item.dateRange ?? null);
+      const resolvedDateRange =
+        preferredDateRange ?? currentDefaultDateRange ?? null;
 
       const subtitle =
         item.subtitle && item.subtitle.trim().length > 0
@@ -268,9 +303,13 @@ export function CartProvider({ children }: { children: ReactNode }) {
               ? item.imageUrl
               : "/hero.webp",
           tags: item.tags ?? [],
-          dateRange: null,
+          dateRange: resolvedDateRange,
         },
       ]);
+
+      toast.success("Berhasil ditambahkan ke cart", {
+        description: item.name,
+      });
     };
 
     const removeItem = (id: string) => {
@@ -280,6 +319,12 @@ export function CartProvider({ children }: { children: ReactNode }) {
     };
 
     const updateDateRange = (id: string, dateRange: CartDateRange) => {
+      const normalizedRange = normalizeDateRange(dateRange);
+
+      if (!normalizedRange) {
+        return;
+      }
+
       persistCart(
         readCartSnapshot().map((currentItem) => {
           if (currentItem.id !== id || !currentItem.requiresDateRange) {
@@ -288,19 +333,71 @@ export function CartProvider({ children }: { children: ReactNode }) {
 
           return {
             ...currentItem,
-            dateRange: normalizeDateRange(dateRange),
+            dateRange: normalizedRange,
           };
         }),
       );
+    };
+
+    const updateDateRangeBulk = (ids: string[], dateRange: CartDateRange) => {
+      const normalizedRange = normalizeDateRange(dateRange);
+
+      if (!normalizedRange || ids.length === 0) {
+        return;
+      }
+
+      const idSet = new Set(ids);
+
+      persistCart(
+        readCartSnapshot().map((currentItem) => {
+          if (!idSet.has(currentItem.id) || !currentItem.requiresDateRange) {
+            return currentItem;
+          }
+
+          return {
+            ...currentItem,
+            dateRange: normalizedRange,
+          };
+        }),
+      );
+    };
+
+    const updateDateRangeForLocations = (dateRange: CartDateRange) => {
+      const normalizedRange = normalizeDateRange(dateRange);
+
+      if (!normalizedRange) {
+        return;
+      }
+
+      persistCart(
+        readCartSnapshot().map((currentItem) => {
+          if (
+            currentItem.itemType !== "location" ||
+            !currentItem.requiresDateRange
+          ) {
+            return currentItem;
+          }
+
+          return {
+            ...currentItem,
+            dateRange: normalizedRange,
+          };
+        }),
+      );
+    };
+
+    const setDefaultDateRange = (dateRange: Partial<CartDateRange> | null) => {
+      persistDefaultDateRange(normalizeDateRange(dateRange));
     };
 
     const clearCart = () => {
       persistCart([]);
     };
 
-    const isInCart = (id: string, itemType: CartItemType = "location") => {
-      const cartId = buildCartId(itemType, id);
-      return items.some((item) => item.id === cartId);
+    const isInCart = (_id: string, _itemType?: CartItemType) => {
+      void _id;
+      void _itemType;
+      return false;
     };
 
     const getDays = (item: CartItem) => {
@@ -313,11 +410,15 @@ export function CartProvider({ children }: { children: ReactNode }) {
       addItem,
       removeItem,
       updateDateRange,
+      updateDateRangeBulk,
+      updateDateRangeForLocations,
+      defaultDateRange,
+      setDefaultDateRange,
       clearCart,
       isInCart,
       getDays,
     };
-  }, [items]);
+  }, [defaultDateRange, items]);
 
   return <CartContext.Provider value={value}>{children}</CartContext.Provider>;
 }
