@@ -18,8 +18,8 @@ type BundleApiResponse = {
 
 function getPrimaryImage(item: Bundle) {
   const firstImage = (item.images ?? [])[0];
-  if (!firstImage) return "/hero.webp";
-  return String(firstImage.preview_url || firstImage.url || "/hero.webp");
+  if (!firstImage) return "/placeholder_durent.webp";
+  return String(firstImage.preview_url || firstImage.url || "/placeholder_durent.webp");
 }
 
 export default function BundlesPage() {

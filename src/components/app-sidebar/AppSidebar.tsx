@@ -320,7 +320,7 @@ function SidebarNavContent({
 
           <SidebarGroup className="px-1 pt-1">
             <Collapsible defaultOpen className="group/collapsible">
-              <SidebarCollapsibleTrigger label="Bundles CRUD" />
+              <SidebarCollapsibleTrigger label="Input Bundle" />
               <CollapsibleContent>
                 <SidebarGroupContent>
                   <SidebarMenu>
@@ -343,7 +343,7 @@ function SidebarNavContent({
 
           <SidebarGroup className="px-1 pt-1">
             <Collapsible defaultOpen className="group/collapsible">
-              <SidebarCollapsibleTrigger label="Locations CRUD" />
+              <SidebarCollapsibleTrigger label="Input Inventory" />
               <CollapsibleContent>
                 <SidebarGroupContent>
                   <SidebarMenu>
@@ -360,29 +360,7 @@ function SidebarNavContent({
                       itemWrapperClassName={itemWrapperClassName}
                       buttonClassName={buttonClassName}
                     />
-                    <SidebarNavItem
-                      href="/admin/locations/tags"
-                      label="Tags"
-                      icon={Tag}
-                      isActive={isPathActive(pathname, "/admin/locations/tags")}
-                      itemClassName={itemClassName}
-                      iconClassName={iconClassName}
-                      labelClassName={labelClassName}
-                      itemWrapperClassName={itemWrapperClassName}
-                      buttonClassName={buttonClassName}
-                    />
-                  </SidebarMenu>
-                </SidebarGroupContent>
-              </CollapsibleContent>
-            </Collapsible>
-          </SidebarGroup>
 
-          <SidebarGroup className="px-1 pt-1">
-            <Collapsible defaultOpen className="group/collapsible">
-              <SidebarCollapsibleTrigger label="Crews CRUD" />
-              <CollapsibleContent>
-                <SidebarGroupContent>
-                  <SidebarMenu>
                     <SidebarNavItem
                       href="/admin/crews"
                       label="Crews"
@@ -396,41 +374,17 @@ function SidebarNavContent({
                       itemWrapperClassName={itemWrapperClassName}
                       buttonClassName={buttonClassName}
                     />
-                  </SidebarMenu>
-                </SidebarGroupContent>
-              </CollapsibleContent>
-            </Collapsible>
-          </SidebarGroup>
-
-          <SidebarGroup className="px-1 pt-1">
-            <Collapsible defaultOpen className="group/collapsible">
-              <SidebarCollapsibleTrigger label="Expendables CRUD" />
-              <CollapsibleContent>
-                <SidebarGroupContent>
-                  <SidebarMenu>
                     <SidebarNavItem
-                      href="/admin/expendables"
-                      label="Expendables"
-                      icon={Boxes}
-                      isActive={isPathActive(pathname, "/admin/expendables")}
+                      href="/admin/rentals"
+                      label="Rentals"
+                      icon={Camera}
+                      isActive={isPathActive(pathname, "/admin/rentals")}
                       itemClassName={itemClassName}
                       iconClassName={iconClassName}
                       labelClassName={labelClassName}
                       itemWrapperClassName={itemWrapperClassName}
                       buttonClassName={buttonClassName}
                     />
-                  </SidebarMenu>
-                </SidebarGroupContent>
-              </CollapsibleContent>
-            </Collapsible>
-          </SidebarGroup>
-
-          <SidebarGroup className="px-1 pt-1">
-            <Collapsible defaultOpen className="group/collapsible">
-              <SidebarCollapsibleTrigger label="Food & Beverage CRUD" />
-              <CollapsibleContent>
-                <SidebarGroupContent>
-                  <SidebarMenu>
                     <SidebarNavItem
                       href="/admin/food-and-beverage"
                       label="Food & Beverage"
@@ -448,37 +402,12 @@ function SidebarNavContent({
                       itemWrapperClassName={itemWrapperClassName}
                       buttonClassName={buttonClassName}
                     />
-                    <SidebarNavItem
-                      href="/admin/food-and-beverage/tags"
-                      label="Tags"
-                      icon={Tag}
-                      isActive={isPathActive(
-                        pathname,
-                        "/admin/food-and-beverage/tags",
-                      )}
-                      itemClassName={itemClassName}
-                      iconClassName={iconClassName}
-                      labelClassName={labelClassName}
-                      itemWrapperClassName={itemWrapperClassName}
-                      buttonClassName={buttonClassName}
-                    />
-                  </SidebarMenu>
-                </SidebarGroupContent>
-              </CollapsibleContent>
-            </Collapsible>
-          </SidebarGroup>
 
-          <SidebarGroup className="px-1 pt-1">
-            <Collapsible defaultOpen className="group/collapsible">
-              <SidebarCollapsibleTrigger label="Rentals CRUD" />
-              <CollapsibleContent>
-                <SidebarGroupContent>
-                  <SidebarMenu>
                     <SidebarNavItem
-                      href="/admin/rentals"
-                      label="Rentals"
-                      icon={Camera}
-                      isActive={isPathActive(pathname, "/admin/rentals")}
+                      href="/admin/expendables"
+                      label="Expendables"
+                      icon={Boxes}
+                      isActive={isPathActive(pathname, "/admin/expendables")}
                       itemClassName={itemClassName}
                       iconClassName={iconClassName}
                       labelClassName={labelClassName}

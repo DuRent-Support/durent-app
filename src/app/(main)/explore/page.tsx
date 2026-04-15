@@ -80,7 +80,7 @@ type BundlesResponse = {
   message?: string;
 };
 
-const fallbackImage = "/hero.webp";
+const fallbackImage = "/placeholder_durent.webp";
 
 const getLocationImage = (location: LocationWithTags) =>
   location.shooting_location_image_url?.[0] || fallbackImage;
@@ -118,6 +118,20 @@ const parseSkillTags = (skills: Crew["skills"]) => {
   }
 
   return [] as string[];
+};
+
+const getFnbTagNames = (item: FoodAndBeverage) => {
+  const tags = (
+    item as FoodAndBeverage & { tags?: Array<{ name?: string | null }> }
+  ).tags;
+
+  if (!Array.isArray(tags)) {
+    return [] as string[];
+  }
+
+  return tags
+    .map((tag) => String(tag?.name ?? "").trim())
+    .filter((name) => name.length > 0);
 };
 
 const ExplorePage = () => {
@@ -567,7 +581,7 @@ const ExplorePage = () => {
                           name={item.name}
                           description={item.description}
                           price={item.price}
-                          fnbTags={item.tags.map((tag) => tag.name).slice(0, 3)}
+                          fnbTags={getFnbTagNames(item).slice(0, 3)}
                           imageUrl={getPrimaryImage(item.images)}
                           onClick={() => router.push("/login")}
                           action={
@@ -584,7 +598,7 @@ const ExplorePage = () => {
                                   subtitle: "Food & Beverage",
                                   price: item.price,
                                   imageUrl: getPrimaryImage(item.images),
-                                  tags: item.tags.map((tag) => tag.name),
+                                  tags: getFnbTagNames(item),
                                   requiresDateRange: false,
                                 });
                               }}

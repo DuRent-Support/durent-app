@@ -26,7 +26,7 @@ type CrewApiResponse = {
 
 function getPrimaryImage(item: CrewApiItem) {
   const firstImage = Array.isArray(item.images) ? item.images[0] : null;
-  if (!firstImage) return "/hero.webp";
+  if (!firstImage) return "/placeholder_durent.webp";
   return String(firstImage);
 }
 

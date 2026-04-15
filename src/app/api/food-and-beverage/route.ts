@@ -9,7 +9,9 @@ export async function GET() {
     const records =
       (await listFoodAndBeverageWithRelations()) as FoodAndBeverage[];
 
-    const items = records.filter((item) => Boolean(item.is_available));
+    const items = records
+      .filter((item) => Boolean(item.is_available))
+      .map(({ tag_ids: _tagIds, tags: _tags, ...item }) => item);
 
     return NextResponse.json({ items }, { status: 200 });
   } catch (error) {

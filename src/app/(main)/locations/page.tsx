@@ -172,7 +172,7 @@ export default function LocationsPage() {
                           name: location.shooting_location_name,
                           subtitle: location.shooting_location_city,
                           price: location.shooting_location_price,
-                          imageUrl: primaryImage || "/hero.webp",
+                          imageUrl: primaryImage || "/placeholder_durent.webp",
                           tags: location.tags,
                           requiresDateRange: true,
                         })

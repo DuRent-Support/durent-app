@@ -1,6 +1,6 @@
 "use client";
 
-import type { RefObject } from "react";
+import { useState, type DragEvent, type RefObject } from "react";
 import { Loader2, Plus, X } from "lucide-react";
 import { toast } from "sonner";
 
@@ -130,13 +130,9 @@ export default function ImageUploadCards<
   onRemoveImageAction,
   onUpdateOrderAction,
 }: ImageUploadCardsProps<T>) {
-  const handleLocalFileChange = async (
-    event: React.ChangeEvent<HTMLInputElement>,
-  ) => {
-    const selectedFile = event.target.files?.[0];
-    event.target.value = "";
-    if (!selectedFile) return;
+  const [isDragActive, setIsDragActive] = useState(false);
 
+  const processAndUploadFile = async (selectedFile: File) => {
     try {
       const webpFile = await convertToWebpUnderLimit(selectedFile);
       await onFileChangeAction(webpFile);
@@ -147,6 +143,54 @@ export default function ImageUploadCards<
           : "Terjadi kesalahan saat memproses gambar";
       toast.error(message);
     }
+  };
+
+  const handleLocalFileChange = async (
+    event: React.ChangeEvent<HTMLInputElement>,
+  ) => {
+    const selectedFile = event.target.files?.[0];
+    event.target.value = "";
+    if (!selectedFile) return;
+
+    await processAndUploadFile(selectedFile);
+  };
+
+  const handleDropZoneDragOver = (event: DragEvent<HTMLButtonElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    if (!uploading) {
+      setIsDragActive(true);
+    }
+  };
+
+  const handleDropZoneDragLeave = (event: DragEvent<HTMLButtonElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    setIsDragActive(false);
+  };
+
+  const handleDropZoneDrop = async (event: DragEvent<HTMLButtonElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    setIsDragActive(false);
+
+    if (uploading) {
+      return;
+    }
+
+    const droppedFiles = event.dataTransfer?.files;
+    const selectedFile = droppedFiles?.[0];
+
+    if (!selectedFile) {
+      return;
+    }
+
+    if (!selectedFile.type.startsWith("image/")) {
+      toast.error("File harus berupa gambar");
+      return;
+    }
+
+    await processAndUploadFile(selectedFile);
   };
 
   return (
@@ -227,7 +271,15 @@ export default function ImageUploadCards<
           type="button"
           onClick={() => onPickImageAction(null)}
           disabled={uploading}
-          className="rounded-lg border border-dashed border-border bg-muted/30 p-3 transition-colors hover:bg-muted/50 disabled:opacity-60"
+          onDragOver={handleDropZoneDragOver}
+          onDragEnter={handleDropZoneDragOver}
+          onDragLeave={handleDropZoneDragLeave}
+          onDrop={handleDropZoneDrop}
+          className={`rounded-lg border border-dashed p-3 transition-colors disabled:opacity-60 ${
+            isDragActive
+              ? "border-primary bg-primary/10"
+              : "border-border bg-muted/30 hover:bg-muted/50"
+          }`}
         >
           <div className="flex h-full min-h-[180px] items-center justify-center">
             <div className="flex flex-col items-center gap-1 text-muted-foreground">
@@ -237,7 +289,11 @@ export default function ImageUploadCards<
                 <Plus className="h-6 w-6" />
               )}
               <span className="text-xs font-medium">
-                {uploading ? "Uploading..." : "Tambah gambar"}
+                {uploading
+                  ? "Uploading..."
+                  : isDragActive
+                    ? "Lepas foto untuk upload"
+                    : "Tambah gambar / Drag & drop foto"}
               </span>
             </div>
           </div>

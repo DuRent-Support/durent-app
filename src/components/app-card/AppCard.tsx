@@ -6,7 +6,7 @@ import { MapPin, Maximize, Star, Users } from "lucide-react";
 import formatPrice from "@/lib/formatPrice";
 import { AppCardType, type AppCardProps } from "@/types/app-card";
 
-const fallbackImage = "/hero.webp";
+const fallbackImage = "/placeholder_durent.webp";
 
 function formatRating(value: number | null) {
   if (value === null || !Number.isFinite(value)) return "belum ada review";

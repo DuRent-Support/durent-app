@@ -1094,7 +1094,6 @@ export default function CartPage() {
         name: user.user_metadata?.name ?? null,
       };
 
-
       const response = await fetch("/api/midtrans/tokenizer", {
         method: "POST",
         headers: {
@@ -1282,7 +1281,7 @@ export default function CartPage() {
               <div className="flex gap-3">
                 <div className="relative h-24 w-32 shrink-0 overflow-hidden rounded-md border border-border/60">
                   <Image
-                    src={item.imageUrl || "/hero.webp"}
+                    src={item.imageUrl || "/placeholder_durent.webp"}
                     alt={item.name}
                     fill
                     sizes="(max-width: 768px) 40vw, 160px"

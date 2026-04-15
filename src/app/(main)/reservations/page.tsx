@@ -257,7 +257,9 @@ export default function ReservationsPage() {
                           <div className="flex min-w-0 items-start gap-3">
                             <div className="relative h-16 w-24 shrink-0 overflow-hidden rounded-md border border-border/60 bg-muted/30">
                               <Image
-                                src={item.imageUrl || "/hero.webp"}
+                                src={
+                                  item.imageUrl || "/placeholder_durent.webp"
+                                }
                                 alt={item.itemName}
                                 fill
                                 sizes="96px"

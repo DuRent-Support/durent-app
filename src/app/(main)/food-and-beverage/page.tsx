@@ -18,8 +18,8 @@ type FoodAndBeverageApiResponse = {
 
 function getPrimaryImage(item: FoodAndBeverage) {
   const firstImage = (item.images ?? [])[0];
-  if (!firstImage) return "/hero.webp";
-  return String(firstImage.preview_url || firstImage.url || "/hero.webp");
+  if (!firstImage) return "/placeholder_durent.webp";
+  return String(firstImage.preview_url || firstImage.url || "/placeholder_durent.webp");
 }
 
 export default function FoodAndBeveragePage() {
@@ -27,7 +27,6 @@ export default function FoodAndBeveragePage() {
   const [items, setItems] = useState<FoodAndBeverage[]>([]);
   const [loading, setLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState("");
-  const [selectedTag, setSelectedTag] = useState("Semua");
   const [searchQuery, setSearchQuery] = useState("");
 
   const fetchItems = useCallback(async () => {
@@ -63,39 +62,17 @@ export default function FoodAndBeveragePage() {
     void fetchItems();
   }, [fetchItems]);
 
-  const tags = useMemo(() => {
-    const tagSet = new Set<string>();
-    items.forEach((item) => {
-      item.tags.forEach((tag) => {
-        const normalized = String(tag.name ?? "").trim();
-        if (normalized) {
-          tagSet.add(normalized);
-        }
-      });
-    });
-
-    return ["Semua", ...Array.from(tagSet).sort((a, b) => a.localeCompare(b))];
-  }, [items]);
-
   const filteredItems = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
 
     return items.filter((item) => {
       const itemName = String(item.name ?? "").toLowerCase();
       const itemDescription = String(item.description ?? "").toLowerCase();
-      const matchNameOrDescription =
-        !query || itemName.includes(query) || itemDescription.includes(query);
-
-      const matchTag =
-        selectedTag === "Semua" ||
-        item.tags.some(
-          (tag) =>
-            String(tag.name ?? "").toLowerCase() === selectedTag.toLowerCase(),
-        );
-
-      return matchNameOrDescription && matchTag;
+      return (
+        !query || itemName.includes(query) || itemDescription.includes(query)
+      );
     });
-  }, [items, searchQuery, selectedTag]);
+  }, [items, searchQuery]);
 
   const addToCart = (item: FoodAndBeverage) => {
     const firstImage = getPrimaryImage(item);
@@ -106,7 +83,7 @@ export default function FoodAndBeveragePage() {
       subtitle: "Food & Beverage",
       price: item.price,
       imageUrl: firstImage,
-      tags: item.tags.map((tag) => tag.name),
+      tags: [],
       requiresDateRange: false,
     });
   };
@@ -136,20 +113,6 @@ export default function FoodAndBeveragePage() {
               className="pl-10"
             />
           </div>
-
-          <div className="mt-3 flex flex-wrap gap-2">
-            {tags.map((tag) => (
-              <Button
-                key={tag}
-                type="button"
-                size="sm"
-                variant={selectedTag === tag ? "default" : "secondary"}
-                onClick={() => setSelectedTag(tag)}
-              >
-                {tag}
-              </Button>
-            ))}
-          </div>
         </div>
 
         {loading ? (
@@ -170,7 +133,6 @@ export default function FoodAndBeveragePage() {
             {filteredItems.map((item) => {
               const itemId = String(item.id);
               const added = isInCart(itemId, "food_and_beverage");
-              const fnbTags = item.tags.map((tag) => tag.name);
 
               return (
                 <AppCard
@@ -179,7 +141,7 @@ export default function FoodAndBeveragePage() {
                   name={item.name}
                   description={item.description}
                   price={item.price}
-                  fnbTags={fnbTags}
+                  fnbTags={[]}
                   imageUrl={getPrimaryImage(item)}
                   action={
                     <Button

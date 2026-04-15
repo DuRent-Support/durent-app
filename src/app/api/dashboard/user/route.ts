@@ -309,7 +309,8 @@ export async function GET() {
           locationId: String(locationId),
           locationName: String(location.name ?? "Lokasi"),
           city: String(location.city ?? "-"),
-          imageUrl: locationImageMap.get(locationId) ?? "/hero.webp",
+          imageUrl:
+            locationImageMap.get(locationId) ?? "/placeholder_durent.webp",
           bookingFrom: from.toISOString(),
           bookingTo: to.toISOString(),
           days,

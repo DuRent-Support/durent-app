@@ -31,7 +31,8 @@ export default function CrewCard({ crew }: CrewCardProps) {
   const router = useRouter();
   const { addItem, isInCart } = useCart();
 
-  const images = crew.images.length > 0 ? crew.images : ["/hero.webp"];
+  const images =
+    crew.images.length > 0 ? crew.images : ["/placeholder_durent.webp"];
   const added = isInCart(crew.crew_id, "crew");
 
   const handleAdd = () => {

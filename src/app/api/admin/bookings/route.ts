@@ -245,7 +245,7 @@ export async function GET() {
           imageUrl:
             location?.shooting_location_image_url?.[1] ||
             location?.shooting_location_image_url?.[0] ||
-            "/hero.webp",
+            "/placeholder_durent.webp",
           startDate: item.booking_start,
           endDate: item.booking_end,
           days,

@@ -228,7 +228,8 @@ export async function GET() {
         locationName: String(location?.name ?? "Lokasi tidak ditemukan"),
         locationCity: String(location?.city ?? "-"),
         locationImageUrl:
-          bestImageByLocation.get(review.location_id)?.url ?? "/hero.webp",
+          bestImageByLocation.get(review.location_id)?.url ??
+          "/placeholder_durent.webp",
         rating: Math.max(0, Number(review.rating ?? 0)),
         comment: String(review.comment ?? "").trim(),
         createdAt: review.created_at,
@@ -239,7 +240,7 @@ export async function GET() {
       id: location.id,
       name: String(location.name ?? `Lokasi #${location.id}`),
       city: String(location.city ?? "-"),
-      imageUrl: bestImageByLocation.get(location.id)?.url ?? "/hero.webp",
+      imageUrl: bestImageByLocation.get(location.id)?.url ?? "/placeholder_durent.webp",
     }));
 
     return NextResponse.json(

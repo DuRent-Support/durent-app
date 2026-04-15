@@ -421,7 +421,7 @@ export default function AdminReviewsPage() {
               <Card key={review.id} className="overflow-hidden">
                 <div className="relative h-28 w-full bg-muted/30">
                   <Image
-                    src={review.locationImageUrl || "/hero.webp"}
+                    src={review.locationImageUrl || "/placeholder_durent.webp"}
                     alt={review.locationName}
                     fill
                     sizes="(max-width: 1280px) 100vw, 50vw"
@@ -494,7 +494,7 @@ export default function AdminReviewsPage() {
             <Card key={row.locationId} className="overflow-hidden">
               <div className="relative h-36 w-full bg-muted/30">
                 <Image
-                  src={row.locationImageUrl || "/hero.webp"}
+                  src={row.locationImageUrl || "/placeholder_durent.webp"}
                   alt={row.locationName}
                   fill
                   sizes="(max-width: 1280px) 100vw, 33vw"

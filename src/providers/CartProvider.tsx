@@ -147,7 +147,7 @@ function parseStoredCart(value: string | null): CartItem[] {
           imageUrl:
             typeof item.imageUrl === "string" && item.imageUrl.length > 0
               ? item.imageUrl
-              : "/hero.webp",
+              : "/placeholder_durent.webp",
           tags: Array.isArray(item.tags)
             ? item.tags.filter(
                 (tag: unknown): tag is string => typeof tag === "string",
@@ -301,7 +301,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
           imageUrl:
             item.imageUrl && item.imageUrl.length > 0
               ? item.imageUrl
-              : "/hero.webp",
+              : "/placeholder_durent.webp",
           tags: item.tags ?? [],
           dateRange: resolvedDateRange,
         },

@@ -32,7 +32,9 @@ export default function EquipmentCard({ equipment }: EquipmentCardProps) {
   const { addItem, isInCart } = useCart();
 
   const images =
-    equipment.images.length > 0 ? equipment.images : ["/hero.webp"];
+    equipment.images.length > 0
+      ? equipment.images
+      : ["/placeholder_durent.webp"];
   const added = isInCart(equipment.equipment_id, "equipment");
 
   const handleAdd = () => {
