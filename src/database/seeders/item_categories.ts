@@ -17,6 +17,8 @@ const itemCategoriesDummyRows: SeederRow[] = [
   { name: "Runner", short_code: "RN" },
   { name: "Production Unit", short_code: "PU" },
   { name: "Addon", short_code: "AO" },
+  { name: "Indoor", short_code: "ID" },
+  { name: "Outdoor", short_code: "OD" },
 ];
 
 export async function seedItemCategories(supabase: SupabaseClient) {

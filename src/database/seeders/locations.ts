@@ -12,70 +12,188 @@ type LocationRow = {
   price: number;
   area: number;
   pax: number;
-  is_available: boolean;
-  rating: number;
 };
 
 const locationRows: LocationRow[] = [
   {
-    code: "DS-LC-SE-ED-0001",
-    name: "Rumah Mewah Menteng",
+    code: "DS-LC-ID-RK",
+    name: "Rumah Kaum No.8 Ciawi",
     description:
-      "Rumah mewah dengan nuansa luxury cocok untuk iklan produk premium dan scene keluarga.",
+      "Rumah di Ciawi dengan nuansa semi-pedesaan, cocok untuk adegan keluarga atau transisi kota–alam, dengan latar hijau dan suasana tenang.",
+    city: "Bogor",
+    price: 1000000,
+    area: 300,
+    pax: 20,
+  },
+  {
+    code: "DS-LC-ID-RK",
+    name: "Rumah Komplek Keuangan, Cipete",
+    description:
+      "Hunian di Cipete dengan karakter urban-middle class, cocok untuk adegan kehidupan kota yang realistis dan padat.",
     city: "Jakarta",
-    price: 2500000,
-    area: 450,
-    pax: 30,
-    is_available: true,
-    rating: 0,
-  },
-  {
-    code: "DS-LC-SE-ED-0003",
-    name: "Apartemen Modern SCBD",
-    description:
-      "Apartemen modern di pusat kota dengan view skyline, cocok untuk iklan produk urban.",
-    city: "Jakarta",
-    price: 1200000,
-    area: 120,
-    pax: 10,
-    is_available: true,
-    rating: 0,
-  },
-  {
-    code: "DS-LC-SE-ED-0004",
-    name: "Gudang Industrial Bandung",
-    description:
-      "Lokasi bergaya industrial dengan nuansa vintage, cocok untuk video klip atau konten kreatif.",
-    city: "Bandung",
-    price: 900000,
-    area: 500,
-    pax: 40,
-    is_available: true,
-    rating: 0,
-  },
-  {
-    code: "DS-LC-SE-ED-0005",
-    name: "Rumah Klasik Surabaya",
-    description:
-      "Rumah klasik dengan desain elegan, cocok untuk scene keluarga dan iklan produk heritage.",
-    city: "Surabaya",
-    price: 1500000,
-    area: 350,
-    pax: 25,
-    is_available: false,
-    rating: 0,
-  },
-  {
-    code: "DS-LC-SE-ED-0006",
-    name: "Cafe Estetik Jogja",
-    description:
-      "Cafe dengan interior estetik dan instagramable, cocok untuk konten F&B dan social media.",
-    city: "Yogyakarta",
-    price: 800000,
+    price: 1000000,
     area: 200,
     pax: 15,
-    is_available: true,
-    rating: 0,
+  },
+  {
+    code: "DS-LC-ID-RV",
+    name: "Rumah Villa Colibah, Puncak",
+    description:
+      "Villa di Puncak dengan view pegunungan dan kabut, ideal untuk mood dramatis, reflektif, atau romantis.",
+    city: "Puncak",
+    price: 1000000,
+    area: 500,
+    pax: 25,
+  },
+  {
+    code: "DS-LC-ID-RS",
+    name: "Grand Aston Puncak",
+    description:
+      "Hotel modern di Puncak dengan fasilitas lengkap dan tampilan mewah, cocok untuk setting profesional, bisnis, atau liburan kelas atas.",
+    city: "Puncak",
+    price: 1000000,
+    area: 2000,
+    pax: 100,
+  },
+  {
+    code: "DS-LC-ID-RK",
+    name: "Rumah Pematang Pauh",
+    description:
+      "Rumah di Pematang Pauh dengan nuansa lokal dan lanskap perbukitan, cocok untuk cerita bernuansa daerah atau budaya.",
+    city: "Bogor",
+    price: 1000000,
+    area: 350,
+    pax: 20,
+  },
+  {
+    code: "DS-LC-ID-RS",
+    name: "Artee Resort Bogor",
+    description:
+      "Resort di Bogor dengan konsep alam terbuka, cocok untuk adegan santai, gathering, atau healing scene.",
+    city: "Bogor",
+    price: 1000000,
+    area: 1500,
+    pax: 80,
+  },
+  {
+    code: "DS-LC-OD-JL",
+    name: "Jl. Fatmawati Raya Opsi Jalan Travling",
+    description:
+      "Jalan utama di Fatmawati Raya dengan lalu lintas aktif dan visual kota, cocok untuk scene perjalanan, establishing shot urban.",
+    city: "Jakarta",
+    price: 1000000,
+    area: 1000,
+    pax: 50,
+  },
+  {
+    code: "DS-LC-OD-JL",
+    name: "Kampung Cina, Cibubur",
+    description:
+      "Area tematik di Cibubur dengan ornamen budaya Tionghoa, cocok untuk visual unik, colorful, atau setting budaya.",
+    city: "Cibubur",
+    price: 1000000,
+    area: 800,
+    pax: 40,
+  },
+  {
+    code: "DS-LC-ID-RT",
+    name: "Kencana Resto Bogor",
+    description:
+      "Restoran di Bogor dengan ambience santai, cocok untuk adegan dialog, meeting, atau social interaction.",
+    city: "Bogor",
+    price: 1000000,
+    area: 300,
+    pax: 30,
+  },
+  {
+    code: "DS-LC-ID-RT",
+    name: "Kopi Tiam 1",
+    description:
+      "Kedai kopi bergaya klasik, cocok untuk scene ngobrol santai, intimate conversation, atau slice-of-life.",
+    city: "Jakarta",
+    price: 1000000,
+    area: 150,
+    pax: 15,
+  },
+  {
+    code: "DS-LC-ID-TI",
+    name: "Masjid At Tin TMII",
+    description:
+      "Masjid megah di Taman Mini Indonesia Indah, cocok untuk establishing shot religius atau momen reflektif.",
+    city: "Jakarta",
+    price: 1000000,
+    area: 2000,
+    pax: 200,
+  },
+  {
+    code: "DS-LC-ID-RT",
+    name: "Penalama Kopi, Bogor",
+    description:
+      "Coffee shop di Bogor dengan potensi view alam, cocok untuk scene santai dengan visual estetik.",
+    city: "Bogor",
+    price: 1000000,
+    area: 200,
+    pax: 20,
+  },
+  {
+    code: "DS-LC-ID-RK",
+    name: "Rumah Cikuray 25, Bogor",
+    description:
+      "Rumah di Bogor dengan karakter perumahan kota, fleksibel untuk berbagai adegan domestik.",
+    city: "Bogor",
+    price: 1000000,
+    area: 250,
+    pax: 15,
+  },
+  {
+    code: "DS-LC-ID-RK",
+    name: "Rumah Damansara",
+    description:
+      "Hunian di Damansara dengan nuansa suburban modern, cocok untuk setting keluarga mapan atau internasional.",
+    city: "Jakarta",
+    price: 1000000,
+    area: 400,
+    pax: 25,
+  },
+  {
+    code: "DS-LC-ID-RK",
+    name: "Rumah Pak Iyan",
+    description:
+      "Rumah dengan nuansa lokal dan personal, cocok untuk adegan autentik berbasis karakter atau kehidupan sehari-hari.",
+    city: "Bogor",
+    price: 1000000,
+    area: 200,
+    pax: 15,
+  },
+  {
+    code: "DS-LC-ID-RK",
+    name: "Rumah Putih, Jagakarsa",
+    description:
+      "Hunian di Jagakarsa dengan suasana lebih hijau dan tenang, cocok untuk adegan keluarga atau drama ringan.",
+    city: "Jakarta",
+    price: 1000000,
+    area: 300,
+    pax: 20,
+  },
+  {
+    code: "DS-LC-ID-RN",
+    name: "Rusun, Lebak Bulus",
+    description:
+      "Hunian vertikal di Lebak Bulus dengan karakter padat dan urban, cocok untuk cerita sosial atau realisme kota.",
+    city: "Jakarta",
+    price: 1000000,
+    area: 150,
+    pax: 20,
+  },
+  {
+    code: "DS-LC-ID-TI",
+    name: "Wihara",
+    description:
+      "Tempat ibadah Buddha dengan suasana hening dan sakral, cocok untuk adegan refleksi, spiritual, atau visual simbolik.",
+    city: "Jakarta",
+    price: 1000000,
+    area: 500,
+    pax: 50,
   },
 ];
 
@@ -92,7 +210,6 @@ function buildEmbeddingContent(row: LocationRow, tags: string[]) {
     description: row.description,
     area: row.area,
     pax: row.pax,
-    rating: row.rating,
     tags,
     image_url: null as string | null,
   };

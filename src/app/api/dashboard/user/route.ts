@@ -189,7 +189,7 @@ export async function GET() {
     ].filter((id) => Number.isInteger(id) && id > 0);
 
     let locationMap = new Map<number, LocationRow>();
-    let locationImageMap = new Map<number, string>();
+    const locationImageMap = new Map<number, string>();
 
     if (locationIds.length > 0) {
       const [locationRowsResult, locationImagesResult] = await Promise.all([

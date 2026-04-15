@@ -56,6 +56,13 @@ const itemSubCategoriesDummyRows: SeederRow[] = [
   { name: "Kawat bendrat", short_code: "KB" },
   { name: "Baterai", short_code: "BA" },
   { name: "Shooting Package", short_code: "SP" },
+  { name: "Rumah Komplek", short_code: "RK" },
+  { name: "Rumah Villa", short_code: "RV" },
+  { name: "Resort", short_code: "RS" },
+  { name: "Jalan", short_code: "JL" },
+  { name: "Resto", short_code: "RT" },
+  { name: "Tempat Ibadah", short_code: "TI" },
+  { name: "Rusun", short_code: "RN" },
 ];
 
 export async function seedItemSubCategories(supabase: SupabaseClient) {
