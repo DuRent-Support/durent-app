@@ -6,8 +6,26 @@ const embeddings = new GoogleGenerativeAIEmbeddings({
   apiKey: process.env.GOOGLE_API_KEY,
 });
 
-export interface LocationEmbeddingInput {
-  location_id: string;
+// ---------------------------------------------------------------------------
+// Types
+// ---------------------------------------------------------------------------
+
+export interface SimilarLocation {
+  location_id: number;
+  content: {
+    name: string;
+    city: string;
+    price: string;
+    description: string;
+    area: number;
+    pax: number;
+    image_url: string | null;
+  };
+  similarity: number;
+}
+
+export interface UpsertLocationEmbeddingParams {
+  location_id: string | number;
   name: string;
   city: string;
   price: string;
@@ -16,124 +34,10 @@ export interface LocationEmbeddingInput {
   pax: number;
   rating: number;
   tags: string[];
-  image_url?: string;
+  image_url?: string | null;
 }
 
-function buildContentString(loc: LocationEmbeddingInput): string {
-  const parts = [
-    `Nama: ${loc.name}.`,
-    `Kota: ${loc.city}.`,
-    `Deskripsi: ${loc.description}.`,
-    loc.tags.length > 0 ? `Tag: ${loc.tags.join(", ")}.` : null,
-    `Area: ${loc.area}m².`,
-    `Kapasitas: ${loc.pax} orang.`,
-    `Harga: ${loc.price}.`,
-    `Rating: ${loc.rating}/5.`,
-  ].filter(Boolean);
-  return parts.join(" ");
-}
-
-export interface LocationSearchResult {
-  location_id: string;
-  content: {
-    name: string;
-    city: string;
-    price: string;
-    description: string;
-    area: number;
-    pax: number;
-    rating: number;
-    tags: string[];
-    image_url: string | null;
-  };
-  similarity: number;
-}
-
-export async function searchSimilarLocations(
-  query: string,
-  matchCount = 5,
-  matchThreshold = 0.6,
-): Promise<LocationSearchResult[]> {
-  try {
-    const vector = await embeddings.embedQuery(query);
-    const supabase = await createClient();
-
-    const { data, error } = await supabase.rpc("match_location_embeddings", {
-      query_embedding: vector,
-      match_threshold: matchThreshold,
-      match_count: matchCount,
-    });
-
-    console.log("Raw RPC response:", { data });
-
-    if (error) {
-      console.error("Vector search error:", error.message);
-      return [];
-    }
-
-    const debug = (data || []).map((r: any) => ({
-      id: r.id,
-      name: r.name,
-      similarity: r.similarity || r.distance, // tergantung RPC kamu
-      city: r.metadata?.city,
-    }));
-
-    console.log(
-      "RAG DEBUG:",
-      JSON.stringify(
-        {
-          query,
-          results: debug,
-        },
-        null,
-        2,
-      ),
-    );
-    return (data as LocationSearchResult[]) ?? [];
-  } catch (err) {
-    console.error("searchSimilarLocations failed:", err);
-    return [];
-  }
-}
-
-export async function upsertLocationEmbedding(
-  loc: LocationEmbeddingInput,
-): Promise<void> {
-  try {
-    const contentString = buildContentString(loc);
-    const vector = await embeddings.embedQuery(contentString);
-
-    const contentJson = {
-      name: loc.name,
-      city: loc.city,
-      price: loc.price,
-      description: loc.description,
-      area: loc.area,
-      pax: loc.pax,
-      rating: loc.rating,
-      tags: loc.tags,
-      image_url: loc.image_url ?? null,
-    };
-
-    const supabase = await createClient();
-    const { error } = await supabase.from("location_embeddings").upsert(
-      {
-        location_id: loc.location_id,
-        content: contentJson,
-        embedding: vector,
-      },
-      { onConflict: "location_id" },
-    );
-
-    if (error) {
-      console.error("Upsert embedding error:", error.message);
-    }
-  } catch (err) {
-    console.error("upsertLocationEmbedding failed:", err);
-  }
-}
-
-export interface AdminLocationEmbeddingInput {
+export interface InsertAdminLocationEmbeddingParams {
   location_id: number;
   code: string;
   name: string;
@@ -149,64 +53,161 @@ export interface AdminLocationEmbeddingInput {
   item_sub_categories: string[];
 }
 
-function buildAdminLocationContentString(
-  loc: AdminLocationEmbeddingInput,
-): string {
-  const parts = [
-    `Code: ${loc.code}.`,
-    `Nama: ${loc.name}.`,
-    `Kota: ${loc.city}.`,
-    `Deskripsi: ${loc.description}.`,
-    loc.tags.length > 0 ? `Tag: ${loc.tags.join(", ")}.` : null,
-    loc.item_categories.length > 0
-      ? `Item categories: ${loc.item_categories.join(", ")}.`
-      : null,
-    loc.item_sub_categories.length > 0
-      ? `Item sub categories: ${loc.item_sub_categories.join(", ")}.`
-      : null,
-    `Area: ${loc.area}m².`,
-    `Kapasitas: ${loc.pax} orang.`,
-    `Harga: ${loc.price}.`,
-    `Rating: ${loc.rating}/5.`,
-    `Status: ${loc.is_available ? "available" : "unavailable"}.`,
-  ].filter(Boolean);
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
 
+function buildEmbeddingContent(params: {
+  name: string;
+  city: string;
+  price: string | number;
+  description: string;
+  area: number;
+  pax: number;
+  image_url?: string | null;
+}) {
+  return {
+    name: params.name,
+    city: params.city,
+    price: String(params.price),
+    description: params.description,
+    area: params.area,
+    pax: params.pax,
+    image_url: params.image_url ?? null,
+  };
+}
+
+function buildContentString(params: {
+  name: string;
+  city: string;
+  description: string;
+  area: number;
+  pax: number;
+  price: string | number;
+  extra?: string[];
+}): string {
+  const parts = [
+    `Nama: ${params.name}.`,
+    `Kota: ${params.city}.`,
+    `Deskripsi: ${params.description}.`,
+    `Area: ${params.area}m².`,
+    `Kapasitas: ${params.pax} orang.`,
+    `Harga: ${params.price}.`,
+    ...(params.extra ?? []),
+  ].filter(Boolean);
   return parts.join(" ");
 }
 
-export async function insertAdminLocationEmbedding(
-  loc: AdminLocationEmbeddingInput,
+// ---------------------------------------------------------------------------
+// Similarity search
+// ---------------------------------------------------------------------------
+
+export async function searchSimilarLocations(
+  query: string,
+  matchCount = 5,
+  matchThreshold = 0.3,
+): Promise<SimilarLocation[]> {
+  const supabase = await createClient();
+  const queryEmbedding = await embeddings.embedQuery(query);
+
+  const { data, error } = await supabase.rpc("match_location_embeddings", {
+    query_embedding: queryEmbedding,
+    match_count: matchCount,
+    match_threshold: matchThreshold,
+  });
+
+  if (error) {
+    throw new Error(`Similarity search failed: ${error.message}`);
+  }
+
+  // Supabase may return `content` as a JSON string instead of a parsed object.
+  // Parse it here so callers can always access loc.content.name etc. safely.
+  return ((data ?? []) as Array<Omit<SimilarLocation, "content"> & { content: unknown }>).map(
+    (row) => ({
+      ...row,
+      content:
+        typeof row.content === "string"
+          ? (JSON.parse(row.content) as SimilarLocation["content"])
+          : (row.content as SimilarLocation["content"]),
+    }),
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Upsert embedding (public location routes — /api/locations)
+// ---------------------------------------------------------------------------
+
+export async function upsertLocationEmbedding(
+  params: UpsertLocationEmbeddingParams,
 ): Promise<void> {
   try {
-    const contentString = buildAdminLocationContentString(loc);
+    const supabase = createServiceRoleClient();
+
+    const contentString = buildContentString(params);
+    const content = buildEmbeddingContent(params);
     const vector = await embeddings.embedQuery(contentString);
 
-    const contentJson = {
-      code: loc.code,
-      name: loc.name,
-      city: loc.city,
-      description: loc.description,
-      price: loc.price,
-      area: loc.area,
-      pax: loc.pax,
-      rating: loc.rating,
-      is_available: loc.is_available,
-      tags: loc.tags,
-      item_categories: loc.item_categories,
-      item_sub_categories: loc.item_sub_categories,
-    };
+    await supabase.from("location_embeddings").upsert(
+      {
+        location_id: params.location_id,
+        content,
+        embedding: vector,
+      },
+      { onConflict: "location_id" },
+    );
+  } catch (error) {
+    console.error("upsertLocationEmbedding error:", error);
+  }
+}
 
+// ---------------------------------------------------------------------------
+// Insert embedding (admin location routes — /api/admin/locations)
+// ---------------------------------------------------------------------------
+
+export async function insertAdminLocationEmbedding(
+  params: InsertAdminLocationEmbeddingParams,
+): Promise<void> {
+  try {
     const supabase = createServiceRoleClient();
-    const { error } = await supabase.from("location_embeddings").insert({
-      location_id: loc.location_id,
-      content: contentJson,
-      embedding: vector,
+
+    const extra: string[] = [];
+    if (params.tags.length > 0)
+      extra.push(`Tag: ${params.tags.join(", ")}.`);
+    if (params.item_categories.length > 0)
+      extra.push(`Kategori: ${params.item_categories.join(", ")}.`);
+    if (params.item_sub_categories.length > 0)
+      extra.push(`Sub-kategori: ${params.item_sub_categories.join(", ")}.`);
+
+    const contentString = buildContentString({
+      name: params.name,
+      city: params.city,
+      description: params.description,
+      area: params.area,
+      pax: params.pax,
+      price: params.price,
+      extra,
     });
 
-    if (error) {
-      console.error("Insert admin embedding error:", error.message);
-    }
-  } catch (err) {
-    console.error("insertAdminLocationEmbedding failed:", err);
+    const content = buildEmbeddingContent({
+      name: params.name,
+      city: params.city,
+      price: params.price,
+      description: params.description,
+      area: params.area,
+      pax: params.pax,
+    });
+
+    const vector = await embeddings.embedQuery(contentString);
+
+    await supabase.from("location_embeddings").upsert(
+      {
+        location_id: params.location_id,
+        content,
+        embedding: vector,
+      },
+      { onConflict: "location_id" },
+    );
+  } catch (error) {
+    console.error("insertAdminLocationEmbedding error:", error);
   }
 }

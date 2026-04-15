@@ -38,15 +38,15 @@ export async function runAllSeeders() {
   // results.push(await seedLocationTags(supabase));
   // results.push(await seedLocationTagPivot(supabase));
   results.push(await seedLocationEmbeddings(supabase));
-  results.push(await seedCrews(supabase));
+  // results.push(await seedCrews(supabase));
   // results.push(await seedCrewSkillPivot(supabase)); karena skill ga perlu
   results.push(await seedRentals(supabase));
   results.push(await seedFoodAndBeverage(supabase));
   // results.push(await seedFoodAndBeverageTags(supabase));
   // results.push(await seedFoodAndBeverageTagPivot(supabase));
   results.push(await seedExpendables(supabase));
-  results.push(await seedCrewItemCategory(supabase));
-  results.push(await seedCrewItemSubCategory(supabase));
+  // results.push(await seedCrewItemCategory(supabase));
+  // results.push(await seedCrewItemSubCategory(supabase));
   results.push(await seedRentalItemCategory(supabase));
   results.push(await seedRentalItemSubCategory(supabase));
   results.push(await seedFoodAndBeverageItemCategory(supabase));

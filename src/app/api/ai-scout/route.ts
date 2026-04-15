@@ -1,234 +1,262 @@
-import { NextRequest } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { ChatGoogleGenerativeAI } from "@langchain/google-genai";
-import {
-  HumanMessage,
-  SystemMessage,
-  AIMessage,
-  BaseMessage,
-} from "@langchain/core/messages";
-import { searchSimilarLocations } from "@/lib/embedding";
-import { PDFLoader } from "@langchain/community/document_loaders/fs/pdf";
+import { HumanMessage, SystemMessage } from "@langchain/core/messages";
+import pdfParse from "pdf-parse";
+import { searchSimilarLocations, type SimilarLocation } from "@/lib/embedding";
 
-// Initialize the model
 const model = new ChatGoogleGenerativeAI({
   model: "models/gemini-2.5-flash",
   apiKey: process.env.GOOGLE_API_KEY,
   temperature: 0.7,
 });
 
+// ---------------------------------------------------------------------------
+// Types
+// ---------------------------------------------------------------------------
+
+interface SceneResult {
+  heading: string;
+  script: string;
+  tags: string[];
+  location: { name: string; city: string; reason: string }[];
+}
+
+interface RawScene {
+  heading: string;
+  script: string;
+}
+
+// ---------------------------------------------------------------------------
+// In-memory scene memory (persists across requests in the same worker process)
+// Key: scene heading (lowercased + trimmed)
+// ---------------------------------------------------------------------------
+
+const sceneMemory = new Map<string, SceneResult>();
+
+// ---------------------------------------------------------------------------
+// Scene extraction from raw text
+// ---------------------------------------------------------------------------
+
+function extractScenes(text: string): RawScene[] {
+  const lines = text.split("\n");
+  const scenes: RawScene[] = [];
+  let currentHeading = "";
+  let currentScript: string[] = [];
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+
+    // Match scene headings: optional leading number, then INT. or EXT.
+    // e.g. "1 INT. RUMAH ARGA, BENGKEL - NIGHT" or "INT. RUANGAN - DAY"
+    if (/^\d*\s*(?:INT\.|EXT\.)/i.test(trimmed)) {
+      if (currentHeading) {
+        scenes.push({
+          heading: currentHeading,
+          script: currentScript.join("\n").trim(),
+        });
+      }
+      currentHeading = trimmed;
+      currentScript = [];
+    } else if (currentHeading) {
+      currentScript.push(trimmed);
+    }
+  }
+
+  if (currentHeading) {
+    scenes.push({
+      heading: currentHeading,
+      script: currentScript.join("\n").trim(),
+    });
+  }
+
+  return scenes;
+}
+
+// ---------------------------------------------------------------------------
+// AI scene analysis
+// ---------------------------------------------------------------------------
+
+const SCENE_SYSTEM_PROMPT = `Kamu adalah asisten location scout film profesional.
+Tugasmu: diberikan deskripsi sebuah scene dan daftar lokasi syuting yang tersedia, pilih lokasi yang paling cocok.
+
+Instruksi:
+1. Baca scene dengan cermat — perhatikan suasana, pencahayaan, setting (interior/eksterior), dan mood yang dibutuhkan.
+2. Tentukan tags untuk scene tersebut (maks 8 tags): tipe setting, mood, pencahayaan, dll.
+3. Pilih 1–3 lokasi dari DAFTAR LOKASI yang paling cocok dan jelaskan alasannya secara spesifik.
+4. WAJIB pilih setidaknya 1 lokasi. Jika tidak ada yang sempurna, pilih yang paling mendekati dan jelaskan jujur.
+5. JANGAN mengarang nama lokasi — hanya gunakan lokasi dari daftar yang diberikan.
+
+Balas HANYA dengan JSON valid (tanpa markdown fence) dalam format ini:
+{
+  "heading": "<scene heading>",
+  "script": "<ringkasan singkat script>",
+  "tags": ["tag1", "tag2"],
+  "location": [
+    { "name": "<nama lokasi persis dari daftar>", "city": "<kota>", "reason": "<alasan singkat>" }
+  ]
+}`;
+
+async function analyzeScene(
+  scene: RawScene,
+  locations: SimilarLocation[],
+): Promise<SceneResult> {
+  const locationList = locations
+    .map(
+      (loc, i) =>
+        `${i + 1}. ${loc.content.name} (${loc.content.city}) [similarity: ${loc.similarity.toFixed(4)}]\n   Deskripsi: ${loc.content.description}\n   Area: ${loc.content.area}m², Kapasitas: ${loc.content.pax} orang`,
+    )
+    .join("\n\n");
+
+  const userPrompt = `SCENE:\nHeading: ${scene.heading}\nScript:\n${scene.script}\n\nDAFTAR LOKASI TERSEDIA:\n${locationList}`;
+
+  const response = await model.invoke([
+    new SystemMessage(SCENE_SYSTEM_PROMPT),
+    new HumanMessage(userPrompt),
+  ]);
+
+  const raw =
+    typeof response.content === "string"
+      ? response.content
+      : JSON.stringify(response.content);
+
+  console.log(
+    `[AI Scout] Raw AI response for "${scene.heading}":\n${raw.slice(0, 500)}`,
+  );
+
+  try {
+    const cleaned = raw
+      .trim()
+      .replace(/^```json\s*/i, "")
+      .replace(/^```\s*/i, "")
+      .replace(/```\s*$/i, "")
+      .trim();
+    const parsed = JSON.parse(cleaned) as SceneResult;
+    return {
+      heading: parsed.heading ?? scene.heading,
+      script: parsed.script ?? scene.script,
+      tags: Array.isArray(parsed.tags) ? parsed.tags : [],
+      location: Array.isArray(parsed.location) ? parsed.location : [],
+    };
+  } catch {
+    // Fallback: return with no locations so UI shows graceful empty state
+    return {
+      heading: scene.heading,
+      script: scene.script,
+      tags: [],
+      location: [],
+    };
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Route handler
+// ---------------------------------------------------------------------------
+
 export async function POST(req: NextRequest) {
   try {
-    const contentType = req.headers.get("content-type") || "";
-
-    // ── Parse request ──
-    let message: string | undefined;
-    let scriptText: string | undefined;
-    let conversationHistory: { role: string; content: string }[] = [];
+    const contentType = req.headers.get("content-type") ?? "";
+    let rawText = "";
 
     if (contentType.includes("multipart/form-data")) {
       const formData = await req.formData();
-      const file = formData.get("pdf") as File | null;
-      const chatMessage = (formData.get("message") as string | null)?.trim();
+      const pdfFile = formData.get("pdf") as File | null;
+      const extraMessage = (formData.get("message") as string) ?? "";
 
-      if (!file || file.type !== "application/pdf") {
-        return new Response(JSON.stringify({ error: "PDF file is required" }), {
-          status: 400,
-          headers: { "Content-Type": "application/json" },
-        });
+      if (pdfFile) {
+        const buffer = Buffer.from(await pdfFile.arrayBuffer());
+        const parsed = await pdfParse(buffer);
+        rawText = parsed.text;
+        if (extraMessage) rawText += "\n" + extraMessage;
+      } else {
+        rawText = extraMessage;
       }
-
-      if (file.size > 5 * 1024 * 1024) {
-        return new Response(
-          JSON.stringify({ error: "File terlalu besar, maksimal 5MB" }),
-          { status: 400, headers: { "Content-Type": "application/json" } },
-        );
-      }
-
-      // Ekstrak teks dari PDF menggunakan @langchain/community PDFLoader
-      const blob = new Blob([await file.arrayBuffer()], {
-        type: "application/pdf",
-      });
-      const loader = new PDFLoader(blob);
-      const docs = await loader.load();
-      scriptText = docs
-        .map((d) => d.pageContent)
-        .join("\n")
-        .trim();
-
-      if (!scriptText) {
-        return new Response(
-          JSON.stringify({ error: "Tidak dapat mengekstrak teks dari PDF" }),
-          { status: 400, headers: { "Content-Type": "application/json" } },
-        );
-      }
-
-      message = chatMessage || undefined;
     } else {
-      // Mode chat biasa (JSON)
       const body = await req.json();
-      message = body.message;
-      conversationHistory = body.conversationHistory || [];
-
-      if (!message || typeof message !== "string") {
-        return new Response(JSON.stringify({ error: "Message is required" }), {
-          status: 400,
-          headers: { "Content-Type": "application/json" },
-        });
-      }
+      rawText = body.message ?? "";
     }
 
-    // Jika ada pesan chat → pakai pesan sebagai query (lebih kontekstual)
-    // Jika PDF saja → pakai 1000 karakter pertama PDF
-    const searchQuery = message ?? scriptText!.slice(0, 1000);
-
-    // Threshold -1 supaya semua lokasi selalu masuk konteks AI,
-    // karena tag baru diketahui setelah AI menganalisis — bukan sebelumnya.
-    const relevantLocations = await searchSimilarLocations(searchQuery, 20, -1);
-
-    // Build location context block for the system prompt
-    let locationContext = "";
-    if (relevantLocations.length > 0) {
-      const locationList = relevantLocations
-        .map((loc, i) => {
-          const c = loc.content ?? {
-            name: "-",
-            city: "-",
-            description: "-",
-            tags: [],
-            area: 0,
-            pax: 0,
-            price: "0",
-            rating: 0,
-          };
-          const tags = Array.isArray(c.tags) ? c.tags : [];
-          return [
-            `${i + 1}. **${c.name}** (${c.city})`,
-            `   Deskripsi: ${c.description}`,
-            `   Tag: ${tags.join(", ") || "-"}`,
-            `   Area: ${c.area}m² | Kapasitas: ${c.pax} orang | Harga: ${c.price} | Rating: ${c.rating}/5`,
-          ].join("\n");
-        })
-        .join("\n\n");
-
-      locationContext = `
-
-## Lokasi yang Tersedia di Database Kami (relevan dengan permintaan ini):
-${locationList}
-
-Saat merekomendasikan lokasi, prioritaskan lokasi-lokasi di atas karena merupakan data nyata dari katalog kami. Sebutkan nama lokasi persis seperti tertulis di atas.`;
-    } else {
-      locationContext = `
-
-## Catatan:
-Tidak ada lokasi yang cocok ditemukan di database untuk permintaan ini. Berikan saran umum dan sarankan pengguna untuk menambahkan lokasi baru ke katalog.`;
+    if (!rawText.trim()) {
+      return NextResponse.json({ error: "No input provided" }, { status: 400 });
     }
 
-    // Build conversation context
-    const messages: BaseMessage[] = [
-      new SystemMessage(`
-You are an AI Location Scout assistant for a shooting location rental platform.
+    // Extract scenes from the raw text
+    let scenes = extractScenes(rawText);
 
-Your task is to analyze screenplay scenes and suggest suitable filming locations from the AVAILABLE LOCATIONS provided in the context.
-
-INSTRUCTIONS:
-
-1. Identify scenes that start with INT. or EXT. If no such heading exists, treat the entire input as a single scene with heading "SCENE 1".
-2. Extract the scene heading and a short script excerpt.
-3. Analyze the environment and infer descriptive tags such as:
-   indoor, outdoor, urban, village, industrial, dark, bright, luxury, traditional, office, house, workshop, etc.
-4. Based on the tags and scene description, select the most relevant locations from AVAILABLE LOCATIONS.
-5. Only suggest locations that exist in the database context.
-6. ALWAYS suggest at least 1–2 locations from AVAILABLE LOCATIONS, even if the match is not perfect. Pick the closest ones and explain the reasoning honestly.
-
-OUTPUT FORMAT (JSON ONLY):
-
-{
-  "scenes": [
-    {
-      "heading": "scene heading from the script",
-      "script": "short excerpt of the scene description",
-      "tags": ["indoor", "industrial", "dark"],
-      "location": [
-        {
-          "name": "location name from database",
-          "city": "city",
-          "reason": "why this location matches the scene"
-        }
-      ]
-    }
-  ]
-}
-
-RULES:
-- Only output valid JSON.
-- Do NOT add explanations outside the JSON.
-- The "location" field must only contain locations from AVAILABLE LOCATIONS.
-- NEVER return an empty "location" array if AVAILABLE LOCATIONS has entries. Always pick the closest match.
-
-Always respond in the same language as the user's message.
-
-AVAILABLE LOCATIONS:
-${locationContext}
-`),
-    ];
-
-    // Add conversation history if provided (chat mode only)
-    if (conversationHistory && Array.isArray(conversationHistory)) {
-      conversationHistory.forEach((msg: { role: string; content: string }) => {
-        if (msg.role === "user") {
-          messages.push(new HumanMessage(msg.content));
-        } else if (msg.role === "assistant") {
-          messages.push(new AIMessage(msg.content));
-        }
-      });
+    // If no INT./EXT. headings found, treat entire text as a single scene
+    if (scenes.length === 0) {
+      scenes = [{ heading: "SCENE 1", script: rawText.trim() }];
     }
 
-    // ── Build human message ──
-    // PDF + chat : sertakan pesan user sebagai context, lalu isi script dari PDF
-    // PDF only  : langsung kirim isi script PDF
-    // Chat only : kirim pesan user seperti biasa
-    // console.log("scripttext", scriptText);
-    console.log("message", message);
-    if (scriptText && message) {
-      console.log("masuk ke 1");
+    // Hardcode max scenes for testing (Gemini rate limit)
+    const MAX_SCENES = 5;
+    const scenesToProcess = scenes.slice(0, MAX_SCENES);
 
-      messages.push(
-        new HumanMessage(
-          `Konteks dari saya: ${message}\n\nBerikut adalah isi naskah/skenario dari PDF:\n\n${scriptText.slice(0, 8000)}`,
-        ),
-      );
-    } else if (scriptText) {
-      console.log("masuk ke 2");
-      messages.push(
-        new HumanMessage(
-          `Berikut adalah isi naskah/skenario dari PDF:\n\n${scriptText.slice(0, 8000)}`,
-        ),
-      );
-    } else {
-      console.log("masuk ke 3");
-      messages.push(new HumanMessage(message!));
-    }
-
-    // Get response from Gemini
-    const response = await model.invoke(messages);
-    // console.log("Raw model response:", response);
-    return new Response(
-      JSON.stringify({
-        message: response.content,
-        success: true,
-      }),
-      {
-        headers: { "Content-Type": "application/json" },
-      },
+    console.log(
+      `\n[AI Scout] ========== Processing ${scenesToProcess.length}/${scenes.length} intent(s) (max ${MAX_SCENES}) ==========`,
     );
+
+    const results: SceneResult[] = [];
+
+    for (let i = 0; i < scenesToProcess.length; i++) {
+      const scene = scenesToProcess[i];
+      const cacheKey = scene.heading.trim().toLowerCase();
+
+      console.log(
+        `\n[AI Scout] --- Intent ${i + 1}/${scenesToProcess.length}: "${scene.heading}" ---`,
+      );
+      console.log(`[AI Scout] Script preview: ${scene.script.slice(0, 200)}`);
+
+      // Check memory cache first
+      if (sceneMemory.has(cacheKey)) {
+        console.log(`[AI Scout] Cache HIT — using saved result`);
+        results.push(sceneMemory.get(cacheKey)!);
+        continue;
+      }
+
+      console.log(`[AI Scout] Cache MISS — running similarity search`);
+
+      // Per-scene similarity search (threshold -1 = return all, let AI decide)
+      const searchQuery = `${scene.heading} ${scene.script}`;
+      const locations = await searchSimilarLocations(searchQuery, 20, -1);
+
+      console.log(
+        `[AI Scout] Similarity results (${locations.length} lokasi):`,
+      );
+      locations.forEach((loc, idx) => {
+        // console.log(JSON.stringify(loc, null, 2));
+        console.log(
+          `  ${idx + 1}. [${loc.similarity.toFixed(4)}] ${loc.content.name} (${loc.content.city})`,
+        );
+      });
+
+      // AI analysis for this scene
+      const sceneResult = await analyzeScene(scene, locations);
+
+      console.log(
+        `[AI Scout] AI recommended locations for "${scene.heading}":`,
+      );
+      sceneResult.location.forEach((loc, idx) => {
+        console.log(`  ${idx + 1}. ${loc.name} (${loc.city}) — ${loc.reason}`);
+      });
+
+      // Save to memory
+      sceneMemory.set(cacheKey, sceneResult);
+      results.push(sceneResult);
+    }
+
+    console.log(`\n[AI Scout] ========== Done ==========\n`);
+
+    return NextResponse.json({
+      message: JSON.stringify({ scenes: results }),
+    });
   } catch (error) {
-    console.error("AI Scout error:", error);
-    return new Response(
-      JSON.stringify({
-        error: "Failed to process request",
-        details: error instanceof Error ? error.message : "Unknown error",
-      }),
-      { status: 500, headers: { "Content-Type": "application/json" } },
+    console.error("[AI Scout] Error:", error);
+    return NextResponse.json(
+      {
+        error: error instanceof Error ? error.message : "Internal server error",
+      },
+      { status: 500 },
     );
   }
 }

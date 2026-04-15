@@ -3,12 +3,13 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { ArrowLeft, Loader2, MapPin, Tag } from "lucide-react";
+import { ArrowLeft, Loader2, ShoppingCart, Tag } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import AppCard from "@/components/app-card/AppCard";
 import { AppCardType } from "@/types/app-card";
 import { LocationWithTags } from "@/types/location";
+import { useCart } from "@/hooks/use-cart";
 
 type SceneLocation = {
   name: string;
@@ -37,6 +38,7 @@ const parseRecommendations = (raw: string | null): Scene[] => {
 
 export default function AIScoutDetailPage() {
   const searchParams = useSearchParams();
+  const { addItem } = useCart();
   const [allLocations, setAllLocations] = useState<LocationWithTags[]>([]);
   const [loadingLocations, setLoadingLocations] = useState(true);
   const recommendations = useMemo(
@@ -118,13 +120,6 @@ export default function AIScoutDetailPage() {
       ) : (
         <div className="space-y-10">
           {recommendations.map((scene, i) => {
-            const matchedLocations = scene.location
-              .map((loc) => findMatchedLocation(loc.name, loc.city))
-              .filter(
-                (loc): loc is LocationWithTags =>
-                  loc !== undefined && loc !== null,
-              );
-
             return (
               <section key={`${scene.heading}-${i}`}>
                 <div className="mb-4">
@@ -160,23 +155,78 @@ export default function AIScoutDetailPage() {
                     <Loader2 className="h-4 w-4 animate-spin" />
                     Memuat card lokasi...
                   </div>
-                ) : matchedLocations.length > 0 ? (
+                ) : scene.location.length > 0 ? (
                   <div className="mt-4 grid gap-6 ml-8 sm:grid-cols-2 lg:grid-cols-3">
-                    {matchedLocations.map((location) => (
-                      <AppCard
-                        key={location.shooting_location_id}
-                        type={AppCardType.Location}
-                        name={location.shooting_location_name}
-                        city={location.shooting_location_city}
-                        price={location.shooting_location_price}
-                        description={location.shooting_location_description}
-                        area={location.shooting_location_area}
-                        imageUrl={location.shooting_location_image_url?.[0]}
-                        pax={location.shooting_location_pax}
-                        rating={location.shooting_location_rate}
-                        tags={location.tags}
-                      />
-                    ))}
+                    {scene.location.map((aiLoc, li) => {
+                      const dbLoc = findMatchedLocation(aiLoc.name, aiLoc.city);
+                      return dbLoc ? (
+                        <AppCard
+                          key={dbLoc.shooting_location_id}
+                          type={AppCardType.Location}
+                          name={dbLoc.shooting_location_name}
+                          city={dbLoc.shooting_location_city}
+                          price={dbLoc.shooting_location_price}
+                          description={dbLoc.shooting_location_description}
+                          area={dbLoc.shooting_location_area}
+                          imageUrl={dbLoc.shooting_location_image_url?.[0]}
+                          pax={dbLoc.shooting_location_pax}
+                          rating={dbLoc.shooting_location_rate}
+                          tags={dbLoc.tags}
+                          action={
+                            <Button
+                              type="button"
+                              className="w-full"
+                              onClick={() =>
+                                addItem({
+                                  id: dbLoc.shooting_location_id,
+                                  itemType: "location",
+                                  name: dbLoc.shooting_location_name,
+                                  subtitle: dbLoc.shooting_location_city,
+                                  price: dbLoc.shooting_location_price,
+                                  imageUrl:
+                                    dbLoc.shooting_location_image_url?.[0] ??
+                                    "/placeholder_durent.webp",
+                                  tags: dbLoc.tags,
+                                  requiresDateRange: true,
+                                })
+                              }
+                            >
+                              <ShoppingCart className="h-4 w-4 mr-2" />
+                              Tambah ke Keranjang
+                            </Button>
+                          }
+                        />
+                      ) : (
+                        <AppCard
+                          key={li}
+                          type={AppCardType.Location}
+                          name={aiLoc.name}
+                          city={aiLoc.city}
+                          description={aiLoc.reason}
+                          price="Hubungi kami"
+                          area={0}
+                          pax={0}
+                          rating={null}
+                          tags={[]}
+                          action={
+                            <Button
+                              asChild
+                              type="button"
+                              variant="secondary"
+                              className="w-full"
+                            >
+                              <Link
+                                href="https://wa.me/628111029064"
+                                target="_blank"
+                                rel="noopener noreferrer"
+                              >
+                                Konsultasi via WhatsApp
+                              </Link>
+                            </Button>
+                          }
+                        />
+                      );
+                    })}
                   </div>
                 ) : (
                   <div className="ml-8 rounded-xl border border-dashed bg-card p-4">

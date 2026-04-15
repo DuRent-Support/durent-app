@@ -110,6 +110,20 @@ type BookedRange = {
   to: Date;
 };
 
+function CartItemImage({ src, alt }: { src: string; alt: string }) {
+  const [imgSrc, setImgSrc] = useState(src || "/placeholder_durent.webp");
+  return (
+    <Image
+      src={imgSrc}
+      alt={alt}
+      fill
+      sizes="(max-width: 768px) 40vw, 160px"
+      className="object-cover"
+      onError={() => setImgSrc("/placeholder_durent.webp")}
+    />
+  );
+}
+
 function toNumberPrice(raw: string) {
   const normalized = String(raw)
     .replace(/[^\d.,-]/g, "")
@@ -1317,13 +1331,7 @@ export default function CartPage() {
             >
               <div className="flex gap-3">
                 <div className="relative h-24 w-32 shrink-0 overflow-hidden rounded-md border border-border/60">
-                  <Image
-                    src={item.imageUrl || "/placeholder_durent.webp"}
-                    alt={item.name}
-                    fill
-                    sizes="(max-width: 768px) 40vw, 160px"
-                    className="object-cover"
-                  />
+                  <CartItemImage src={item.imageUrl} alt={item.name} />
                 </div>
 
                 <div className="min-w-0 flex-1 space-y-2">

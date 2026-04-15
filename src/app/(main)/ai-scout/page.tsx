@@ -106,12 +106,12 @@ export default function AiScoutPage() {
         const formData = new FormData();
         formData.append("pdf", pdfFile!);
         if (hasText) formData.append("message", hasText);
-        response = await fetch("/api/ai-scout-new", {
+        response = await fetch("/api/ai-scout", {
           method: "POST",
           body: formData,
         });
       } else {
-        response = await fetch("/api/ai-scout-new", {
+        response = await fetch("/api/ai-scout", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
