@@ -33,7 +33,7 @@ export default function TagsPage() {
       const data = await response.json();
 
       if (response.ok) {
-     / Debug: check tag structure
+        //  / Debug: check tag structure
         setTags(data.tags || []);
       } else {
         toast.error(data.error || "Gagal mengambil data tags");
@@ -59,7 +59,6 @@ export default function TagsPage() {
 
   // Open dialog for editing tag
   const openEditDialog = (tag: Tag) => {
-   
     setEditingTag(tag);
     setFormData(tag.tag);
     setDialogOpen(true);
@@ -77,8 +76,6 @@ export default function TagsPage() {
       setSaving(true);
 
       if (editingTag) {
-      
-      
         const response = await fetch(`/api/tags/${editingTag.tag_id}`, {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
