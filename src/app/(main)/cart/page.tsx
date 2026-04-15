@@ -1094,8 +1094,6 @@ export default function CartPage() {
         name: user.user_metadata?.name ?? null,
       };
 
-      console.log("Checkout items (client):", checkoutPayloadItems);
-      console.log("Checkout user (client/useAuth):", checkoutUser);
 
       const response = await fetch("/api/midtrans/tokenizer", {
         method: "POST",

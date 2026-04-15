@@ -9,7 +9,6 @@ export async function PUT(
   try {
     const { tag } = await request.json();
     const { id } = await params;
-    console.log("PUT /api/tags/[id] - Received ID:", id); // Debug
 
     // Validation
     if (!tag || !tag.trim()) {
@@ -63,19 +62,15 @@ export async function DELETE(
   request: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  console.log("checkpoint 1");
   try {
     const { id } = await params;
     const supabase = await createClient();
-    console.log("checkpoint 2");
 
     const { error } = await supabase.from("tags").delete().eq("tag_id", id);
-    console.log("checkpoint 3", error);
 
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 400 });
     }
-    console.log("checkpoint 3");
 
     return NextResponse.json(
       { message: "Tag berhasil dihapus" },

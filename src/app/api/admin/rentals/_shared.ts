@@ -228,7 +228,7 @@ export async function generateRentalCode(
 
   const categoryPart = buildCodePart(categoryCodes);
   const subCategoryPart = buildCodePart(subCategoryCodes);
-  const baseCode = `DR-RT-${categoryPart}-${subCategoryPart}`;
+  const baseCode = `DS-RT-${categoryPart}-${subCategoryPart}`;
 
   if (Number.isInteger(options?.excludeRentalId)) {
     const currentRentalResult = await serviceRoleClient

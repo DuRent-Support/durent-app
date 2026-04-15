@@ -196,7 +196,7 @@ export async function generateExpendableCode(
 
   const categoryPart = buildCodePart(categoryCodes);
   const subCategoryPart = buildCodePart(subCategoryCodes);
-  const baseCode = `DR-ED-${categoryPart}-${subCategoryPart}`;
+  const baseCode = `DS-ED-${categoryPart}-${subCategoryPart}`;
 
   if (Number.isInteger(options?.excludeExpendableId)) {
     const currentExpendableResult = await serviceRoleClient

@@ -71,8 +71,7 @@ export async function GET() {
       .map((row) => Number(row.crew_id ?? row.id))
       .filter((id) => Number.isFinite(id));
 
-    console.log("[crews] rows:", (rows ?? []).length);
-    console.log("[crews] crewIds:", crewIds);
+ 
 
     const skillsMap = new Map<number, string[]>();
     if (crewIds.length > 0) {
@@ -82,10 +81,10 @@ export async function GET() {
         .in("crew_id", crewIds);
 
       if (pivotResult.error) {
-        console.log("[crews] crew_skill error:", pivotResult.error);
+    
       } else {
         const pivotRows = pivotResult.data ?? [];
-        console.log("[crews] crew_skill rows:", pivotRows.length);
+      
 
         const skillIds = Array.from(
           new Set(
@@ -103,7 +102,7 @@ export async function GET() {
           : { data: [], error: null };
 
         if (skillsResult.error) {
-          console.log("[crews] crew_skills error:", skillsResult.error);
+       
         } else {
           const nameById = new Map<number, string>();
           (skillsResult.data ?? []).forEach((row) => {
@@ -136,13 +135,7 @@ export async function GET() {
       return mapCrewRow(row, skills);
     });
 
-    console.log(
-      "[crews] sample skills:",
-      crews.slice(0, 3).map((crew) => ({
-        crew_id: crew.crew_id,
-        skills: crew.skills,
-      })),
-    );
+  
 
     return NextResponse.json({ crews }, { status: 200 });
   } catch (error) {

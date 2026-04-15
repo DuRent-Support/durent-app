@@ -208,7 +208,7 @@ export async function generateFoodAndBeverageCode(
 
   const categoryPart = buildCodePart(categoryCodes);
   const subCategoryPart = buildCodePart(subCategoryCodes);
-  const baseCode = `DR-FB-${categoryPart}-${subCategoryPart}`;
+  const baseCode = `DS-FB-${categoryPart}-${subCategoryPart}`;
 
   if (Number.isInteger(options?.excludeFoodAndBeverageId)) {
     const currentResult = await serviceRoleClient

@@ -340,16 +340,6 @@ export async function POST(request: Request) {
       );
     }
 
-    // console.log("Midtrans checkout user:", {
-    //   id: authUser.id,
-    //   email: authUser.email,
-    //   phone: authUser.phone,
-    //   full_name: authUser.user_metadata?.full_name ?? null,
-    //   name: authUser.user_metadata?.name ?? null,
-    // });
-
-    console.log("Midtrans checkout items:", items);
-
     const todayDateOnly = getTodayDateOnly();
     if (!todayDateOnly) {
       return NextResponse.json(

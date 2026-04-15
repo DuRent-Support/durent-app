@@ -146,7 +146,7 @@ function getItemTypeFromCode(code: string): ItemType | null {
   if (code.startsWith("DS-RT-")) return "rental";
   if (code.startsWith("DS-ED-")) return "expendable";
   if (code.startsWith("DS-FB-")) return "fnb";
-  if (code.startsWith("DR-LC-")) return "location";
+  if (code.startsWith("DS-LC-")) return "location";
   return null;
 }
 
@@ -223,7 +223,7 @@ export async function seedBundles(
   const rentalCodes = allCodes.filter((code) => code.startsWith("DS-RT-"));
   const expendableCodes = allCodes.filter((code) => code.startsWith("DS-ED-"));
   const fnbCodes = allCodes.filter((code) => code.startsWith("DS-FB-"));
-  const locationCodes = allCodes.filter((code) => code.startsWith("DR-LC-"));
+  const locationCodes = allCodes.filter((code) => code.startsWith("DS-LC-"));
 
   const [
     crewResult,

@@ -201,7 +201,7 @@ export async function generateLocationCode(
 
   const categoryPart = buildCodePart(categoryCodes);
   const subCategoryPart = buildCodePart(subCategoryCodes);
-  const baseCode = `DR-LC-${categoryPart}-${subCategoryPart}`;
+  const baseCode = `DS-LC-${categoryPart}-${subCategoryPart}`;
 
   if (Number.isInteger(options?.excludeLocationId)) {
     const currentLocationResult = await serviceRoleClient

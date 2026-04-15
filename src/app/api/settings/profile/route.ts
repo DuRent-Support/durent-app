@@ -58,7 +58,7 @@ export async function GET() {
         { status: 401 },
       );
     }
-    // console.log(userId)
+
     const { data, error } = await supabase
       .from("profiles")
       .select("full_name, phone")
@@ -139,7 +139,7 @@ export async function PUT(request: Request) {
       .eq("user_uuid", userId)
       .select("full_name, phone")
       .single<ProfileSettingsRow>();
-    console.log("userId:", userId);
+   
     if (error) {
       const isUniquePhoneViolation = error.code === "23505";
 

@@ -156,7 +156,7 @@ export async function PUT(
       (formData.get("existingImageUrls") as string) || "[]",
     );
 
-    console.log("Test 1");
+   
     const imageFiles: File[] = [];
     let index = 0;
     while (formData.has(`image_${index}`)) {
@@ -166,7 +166,7 @@ export async function PUT(
       }
       index++;
     }
-    console.log("Test 2");
+  
 
     // Validation
     if (!name?.trim()) {
@@ -177,7 +177,7 @@ export async function PUT(
     }
 
     const supabase = await createClient();
-    console.log("Test 3");
+
 
     // Get existing location to manage old images
     const { data: existingLocation } = await supabase
@@ -189,7 +189,7 @@ export async function PUT(
     const oldImageUrls =
       (existingLocation?.shooting_location_image_url as string[]) || [];
     const newImageUrls: string[] = [...existingImageUrls];
-    console.log("Test 4");
+   
 
     // Delete removed images from storage
     const imagesToDelete = oldImageUrls.filter(
@@ -199,7 +199,7 @@ export async function PUT(
       const path = url.split("/").slice(-2).join("/");
       await supabase.storage.from("shooting_locations").remove([path]);
     }
-    console.log("Test 5");
+
 
     // Upload new images
     for (const imageFile of imageFiles) {
@@ -220,7 +220,7 @@ export async function PUT(
           { status: 400 },
         );
       }
-      console.log("Test 6");
+
 
       // Get public URL
       const {
@@ -230,7 +230,7 @@ export async function PUT(
       newImageUrls.push(publicUrl);
     }
 
-    console.log("Test 7");
+
     // Update location
     const { data: updatedLocation, error: updateError } = await supabase
       .from("shooting_locations")
@@ -251,7 +251,7 @@ export async function PUT(
     if (updateError) {
       return NextResponse.json({ error: updateError.message }, { status: 400 });
     }
-    console.log("Test 8");
+
 
     // Update location tags
     // First, delete existing tags
@@ -305,7 +305,7 @@ export async function PUT(
         }
       }
     }
-    console.log("Test 8");
+
 
     // Generate and store embedding (non-blocking)
     upsertLocationEmbedding({
@@ -339,7 +339,7 @@ export async function DELETE(
   request: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  console.log("Test 1");
+
 
   try {
     const { id } = await params;
@@ -360,7 +360,7 @@ export async function DELETE(
         await supabase.storage.from("shooting_locations").remove([imagePath]);
       }
     }
-    console.log("Test 2");
+   
 
     // Delete location tags first (foreign key constraint)
     await supabase
@@ -371,7 +371,7 @@ export async function DELETE(
     // Delete location embeddings (foreign key constraint)
     await supabase.from("location_embeddings").delete().eq("location_id", id);
 
-    console.log("Test 3");
+    
 
     // Delete location
     const { error } = await supabase
@@ -379,12 +379,12 @@ export async function DELETE(
       .delete()
       .eq("shooting_location_id", id);
 
-    console.log("Test 3.5", error);
+   
 
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 400 });
     }
-    console.log("Test 4");
+  
 
     return NextResponse.json(
       { message: "Lokasi berhasil dihapus" },

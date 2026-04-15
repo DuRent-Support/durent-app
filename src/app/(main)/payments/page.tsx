@@ -81,7 +81,9 @@ async function ensureSnapLoaded(snapUrl: string, clientKey: string) {
 
 export default function PaymentsPage() {
   const router = useRouter();
-  const [pendingPayments, setPendingPayments] = useState<PendingPaymentRow[]>([]);
+  const [pendingPayments, setPendingPayments] = useState<PendingPaymentRow[]>(
+    [],
+  );
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [activeOrderId, setActiveOrderId] = useState<string | null>(null);
@@ -153,18 +155,15 @@ export default function PaymentsPage() {
 
       snap.pay(row.midtrans_token, {
         onSuccess: (result) => {
-          console.log("Midtrans success:", result);
           setActiveOrderId(null);
           void fetchPendingPayments();
           router.refresh();
         },
         onPending: (result) => {
-          console.log("Midtrans pending:", result);
           setActiveOrderId(null);
           void fetchPendingPayments();
         },
         onError: (result) => {
-          console.error("Midtrans error:", result);
           setActiveOrderId(null);
         },
         onClose: () => {

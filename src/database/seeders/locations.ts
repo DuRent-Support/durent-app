@@ -18,7 +18,7 @@ type LocationRow = {
 
 const locationRows: LocationRow[] = [
   {
-    code: "DR-LC-SE-ED-0001",
+    code: "DS-LC-SE-ED-0001",
     name: "Rumah Mewah Menteng",
     description:
       "Rumah mewah dengan nuansa luxury cocok untuk iklan produk premium dan scene keluarga.",
@@ -30,7 +30,7 @@ const locationRows: LocationRow[] = [
     rating: 0,
   },
   {
-    code: "DR-LC-SE-ED-0003",
+    code: "DS-LC-SE-ED-0003",
     name: "Apartemen Modern SCBD",
     description:
       "Apartemen modern di pusat kota dengan view skyline, cocok untuk iklan produk urban.",
@@ -42,7 +42,7 @@ const locationRows: LocationRow[] = [
     rating: 0,
   },
   {
-    code: "DR-LC-SE-ED-0004",
+    code: "DS-LC-SE-ED-0004",
     name: "Gudang Industrial Bandung",
     description:
       "Lokasi bergaya industrial dengan nuansa vintage, cocok untuk video klip atau konten kreatif.",
@@ -54,7 +54,7 @@ const locationRows: LocationRow[] = [
     rating: 0,
   },
   {
-    code: "DR-LC-SE-ED-0005",
+    code: "DS-LC-SE-ED-0005",
     name: "Rumah Klasik Surabaya",
     description:
       "Rumah klasik dengan desain elegan, cocok untuk scene keluarga dan iklan produk heritage.",
@@ -66,7 +66,7 @@ const locationRows: LocationRow[] = [
     rating: 0,
   },
   {
-    code: "DR-LC-SE-ED-0006",
+    code: "DS-LC-SE-ED-0006",
     name: "Cafe Estetik Jogja",
     description:
       "Cafe dengan interior estetik dan instagramable, cocok untuk konten F&B dan social media.",

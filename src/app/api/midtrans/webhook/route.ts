@@ -35,13 +35,6 @@ function isValidMidtransSignature(payload: MidtransWebhookPayload) {
     .digest("hex")
     .toLowerCase();
 
-  // console.log("expected signature:", expected);
-  // console.log("expected orderId:", orderId);
-  // console.log("expected statusCode:", statusCode);
-  // console.log("expected grossAmount:", grossAmount);
-  // console.log("expected serverKey:", serverKey);
-
-  // console.log("received signature:", signatureKey);
   return expected === signatureKey;
 }
 
@@ -93,7 +86,7 @@ export async function POST(request: Request) {
       .from("orders")
       .select("*")
       .eq("code", orderId);
-    console.log("Midtrans webhook all orders:", allRows, error);
+  
 
     const { data: updatedRows, error: updateError } = await supabase
       .from("orders")

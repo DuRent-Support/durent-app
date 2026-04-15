@@ -33,7 +33,7 @@ export default function TagsPage() {
       const data = await response.json();
 
       if (response.ok) {
-        console.log("Tags data:", data.tags); // Debug: check tag structure
+     / Debug: check tag structure
         setTags(data.tags || []);
       } else {
         toast.error(data.error || "Gagal mengambil data tags");
@@ -59,7 +59,7 @@ export default function TagsPage() {
 
   // Open dialog for editing tag
   const openEditDialog = (tag: Tag) => {
-    console.log("Editing tag:", tag); // Debug: check if tag_id exists
+   
     setEditingTag(tag);
     setFormData(tag.tag);
     setDialogOpen(true);
@@ -77,8 +77,8 @@ export default function TagsPage() {
       setSaving(true);
 
       if (editingTag) {
-        // Update existing tag
-        console.log("Updating tag with tag_id:", editingTag.tag_id); // Debug
+      
+      
         const response = await fetch(`/api/tags/${editingTag.tag_id}`, {
           method: "PUT",
           headers: { "Content-Type": "application/json" },

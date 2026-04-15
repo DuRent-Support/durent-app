@@ -206,7 +206,7 @@ export async function generateCrewCode(
 
   const categoryPart = buildCodePart(categoryCodes);
   const subCategoryPart = buildCodePart(subCategoryCodes);
-  const baseCode = `DR-CR-${categoryPart}-${subCategoryPart}`;
+  const baseCode = `DS-CR-${categoryPart}-${subCategoryPart}`;
 
   if (Number.isInteger(options?.excludeCrewId)) {
     const currentCrewResult = await serviceRoleClient
