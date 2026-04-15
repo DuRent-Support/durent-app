@@ -210,7 +210,7 @@ export default function CartPage() {
   } = useCart();
   const { user } = useAuth();
   const supabase = useMemo(() => createClient(), []);
-  const [itemQuantities, setItemQuantities] = useState<Record<string, number>>(
+  const [itemQuantities, setItemQuantities] = useState<Record<string, string>>(
     {},
   );
   const [rentPurpose, setRentPurpose] = useState("");
@@ -227,7 +227,7 @@ export default function CartPage() {
   >({});
   const [checkoutError, setCheckoutError] = useState("");
   const [isPaying, setIsPaying] = useState(false);
-  const [showMissingDateFrame, setShowMissingDateFrame] = useState(false);
+  const [, setShowMissingDateFrame] = useState(false);
   const [selectedItemIds, setSelectedItemIds] = useState<
     Record<string, boolean>
   >({});
@@ -268,9 +268,13 @@ export default function CartPage() {
         ? 1
         : Math.max(1, Number(getDays(item) || 1));
       const unitPrice = toNumberPrice(item.price);
+      const rawQuantity = String(itemQuantities[item.id] ?? "1").trim();
+      const parsedQuantity = Number.parseInt(rawQuantity, 10);
       const quantity = isLocation
         ? 1
-        : Math.max(1, Number(itemQuantities[item.id] ?? 1));
+        : Number.isFinite(parsedQuantity) && parsedQuantity > 0
+          ? parsedQuantity
+          : 0;
       const effectiveUnits = isLocation ? multiplier : quantity * multiplier;
 
       return {
@@ -408,6 +412,31 @@ export default function CartPage() {
   const invalidBookingItemIdSet = useMemo(() => {
     return new Set([...sameItemConflictItemIds, ...manualConflictItemIds]);
   }, [manualConflictItemIds, sameItemConflictItemIds]);
+
+  const invalidQuantityItemIdSet = useMemo(() => {
+    const invalidIds = new Set<string>();
+
+    checkoutItems.forEach((item) => {
+      if (item.isLocation) {
+        return;
+      }
+
+      const rawQuantity = String(itemQuantities[item.id] ?? "1").trim();
+
+      if (!rawQuantity) {
+        invalidIds.add(item.id);
+        return;
+      }
+
+      const parsedQuantity = Number.parseInt(rawQuantity, 10);
+
+      if (!Number.isFinite(parsedQuantity) || parsedQuantity <= 0) {
+        invalidIds.add(item.id);
+      }
+    });
+
+    return invalidIds;
+  }, [checkoutItems, itemQuantities]);
 
   const collectSameItemConflictIdsForUpdates = (
     updatesById: Record<string, BookedRange>,
@@ -972,6 +1001,11 @@ export default function CartPage() {
       return;
     }
 
+    if (invalidQuantityItemIdSet.size > 0) {
+      setCheckoutError("Quantity tidak boleh kosong, 0, atau minus.");
+      return;
+    }
+
     if (!user) {
       router.push("/login");
       return;
@@ -1195,13 +1229,14 @@ export default function CartPage() {
   };
 
   const handleChangeQuantity = (itemId: string, value: string) => {
-    const parsed = Number.parseInt(value, 10);
-    const nextQuantity = Number.isFinite(parsed) && parsed > 0 ? parsed : 1;
+    const normalizedValue = value.trim();
 
     setItemQuantities((prev) => ({
       ...prev,
-      [itemId]: nextQuantity,
+      [itemId]: normalizedValue,
     }));
+
+    setCheckoutError("");
   };
 
   const handleRemoveSingleItem = (itemId: string) => {
@@ -1250,6 +1285,7 @@ export default function CartPage() {
   });
   const hasBookingConflicts =
     sameItemConflictItemIds.length > 0 || hasLiveLocationOverlap;
+  const hasInvalidQuantities = invalidQuantityItemIdSet.size > 0;
   const isRequiredCheckoutFieldsMissing =
     !normalizedPurpose || !normalizedShootingAddress || !normalizedPhone;
 
@@ -1266,6 +1302,7 @@ export default function CartPage() {
             item.requiresDateRange &&
             (!item.dateRange?.from || !item.dateRange?.to);
           const hasInvalidBooking = invalidBookingItemIdSet.has(item.id);
+          const hasInvalidQuantity = invalidQuantityItemIdSet.has(item.id);
           const canBulkChangeDate = item.requiresDateRange;
           const isSelected = Boolean(selectedItemIds[item.id]);
 
@@ -1273,7 +1310,7 @@ export default function CartPage() {
             <div
               key={item.id}
               className={`rounded-lg border bg-background p-3 ${
-                isMissingDateRange || hasInvalidBooking
+                isMissingDateRange || hasInvalidBooking || hasInvalidQuantity
                   ? "border-red-500"
                   : "border-border/60"
               }`}
@@ -1341,8 +1378,12 @@ export default function CartPage() {
                           type="number"
                           min={1}
                           inputMode="numeric"
-                          className="h-7 w-20 text-xs"
-                          value={item.quantity}
+                          className={`h-7 w-20 text-xs ${
+                            hasInvalidQuantity ? "border-red-500" : ""
+                          }`}
+                          value={
+                            itemQuantities[item.id] ?? String(item.quantity)
+                          }
                           onChange={(event) =>
                             handleChangeQuantity(item.id, event.target.value)
                           }
@@ -1420,6 +1461,12 @@ export default function CartPage() {
                     <p className="text-xs text-destructive">
                       Item yang sama tidak boleh memiliki tanggal booking yang
                       overlap.
+                    </p>
+                  ) : null}
+
+                  {hasInvalidQuantity ? (
+                    <p className="text-xs text-destructive">
+                      Quantity tidak boleh kosong, 0, atau minus.
                     </p>
                   ) : null}
 
@@ -1667,12 +1714,17 @@ export default function CartPage() {
                   const hasInvalidBooking = invalidBookingItemIdSet.has(
                     item.id,
                   );
+                  const hasInvalidQuantity = invalidQuantityItemIdSet.has(
+                    item.id,
+                  );
 
                   return (
                     <div
                       key={`summary-${item.id}`}
                       className={`flex items-start justify-between gap-3 rounded-md border p-2 text-sm ${
-                        isMissingDateRange || hasInvalidBooking
+                        isMissingDateRange ||
+                        hasInvalidBooking ||
+                        hasInvalidQuantity
                           ? "border-red-500"
                           : "border-transparent"
                       }`}
@@ -1852,7 +1904,8 @@ export default function CartPage() {
                   checkoutItems.length === 0 ||
                   isPaying ||
                   isRequiredCheckoutFieldsMissing ||
-                  hasBookingConflicts
+                  hasBookingConflicts ||
+                  hasInvalidQuantities
                 }
               >
                 {isPaying ? "Memproses pembayaran..." : "Pembayaran"}
@@ -1862,6 +1915,12 @@ export default function CartPage() {
                 <p className="text-xs text-destructive">
                   Pembayaran dinonaktifkan karena masih ada konflik tanggal.
                   Ubah tanggal pada item yang ditandai merah.
+                </p>
+              ) : null}
+
+              {hasInvalidQuantities ? (
+                <p className="text-xs text-destructive">
+                  Pembayaran dinonaktifkan karena quantity kosong/0/minus.
                 </p>
               ) : null}
 

@@ -44,6 +44,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const resolveRole = useCallback(
     async (userId: string) => {
+      // console.log("Resolving role for user ID:", userId);
       for (const retryDelayMs of ROLE_FETCH_RETRY_DELAYS_MS) {
         if (retryDelayMs > 0) {
           await delay(retryDelayMs);
@@ -81,7 +82,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return;
       }
 
-      setStatus("loading");
+      // setStatus("loading");
       setUser(nextUser);
 
       const nextRole = await resolveRole(nextUser.id);
@@ -106,7 +107,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     let isMounted = true;
-
+    console.log("AuthProvider initializing, checking current auth state...");
     const bootstrap = async () => {
       const {
         data: { user: latestUser },
@@ -118,6 +119,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       await syncAuthState(latestUser);
     };
+    // console.log("test");
 
     void bootstrap();
 
@@ -128,6 +130,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return;
       }
 
+      // if (_event === "SIGNED_IN") {
+      //   console.log("test masuk");
+      //   if (!session?.user) return;
+
+      //   if (user?.id !== session.user.id) {
+      //     // setUser(session.user);
+      //     return;
+      //   }
+      //   return;
+      // }
+
+      // if (_event === "SIGNED_OUT") {
+      //   setUser(null);
+      // }
+
+      console.log("Auth state changed:", _event);
       void syncAuthState(session?.user ?? null);
     });
 
