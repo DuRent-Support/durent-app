@@ -52,7 +52,7 @@ export interface LocationSearchResult {
 export async function searchSimilarLocations(
   query: string,
   matchCount = 5,
-  matchThreshold = 0.4,
+  matchThreshold = 0.6,
 ): Promise<LocationSearchResult[]> {
   try {
     const vector = await embeddings.embedQuery(query);
@@ -64,11 +64,31 @@ export async function searchSimilarLocations(
       match_count: matchCount,
     });
 
+    console.log("Raw RPC response:", { data });
+
     if (error) {
       console.error("Vector search error:", error.message);
       return [];
     }
 
+    const debug = (data || []).map((r: any) => ({
+      id: r.id,
+      name: r.name,
+      similarity: r.similarity || r.distance, // tergantung RPC kamu
+      city: r.metadata?.city,
+    }));
+
+    console.log(
+      "RAG DEBUG:",
+      JSON.stringify(
+        {
+          query,
+          results: debug,
+        },
+        null,
+        2,
+      ),
+    );
     return (data as LocationSearchResult[]) ?? [];
   } catch (err) {
     console.error("searchSimilarLocations failed:", err);

@@ -64,6 +64,7 @@ export default function AiScoutPage() {
     try {
       // Strip markdown code fences jika ada
       const cleaned = raw
+        .trim()
         .replace(/^```json\s*/i, "")
         .replace(/```\s*$/, "")
         .trim();

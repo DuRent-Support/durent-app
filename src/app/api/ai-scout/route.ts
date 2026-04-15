@@ -131,12 +131,13 @@ Your task is to analyze screenplay scenes and suggest suitable filming locations
 
 INSTRUCTIONS:
 
-1. Identify scenes that start with INT. or EXT.
+1. Identify scenes that start with INT. or EXT. If no such heading exists, treat the entire input as a single scene with heading "SCENE 1".
 2. Extract the scene heading and a short script excerpt.
 3. Analyze the environment and infer descriptive tags such as:
    indoor, outdoor, urban, village, industrial, dark, bright, luxury, traditional, office, house, workshop, etc.
 4. Based on the tags and scene description, select the most relevant locations from AVAILABLE LOCATIONS.
 5. Only suggest locations that exist in the database context.
+6. If no location perfectly matches but some are reasonably close, still suggest the closest ones with a clear reason.
 
 OUTPUT FORMAT (JSON ONLY):
 

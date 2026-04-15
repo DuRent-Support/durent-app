@@ -16,7 +16,7 @@ type LocationRow = {
 
 const locationRows: LocationRow[] = [
   {
-    code: "DS-LC-ID-RK",
+    code: "DS-LC-ID-RK-0001",
     name: "Rumah Kaum No.8 Ciawi",
     description:
       "Rumah di Ciawi dengan nuansa semi-pedesaan, cocok untuk adegan keluarga atau transisi kota–alam, dengan latar hijau dan suasana tenang.",
@@ -26,7 +26,7 @@ const locationRows: LocationRow[] = [
     pax: 20,
   },
   {
-    code: "DS-LC-ID-RK",
+    code: "DS-LC-ID-RK-0002",
     name: "Rumah Komplek Keuangan, Cipete",
     description:
       "Hunian di Cipete dengan karakter urban-middle class, cocok untuk adegan kehidupan kota yang realistis dan padat.",
@@ -36,7 +36,7 @@ const locationRows: LocationRow[] = [
     pax: 15,
   },
   {
-    code: "DS-LC-ID-RV",
+    code: "DS-LC-ID-RV-0001",
     name: "Rumah Villa Colibah, Puncak",
     description:
       "Villa di Puncak dengan view pegunungan dan kabut, ideal untuk mood dramatis, reflektif, atau romantis.",
@@ -46,7 +46,7 @@ const locationRows: LocationRow[] = [
     pax: 25,
   },
   {
-    code: "DS-LC-ID-RS",
+    code: "DS-LC-ID-RS-0001",
     name: "Grand Aston Puncak",
     description:
       "Hotel modern di Puncak dengan fasilitas lengkap dan tampilan mewah, cocok untuk setting profesional, bisnis, atau liburan kelas atas.",
@@ -56,7 +56,7 @@ const locationRows: LocationRow[] = [
     pax: 100,
   },
   {
-    code: "DS-LC-ID-RK",
+    code: "DS-LC-ID-RK-0003",
     name: "Rumah Pematang Pauh",
     description:
       "Rumah di Pematang Pauh dengan nuansa lokal dan lanskap perbukitan, cocok untuk cerita bernuansa daerah atau budaya.",
@@ -66,7 +66,7 @@ const locationRows: LocationRow[] = [
     pax: 20,
   },
   {
-    code: "DS-LC-ID-RS",
+    code: "DS-LC-ID-RS-0002",
     name: "Artee Resort Bogor",
     description:
       "Resort di Bogor dengan konsep alam terbuka, cocok untuk adegan santai, gathering, atau healing scene.",
@@ -76,7 +76,7 @@ const locationRows: LocationRow[] = [
     pax: 80,
   },
   {
-    code: "DS-LC-OD-JL",
+    code: "DS-LC-OD-JL-0001",
     name: "Jl. Fatmawati Raya Opsi Jalan Travling",
     description:
       "Jalan utama di Fatmawati Raya dengan lalu lintas aktif dan visual kota, cocok untuk scene perjalanan, establishing shot urban.",
@@ -86,7 +86,7 @@ const locationRows: LocationRow[] = [
     pax: 50,
   },
   {
-    code: "DS-LC-OD-JL",
+    code: "DS-LC-OD-JL-0002",
     name: "Kampung Cina, Cibubur",
     description:
       "Area tematik di Cibubur dengan ornamen budaya Tionghoa, cocok untuk visual unik, colorful, atau setting budaya.",
@@ -96,7 +96,7 @@ const locationRows: LocationRow[] = [
     pax: 40,
   },
   {
-    code: "DS-LC-ID-RT",
+    code: "DS-LC-ID-RT-0001",
     name: "Kencana Resto Bogor",
     description:
       "Restoran di Bogor dengan ambience santai, cocok untuk adegan dialog, meeting, atau social interaction.",
@@ -106,7 +106,7 @@ const locationRows: LocationRow[] = [
     pax: 30,
   },
   {
-    code: "DS-LC-ID-RT",
+    code: "DS-LC-ID-RT-0002",
     name: "Kopi Tiam 1",
     description:
       "Kedai kopi bergaya klasik, cocok untuk scene ngobrol santai, intimate conversation, atau slice-of-life.",
@@ -116,7 +116,7 @@ const locationRows: LocationRow[] = [
     pax: 15,
   },
   {
-    code: "DS-LC-ID-TI",
+    code: "DS-LC-ID-TI-0001",
     name: "Masjid At Tin TMII",
     description:
       "Masjid megah di Taman Mini Indonesia Indah, cocok untuk establishing shot religius atau momen reflektif.",
@@ -126,7 +126,7 @@ const locationRows: LocationRow[] = [
     pax: 200,
   },
   {
-    code: "DS-LC-ID-RT",
+    code: "DS-LC-ID-RT-0003",
     name: "Penalama Kopi, Bogor",
     description:
       "Coffee shop di Bogor dengan potensi view alam, cocok untuk scene santai dengan visual estetik.",
@@ -136,7 +136,7 @@ const locationRows: LocationRow[] = [
     pax: 20,
   },
   {
-    code: "DS-LC-ID-RK",
+    code: "DS-LC-ID-RK-0004",
     name: "Rumah Cikuray 25, Bogor",
     description:
       "Rumah di Bogor dengan karakter perumahan kota, fleksibel untuk berbagai adegan domestik.",
@@ -146,7 +146,7 @@ const locationRows: LocationRow[] = [
     pax: 15,
   },
   {
-    code: "DS-LC-ID-RK",
+    code: "DS-LC-ID-RK-0005",
     name: "Rumah Damansara",
     description:
       "Hunian di Damansara dengan nuansa suburban modern, cocok untuk setting keluarga mapan atau internasional.",
@@ -156,7 +156,7 @@ const locationRows: LocationRow[] = [
     pax: 25,
   },
   {
-    code: "DS-LC-ID-RK",
+    code: "DS-LC-ID-RK-0006",
     name: "Rumah Pak Iyan",
     description:
       "Rumah dengan nuansa lokal dan personal, cocok untuk adegan autentik berbasis karakter atau kehidupan sehari-hari.",
@@ -166,7 +166,7 @@ const locationRows: LocationRow[] = [
     pax: 15,
   },
   {
-    code: "DS-LC-ID-RK",
+    code: "DS-LC-ID-RK-0007",
     name: "Rumah Putih, Jagakarsa",
     description:
       "Hunian di Jagakarsa dengan suasana lebih hijau dan tenang, cocok untuk adegan keluarga atau drama ringan.",
@@ -176,7 +176,7 @@ const locationRows: LocationRow[] = [
     pax: 20,
   },
   {
-    code: "DS-LC-ID-RN",
+    code: "DS-LC-ID-RN-0001",
     name: "Rusun, Lebak Bulus",
     description:
       "Hunian vertikal di Lebak Bulus dengan karakter padat dan urban, cocok untuk cerita sosial atau realisme kota.",
@@ -186,7 +186,7 @@ const locationRows: LocationRow[] = [
     pax: 20,
   },
   {
-    code: "DS-LC-ID-TI",
+    code: "DS-LC-ID-TI-0002",
     name: "Wihara",
     description:
       "Tempat ibadah Buddha dengan suasana hening dan sakral, cocok untuk adegan refleksi, spiritual, atau visual simbolik.",
@@ -202,7 +202,7 @@ const embeddings = new GoogleGenerativeAIEmbeddings({
   apiKey: process.env.GOOGLE_API_KEY,
 });
 
-function buildEmbeddingContent(row: LocationRow, tags: string[]) {
+function buildEmbeddingContent(row: LocationRow) {
   return {
     name: row.name,
     city: row.city,
@@ -210,7 +210,6 @@ function buildEmbeddingContent(row: LocationRow, tags: string[]) {
     description: row.description,
     area: row.area,
     pax: row.pax,
-    tags,
     image_url: null as string | null,
   };
 }
@@ -220,69 +219,12 @@ function buildContentString(content: ReturnType<typeof buildEmbeddingContent>) {
     `Nama: ${content.name}.`,
     `Kota: ${content.city}.`,
     `Deskripsi: ${content.description}.`,
-    content.tags.length > 0 ? `Tag: ${content.tags.join(", ")}.` : null,
     `Area: ${content.area}m².`,
     `Kapasitas: ${content.pax} orang.`,
     `Harga: ${content.price}.`,
-    `Rating: ${content.rating}/5.`,
   ].filter(Boolean);
 
   return parts.join(" ");
-}
-
-async function loadTagsByLocationId(
-  supabase: SupabaseClient,
-  locationIds: number[],
-) {
-  const tagsByLocationId = new Map<number, string[]>();
-
-  if (locationIds.length === 0) {
-    return tagsByLocationId;
-  }
-
-  const { data: locationTags, error: locationTagsError } = await supabase
-    .from("location_tag")
-    .select("location_id, location_tag_id")
-    .in("location_id", locationIds);
-
-  if (locationTagsError) {
-    throw new Error(
-      `Select location tags failed: ${locationTagsError.message}`,
-    );
-  }
-
-  const tagIds = Array.from(
-    new Set((locationTags ?? []).map((row) => Number(row.location_tag_id))),
-  ).filter((id) => Number.isFinite(id));
-
-  if (tagIds.length === 0) {
-    return tagsByLocationId;
-  }
-
-  const { data: tagRows, error: tagRowsError } = await supabase
-    .from("location_tags")
-    .select("id, name")
-    .in("id", tagIds);
-
-  if (tagRowsError) {
-    throw new Error(`Select tags failed: ${tagRowsError.message}`);
-  }
-
-  const tagIdToName = new Map(
-    (tagRows ?? []).map((row) => [Number(row.id), String(row.name)]),
-  );
-
-  for (const row of locationTags ?? []) {
-    const locationId = Number(row.location_id);
-    const tagId = Number(row.location_tag_id);
-    const tagName = tagIdToName.get(tagId);
-    if (!tagName) continue;
-    const existing = tagsByLocationId.get(locationId) ?? [];
-    existing.push(tagName);
-    tagsByLocationId.set(locationId, existing);
-  }
-
-  return tagsByLocationId;
 }
 
 export async function seedLocationEmbeddings(
@@ -311,17 +253,13 @@ export async function seedLocationEmbeddings(
     (seededLocations ?? []).map((row) => [String(row.code), Number(row.id)]),
   );
 
-  const locationIds = [...codeToId.values()];
-  const tagsByLocationId = await loadTagsByLocationId(supabase, locationIds);
-
   let inserted = 0;
 
   for (const row of locationRows) {
     const locationId = codeToId.get(row.code);
     if (!locationId) continue;
 
-    const tags = tagsByLocationId.get(locationId) ?? [];
-    const content = buildEmbeddingContent(row, tags);
+    const content = buildEmbeddingContent(row);
     const contentString = buildContentString(content);
     const vector = await embeddings.embedQuery(contentString);
 
@@ -390,8 +328,6 @@ export async function seedLocations(
       price: row.price,
       area: row.area,
       pax: row.pax,
-      is_available: row.is_available,
-      rating: row.rating,
     }));
 
   if (rowsToInsert.length > 0) {
