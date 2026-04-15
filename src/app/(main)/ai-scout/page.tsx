@@ -106,12 +106,12 @@ export default function AiScoutPage() {
         const formData = new FormData();
         formData.append("pdf", pdfFile!);
         if (hasText) formData.append("message", hasText);
-        response = await fetch("/api/ai-scout", {
+        response = await fetch("/api/ai-scout-new", {
           method: "POST",
           body: formData,
         });
       } else {
-        response = await fetch("/api/ai-scout", {
+        response = await fetch("/api/ai-scout-new", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -130,7 +130,7 @@ export default function AiScoutPage() {
           : JSON.stringify(data.message);
 
       const scenes = parseScenes(raw);
-
+      console.log("Parsed scenes:", scenes);
       if (scenes) {
         setSceneResults(scenes);
         setDrawerOpen(true);

@@ -81,8 +81,9 @@ export async function POST(req: NextRequest) {
     // Jika PDF saja → pakai 1000 karakter pertama PDF
     const searchQuery = message ?? scriptText!.slice(0, 1000);
 
-    // Search for relevant locations using vector similarity
-    const relevantLocations = await searchSimilarLocations(searchQuery);
+    // Threshold -1 supaya semua lokasi selalu masuk konteks AI,
+    // karena tag baru diketahui setelah AI menganalisis — bukan sebelumnya.
+    const relevantLocations = await searchSimilarLocations(searchQuery, 20, -1);
 
     // Build location context block for the system prompt
     let locationContext = "";
@@ -137,7 +138,7 @@ INSTRUCTIONS:
    indoor, outdoor, urban, village, industrial, dark, bright, luxury, traditional, office, house, workshop, etc.
 4. Based on the tags and scene description, select the most relevant locations from AVAILABLE LOCATIONS.
 5. Only suggest locations that exist in the database context.
-6. If no location perfectly matches but some are reasonably close, still suggest the closest ones with a clear reason.
+6. ALWAYS suggest at least 1–2 locations from AVAILABLE LOCATIONS, even if the match is not perfect. Pick the closest ones and explain the reasoning honestly.
 
 OUTPUT FORMAT (JSON ONLY):
 
@@ -162,7 +163,7 @@ RULES:
 - Only output valid JSON.
 - Do NOT add explanations outside the JSON.
 - The "location" field must only contain locations from AVAILABLE LOCATIONS.
-- If no location is suitable, return an empty array for "location".
+- NEVER return an empty "location" array if AVAILABLE LOCATIONS has entries. Always pick the closest match.
 
 Always respond in the same language as the user's message.
 
@@ -186,25 +187,31 @@ ${locationContext}
     // PDF + chat : sertakan pesan user sebagai context, lalu isi script dari PDF
     // PDF only  : langsung kirim isi script PDF
     // Chat only : kirim pesan user seperti biasa
+    // console.log("scripttext", scriptText);
+    console.log("message", message);
     if (scriptText && message) {
+      console.log("masuk ke 1");
+
       messages.push(
         new HumanMessage(
           `Konteks dari saya: ${message}\n\nBerikut adalah isi naskah/skenario dari PDF:\n\n${scriptText.slice(0, 8000)}`,
         ),
       );
     } else if (scriptText) {
+      console.log("masuk ke 2");
       messages.push(
         new HumanMessage(
           `Berikut adalah isi naskah/skenario dari PDF:\n\n${scriptText.slice(0, 8000)}`,
         ),
       );
     } else {
+      console.log("masuk ke 3");
       messages.push(new HumanMessage(message!));
     }
 
     // Get response from Gemini
     const response = await model.invoke(messages);
-
+    // console.log("Raw model response:", response);
     return new Response(
       JSON.stringify({
         message: response.content,
