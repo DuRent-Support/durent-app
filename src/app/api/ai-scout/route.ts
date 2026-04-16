@@ -189,7 +189,7 @@ export async function POST(req: NextRequest) {
     }
 
     // Hardcode max scenes for testing (Gemini rate limit)
-    const MAX_SCENES = 5;
+    const MAX_SCENES = 3;
     const scenesToProcess = scenes.slice(0, MAX_SCENES);
 
     console.log(
