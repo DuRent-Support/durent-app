@@ -17,11 +17,6 @@ type LocationRow = {
   updated_at: string | null;
 };
 
-type PivotTagRow = {
-  location_id: number;
-  location_tag_id: number;
-};
-
 type PivotItemCategoryRow = {
   location_id: number;
   item_category_id: number;
@@ -43,11 +38,6 @@ type SignedUrlRow = {
   signedUrl?: string;
   path?: string;
   error?: string;
-};
-
-type TagRow = {
-  id: number;
-  name: string;
 };
 
 type ItemCategoryRow = {
@@ -128,6 +118,17 @@ export function parseLocationPayload(
     return parsed;
   };
 
+  const item_category_ids = toIntArray(source.item_category_ids);
+  const item_sub_category_ids = toIntArray(source.item_sub_category_ids);
+
+  if (item_category_ids.length === 0) {
+    return { ok: false, message: "Kategori item wajib dipilih." };
+  }
+
+  if (item_sub_category_ids.length === 0) {
+    return { ok: false, message: "Sub-kategori item wajib dipilih." };
+  }
+
   return {
     ok: true,
     data: {
@@ -139,8 +140,8 @@ export function parseLocationPayload(
       pax: Math.max(0, Math.trunc(toNumber(source.pax, 0))),
       is_available: Boolean(source.is_available ?? true),
       tag_ids: toIntArray(source.tag_ids),
-      item_category_ids: toIntArray(source.item_category_ids),
-      item_sub_category_ids: toIntArray(source.item_sub_category_ids),
+      item_category_ids,
+      item_sub_category_ids,
       images: toImages((source as { images?: unknown }).images),
     },
   };
@@ -272,15 +273,6 @@ export async function syncLocationRelations(
 ) {
   const serviceRoleClient = createServiceRoleClient();
 
-  const deleteTagResult = await serviceRoleClient
-    .from("location_tag")
-    .delete()
-    .eq("location_id", locationId);
-
-  if (deleteTagResult.error) {
-    throw new Error(deleteTagResult.error.message);
-  }
-
   const deleteCategoryResult = await serviceRoleClient
     .from("location_item_category")
     .delete()
@@ -297,19 +289,6 @@ export async function syncLocationRelations(
 
   if (deleteSubCategoryResult.error) {
     throw new Error(deleteSubCategoryResult.error.message);
-  }
-
-  if (payload.tag_ids.length > 0) {
-    const insertTagResult = await serviceRoleClient.from("location_tag").insert(
-      payload.tag_ids.map((tagId) => ({
-        location_id: locationId,
-        location_tag_id: tagId,
-      })),
-    );
-
-    if (insertTagResult.error) {
-      throw new Error(insertTagResult.error.message);
-    }
   }
 
   if (payload.item_category_ids.length > 0) {
@@ -389,34 +368,22 @@ export async function listLocationsWithRelations() {
 
   const locationIds = locationRows.map((row) => row.id);
 
-  const [
-    tagPivotResult,
-    categoryPivotResult,
-    subCategoryPivotResult,
-    imagesResult,
-  ] = await Promise.all([
-    serviceRoleClient
-      .from("location_tag")
-      .select("location_id, location_tag_id")
-      .in("location_id", locationIds),
-    serviceRoleClient
-      .from("location_item_category")
-      .select("location_id, item_category_id")
-      .in("location_id", locationIds),
-    serviceRoleClient
-      .from("location_item_sub_category")
-      .select("location_id, item_sub_category_id")
-      .in("location_id", locationIds),
-    serviceRoleClient
-      .from("location_images")
-      .select("id, location_id, url, position")
-      .in("location_id", locationIds)
-      .order("position", { ascending: true }),
-  ]);
-
-  if (tagPivotResult.error) {
-    throw new Error(tagPivotResult.error.message);
-  }
+  const [categoryPivotResult, subCategoryPivotResult, imagesResult] =
+    await Promise.all([
+      serviceRoleClient
+        .from("location_item_category")
+        .select("location_id, item_category_id")
+        .in("location_id", locationIds),
+      serviceRoleClient
+        .from("location_item_sub_category")
+        .select("location_id, item_sub_category_id")
+        .in("location_id", locationIds),
+      serviceRoleClient
+        .from("location_images")
+        .select("id, location_id, url, position")
+        .in("location_id", locationIds)
+        .order("position", { ascending: true }),
+    ]);
 
   if (categoryPivotResult.error) {
     throw new Error(categoryPivotResult.error.message);
@@ -430,7 +397,6 @@ export async function listLocationsWithRelations() {
     throw new Error(imagesResult.error.message);
   }
 
-  const tagPivots = (tagPivotResult.data ?? []) as PivotTagRow[];
   const categoryPivots = (categoryPivotResult.data ??
     []) as PivotItemCategoryRow[];
   const subCategoryPivots = (subCategoryPivotResult.data ??
@@ -461,7 +427,6 @@ export async function listLocationsWithRelations() {
     }
   }
 
-  const tagIds = [...new Set(tagPivots.map((row) => row.location_tag_id))];
   const categoryIds = [
     ...new Set(categoryPivots.map((row) => row.item_category_id)),
   ];
@@ -469,32 +434,20 @@ export async function listLocationsWithRelations() {
     ...new Set(subCategoryPivots.map((row) => row.item_sub_category_id)),
   ];
 
-  const [tagsResult, categoriesResult, subCategoriesResult] = await Promise.all(
-    [
-      tagIds.length > 0
-        ? serviceRoleClient
-            .from("location_tags")
-            .select("id, name")
-            .in("id", tagIds)
-        : Promise.resolve({ data: [], error: null }),
-      categoryIds.length > 0
-        ? serviceRoleClient
-            .from("item_categories")
-            .select("id, name, short_code")
-            .in("id", categoryIds)
-        : Promise.resolve({ data: [], error: null }),
-      subCategoryIds.length > 0
-        ? serviceRoleClient
-            .from("item_sub_categories")
-            .select("id, name, short_code")
-            .in("id", subCategoryIds)
-        : Promise.resolve({ data: [], error: null }),
-    ],
-  );
-
-  if (tagsResult.error) {
-    throw new Error(tagsResult.error.message);
-  }
+  const [categoriesResult, subCategoriesResult] = await Promise.all([
+    categoryIds.length > 0
+      ? serviceRoleClient
+          .from("item_categories")
+          .select("id, name, short_code")
+          .in("id", categoryIds)
+      : Promise.resolve({ data: [], error: null }),
+    subCategoryIds.length > 0
+      ? serviceRoleClient
+          .from("item_sub_categories")
+          .select("id, name, short_code")
+          .in("id", subCategoryIds)
+      : Promise.resolve({ data: [], error: null }),
+  ]);
 
   if (categoriesResult.error) {
     throw new Error(categoriesResult.error.message);
@@ -504,13 +457,8 @@ export async function listLocationsWithRelations() {
     throw new Error(subCategoriesResult.error.message);
   }
 
-  const tagMap = new Map<number, TagRow>();
   const categoryMap = new Map<number, ItemCategoryRow>();
   const subCategoryMap = new Map<number, ItemSubCategoryRow>();
-
-  ((tagsResult.data ?? []) as TagRow[]).forEach((row) =>
-    tagMap.set(row.id, row),
-  );
   ((categoriesResult.data ?? []) as ItemCategoryRow[]).forEach((row) =>
     categoryMap.set(row.id, row),
   );
@@ -519,10 +467,6 @@ export async function listLocationsWithRelations() {
   );
 
   return locationRows.map((location) => {
-    const selectedTagIds = tagPivots
-      .filter((row) => row.location_id === location.id)
-      .map((row) => row.location_tag_id);
-
     const selectedCategoryIds = categoryPivots
       .filter((row) => row.location_id === location.id)
       .map((row) => row.item_category_id);
@@ -533,13 +477,10 @@ export async function listLocationsWithRelations() {
 
     return {
       ...location,
-      tag_ids: selectedTagIds,
+      tag_ids: [],
       item_category_ids: selectedCategoryIds,
       item_sub_category_ids: selectedSubCategoryIds,
-      tags: selectedTagIds
-        .map((id) => tagMap.get(id))
-        .filter(Boolean)
-        .map((item) => ({ id: item!.id, name: item!.name })),
+      tags: [],
       item_categories: selectedCategoryIds
         .map((id) => categoryMap.get(id))
         .filter(Boolean)

@@ -89,20 +89,12 @@ function isPaidStatus(value: string | null | undefined) {
 async function getTagsCount() {
   const serviceRoleClient = createServiceRoleClient();
 
-  const locationTagsResult = await serviceRoleClient
-    .from("location_tags")
-    .select("id", { count: "exact", head: true });
-
-  if (!locationTagsResult.error) {
-    return locationTagsResult.count ?? 0;
-  }
-
-  const legacyTagsResult = await serviceRoleClient
+  const tagsResult = await serviceRoleClient
     .from("tags")
     .select("tag_id", { count: "exact", head: true });
 
-  if (!legacyTagsResult.error) {
-    return legacyTagsResult.count ?? 0;
+  if (!tagsResult.error) {
+    return tagsResult.count ?? 0;
   }
 
   return 0;

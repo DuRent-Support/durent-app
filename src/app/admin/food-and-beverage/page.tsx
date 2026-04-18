@@ -6,7 +6,6 @@ import { Loader2, Pencil, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 import ImageUploadCards from "@/components/admin/ImageUploadCards";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -103,7 +102,6 @@ export default function AdminFoodAndBeveragePage() {
     null,
   );
   const [records, setRecords] = useState<FoodAndBeverageItem[]>([]);
-  const [availableTags, setAvailableTags] = useState<RelationItem[]>([]);
   const [availableItemCategories, setAvailableItemCategories] = useState<
     RelationItem[]
   >([]);
@@ -193,38 +191,21 @@ export default function AdminFoodAndBeveragePage() {
 
   const fetchOptions = useCallback(async () => {
     try {
-      const [tagResponse, categoryResponse, subCategoryResponse] =
-        await Promise.all([
-          fetch("/api/admin/food-and-beverage/tags", {
-            method: "GET",
-            cache: "no-store",
-          }),
-          fetch("/api/admin/categories", {
-            method: "GET",
-            cache: "no-store",
-          }),
-          fetch("/api/admin/sub-categories", {
-            method: "GET",
-            cache: "no-store",
-          }),
-        ]);
+      const [categoryResponse, subCategoryResponse] = await Promise.all([
+        fetch("/api/admin/categories", {
+          method: "GET",
+          cache: "no-store",
+        }),
+        fetch("/api/admin/sub-categories", {
+          method: "GET",
+          cache: "no-store",
+        }),
+      ]);
 
-      const [tagData, categoryData, subCategoryData] = await Promise.all([
-        tagResponse.json(),
+      const [categoryData, subCategoryData] = await Promise.all([
         categoryResponse.json(),
         subCategoryResponse.json(),
       ]);
-
-      if (tagResponse.ok) {
-        setAvailableTags(
-          (
-            (tagData.items ?? []) as Array<{
-              id: string;
-              name: string;
-            }>
-          ).map((item) => ({ id: Number(item.id), name: item.name })),
-        );
-      }
 
       if (categoryResponse.ok) {
         setAvailableItemCategories(
@@ -387,15 +368,6 @@ export default function AdminFoodAndBeveragePage() {
     }
   };
 
-  const toggleMultiSelect = (key: "tag_ids", value: number) => {
-    setFormData((prev) => ({
-      ...prev,
-      [key]: prev[key].includes(value)
-        ? prev[key].filter((item) => item !== value)
-        : [...prev[key], value],
-    }));
-  };
-
   const selectSingleRelation = (
     key: "item_category_ids" | "item_sub_category_ids",
     value: number,
@@ -547,8 +519,8 @@ export default function AdminFoodAndBeveragePage() {
             Kelola Food & Beverage
           </h1>
           <p className="text-muted-foreground text-sm">
-            Tambah, edit, atau hapus item beserta relasi tag, kategori, sub
-            kategori, dan gambar.
+            Tambah, edit, atau hapus item beserta relasi kategori, sub kategori,
+            dan gambar.
           </p>
         </div>
 
@@ -599,7 +571,6 @@ export default function AdminFoodAndBeveragePage() {
                 <TableHead>Code</TableHead>
                 <TableHead>Nama</TableHead>
                 <TableHead className="hidden sm:table-cell">Harga</TableHead>
-                <TableHead className="hidden lg:table-cell">Tag</TableHead>
                 <TableHead className="hidden lg:table-cell">Status</TableHead>
                 <TableHead className="w-24 text-right">Aksi</TableHead>
               </TableRow>
@@ -607,14 +578,14 @@ export default function AdminFoodAndBeveragePage() {
             <TableBody>
               {loading ? (
                 <TableRow>
-                  <TableCell colSpan={6} className="text-center py-12">
+                  <TableCell colSpan={5} className="text-center py-12">
                     <Loader2 className="h-6 w-6 animate-spin text-muted-foreground mx-auto" />
                   </TableCell>
                 </TableRow>
               ) : visibleRecords.length === 0 ? (
                 <TableRow>
                   <TableCell
-                    colSpan={6}
+                    colSpan={5}
                     className="text-center py-12 text-sm text-muted-foreground"
                   >
                     {searchQuery.trim()
@@ -633,19 +604,6 @@ export default function AdminFoodAndBeveragePage() {
                     </TableCell>
                     <TableCell className="hidden sm:table-cell text-muted-foreground">
                       {formatPrice(item.price)}
-                    </TableCell>
-                    <TableCell className="hidden lg:table-cell">
-                      <div className="flex flex-wrap gap-1">
-                        {item.tags.map((tag) => (
-                          <Badge
-                            key={`${item.id}-${tag.id}`}
-                            variant="secondary"
-                            className="text-[10px]"
-                          >
-                            {tag.name}
-                          </Badge>
-                        ))}
-                      </div>
                     </TableCell>
                     <TableCell className="hidden lg:table-cell text-muted-foreground">
                       {item.is_available ? "Available" : "Unavailable"}
@@ -778,26 +736,6 @@ export default function AdminFoodAndBeveragePage() {
                 >
                   Unavailable
                 </Button>
-              </div>
-            </div>
-
-            <div className="grid gap-1.5">
-              <Label>Tags</Label>
-              <div className="flex flex-wrap gap-2">
-                {availableTags.map((tag) => (
-                  <button
-                    key={tag.id}
-                    type="button"
-                    onClick={() => toggleMultiSelect("tag_ids", Number(tag.id))}
-                    className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
-                      formData.tag_ids.includes(Number(tag.id))
-                        ? "bg-primary text-primary-foreground"
-                        : "bg-secondary text-secondary-foreground hover:bg-secondary/80"
-                    }`}
-                  >
-                    {tag.name}
-                  </button>
-                ))}
               </div>
             </div>
 

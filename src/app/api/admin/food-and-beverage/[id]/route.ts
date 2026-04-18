@@ -99,12 +99,8 @@ export async function DELETE(_request: Request, { params }: RouteContext) {
 
     const serviceRoleClient = createServiceRoleClient();
 
-    const [deleteTags, deleteCategory, deleteSubCategory, deleteImages] =
-      await Promise.all([
-        serviceRoleClient
-          .from("food_and_beverage_tag")
-          .delete()
-          .eq("food_and_beverage_id", recordId),
+    const [deleteCategory, deleteSubCategory, deleteImages] = await Promise.all(
+      [
         serviceRoleClient
           .from("food_and_beverage_item_category")
           .delete()
@@ -117,13 +113,11 @@ export async function DELETE(_request: Request, { params }: RouteContext) {
           .from("food_and_beverage_images")
           .delete()
           .eq("food_and_beverage_id", recordId),
-      ]);
+      ],
+    );
 
     const relationError =
-      deleteTags.error ||
-      deleteCategory.error ||
-      deleteSubCategory.error ||
-      deleteImages.error;
+      deleteCategory.error || deleteSubCategory.error || deleteImages.error;
 
     if (relationError) {
       return NextResponse.json(

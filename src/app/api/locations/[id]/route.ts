@@ -42,44 +42,20 @@ export async function GET(
       );
     }
 
-    const [tagPivotResult, tagsResult, imagesResult] = await Promise.all([
-      serviceRoleClient
-        .from("location_tag")
-        .select("location_tag_id")
-        .eq("location_id", locationId),
-      serviceRoleClient.from("location_tags").select("id, name"),
-      serviceRoleClient
-        .from("location_images")
-        .select("url, position")
-        .eq("location_id", locationId)
-        .order("position", { ascending: true }),
-    ]);
+    const { data: imagesData, error: imagesError } = await serviceRoleClient
+      .from("location_images")
+      .select("url, position")
+      .eq("location_id", locationId)
+      .order("position", { ascending: true });
 
-    if (tagPivotResult.error) {
+    if (imagesError) {
       return NextResponse.json(
-        { message: tagPivotResult.error.message },
+        { message: imagesError.message },
         { status: 400 },
       );
     }
 
-    if (tagsResult.error) {
-      return NextResponse.json(
-        { message: tagsResult.error.message },
-        { status: 400 },
-      );
-    }
-
-    if (imagesResult.error) {
-      return NextResponse.json(
-        { message: imagesResult.error.message },
-        { status: 400 },
-      );
-    }
-
-    const tagsById = new Map<number, string>();
-    (tagsResult.data ?? []).forEach((row) => {
-      tagsById.set(Number(row.id), String(row.name ?? ""));
-    });
+    const imagesResult = { data: imagesData, error: imagesError };
 
     const imagePaths = Array.from(
       new Set(
@@ -120,9 +96,7 @@ export async function GET(
         const path = String(row.url ?? "");
         return signedMap.get(path) ?? path;
       }),
-      tags: (tagPivotResult.data ?? [])
-        .map((row) => tagsById.get(Number(row.location_tag_id)) || "")
-        .filter((tag) => tag.length > 0),
+      tags: [],
       created_at: location.updated_at,
     };
 
@@ -156,7 +130,6 @@ export async function PUT(
       (formData.get("existingImageUrls") as string) || "[]",
     );
 
-   
     const imageFiles: File[] = [];
     let index = 0;
     while (formData.has(`image_${index}`)) {
@@ -166,7 +139,6 @@ export async function PUT(
       }
       index++;
     }
-  
 
     // Validation
     if (!name?.trim()) {
@@ -178,7 +150,6 @@ export async function PUT(
 
     const supabase = await createClient();
 
-
     // Get existing location to manage old images
     const { data: existingLocation } = await supabase
       .from("shooting_locations")
@@ -189,7 +160,6 @@ export async function PUT(
     const oldImageUrls =
       (existingLocation?.shooting_location_image_url as string[]) || [];
     const newImageUrls: string[] = [...existingImageUrls];
-   
 
     // Delete removed images from storage
     const imagesToDelete = oldImageUrls.filter(
@@ -199,7 +169,6 @@ export async function PUT(
       const path = url.split("/").slice(-2).join("/");
       await supabase.storage.from("shooting_locations").remove([path]);
     }
-
 
     // Upload new images
     for (const imageFile of imageFiles) {
@@ -221,7 +190,6 @@ export async function PUT(
         );
       }
 
-
       // Get public URL
       const {
         data: { publicUrl },
@@ -229,7 +197,6 @@ export async function PUT(
 
       newImageUrls.push(publicUrl);
     }
-
 
     // Update location
     const { data: updatedLocation, error: updateError } = await supabase
@@ -251,61 +218,6 @@ export async function PUT(
     if (updateError) {
       return NextResponse.json({ error: updateError.message }, { status: 400 });
     }
-
-
-    // Update location tags
-    // First, delete existing tags
-    const { error: deleteTagsError } = await supabase
-      .from("shooting_location_tag")
-      .delete()
-      .eq("shooting_location_id", id);
-
-    if (deleteTagsError) {
-      return NextResponse.json(
-        {
-          error: `Gagal menghapus relasi tag lama: ${deleteTagsError.message}`,
-        },
-        { status: 400 },
-      );
-    }
-
-    // Then insert new tags
-    if (tags.length > 0) {
-      const { data: tagRecords, error: tagRecordsError } = await supabase
-        .from("tags")
-        .select("tag_id, tag")
-        .in("tag", tags);
-
-      if (tagRecordsError) {
-        return NextResponse.json(
-          { error: `Gagal mengambil data tag: ${tagRecordsError.message}` },
-          { status: 400 },
-        );
-      }
-
-      if (tagRecords && tagRecords.length > 0) {
-        const locationTags = tagRecords.map(
-          (tag: { tag_id: string; tag: string }) => ({
-            shooting_location_id: id,
-            tag_id: tag.tag_id,
-          }),
-        );
-
-        const { error: insertTagsError } = await supabase
-          .from("shooting_location_tag")
-          .insert(locationTags);
-
-        if (insertTagsError) {
-          return NextResponse.json(
-            {
-              error: `Gagal menyimpan relasi tag baru: ${insertTagsError.message}`,
-            },
-            { status: 400 },
-          );
-        }
-      }
-    }
-
 
     // Generate and store embedding (non-blocking)
     upsertLocationEmbedding({
@@ -339,8 +251,6 @@ export async function DELETE(
   request: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
-
-
   try {
     const { id } = await params;
     const supabase = await createClient();
@@ -360,18 +270,9 @@ export async function DELETE(
         await supabase.storage.from("shooting_locations").remove([imagePath]);
       }
     }
-   
-
-    // Delete location tags first (foreign key constraint)
-    await supabase
-      .from("shooting_location_tag")
-      .delete()
-      .eq("shooting_location_id", id);
 
     // Delete location embeddings (foreign key constraint)
     await supabase.from("location_embeddings").delete().eq("location_id", id);
-
-    
 
     // Delete location
     const { error } = await supabase
@@ -379,12 +280,9 @@ export async function DELETE(
       .delete()
       .eq("shooting_location_id", id);
 
-   
-
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 400 });
     }
-  
 
     return NextResponse.json(
       { message: "Lokasi berhasil dihapus" },

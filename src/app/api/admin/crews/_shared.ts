@@ -14,12 +14,6 @@ type CrewRow = {
   updated_at: string | null;
 };
 
-type CrewSkillRow = {
-  id: number;
-  name: string | null;
-  description: string | null;
-};
-
 type ItemCategoryRow = {
   id: number;
   name: string | null;
@@ -30,11 +24,6 @@ type ItemSubCategoryRow = {
   id: number;
   name: string | null;
   short_code: string | null;
-};
-
-type CrewSkillPivotRow = {
-  crew_id: number;
-  crew_skill_id: number;
 };
 
 type CrewItemCategoryPivotRow = {
@@ -69,7 +58,6 @@ export type CrewPayload = {
   description: string;
   price: number;
   is_available: boolean;
-  skill_ids: number[];
   item_category_ids: number[];
   item_sub_category_ids: number[];
   images: Array<{
@@ -143,7 +131,6 @@ export function parseCrewPayload(
       description,
       price,
       is_available: Boolean(source.is_available ?? true),
-      skill_ids: toIntArray(source.skill_ids),
       item_category_ids: toSingleIntArray(source.item_category_ids),
       item_sub_category_ids: toSingleIntArray(source.item_sub_category_ids),
       images: toImages((source as { images?: unknown }).images),
@@ -274,41 +261,20 @@ export async function generateCrewCode(
 export async function syncCrewRelations(crewId: number, payload: CrewPayload) {
   const serviceRoleClient = createServiceRoleClient();
 
-  const [deleteSkills, deleteCategory, deleteSubCategory, deleteImages] =
-    await Promise.all([
-      serviceRoleClient.from("crew_skill").delete().eq("crew_id", crewId),
-      serviceRoleClient
-        .from("crew_item_category")
-        .delete()
-        .eq("crew_id", crewId),
-      serviceRoleClient
-        .from("crew_item_sub_category")
-        .delete()
-        .eq("crew_id", crewId),
-      serviceRoleClient.from("crew_images").delete().eq("crew_id", crewId),
-    ]);
+  const [deleteCategory, deleteSubCategory, deleteImages] = await Promise.all([
+    serviceRoleClient.from("crew_item_category").delete().eq("crew_id", crewId),
+    serviceRoleClient
+      .from("crew_item_sub_category")
+      .delete()
+      .eq("crew_id", crewId),
+    serviceRoleClient.from("crew_images").delete().eq("crew_id", crewId),
+  ]);
 
   const deleteError =
-    deleteSkills.error ||
-    deleteCategory.error ||
-    deleteSubCategory.error ||
-    deleteImages.error;
+    deleteCategory.error || deleteSubCategory.error || deleteImages.error;
 
   if (deleteError) {
     throw new Error(deleteError.message);
-  }
-
-  if (payload.skill_ids.length > 0) {
-    const insertSkills = await serviceRoleClient.from("crew_skill").insert(
-      payload.skill_ids.map((skillId) => ({
-        crew_id: crewId,
-        crew_skill_id: skillId,
-      })),
-    );
-
-    if (insertSkills.error) {
-      throw new Error(insertSkills.error.message);
-    }
   }
 
   if (payload.item_category_ids.length > 0) {
@@ -377,34 +343,23 @@ export async function listCrewsWithRelations() {
 
   const crewIds = crews.map((item) => item.id);
 
-  const [
-    skillPivotResult,
-    categoryPivotResult,
-    subCategoryPivotResult,
-    imagesResult,
-  ] = await Promise.all([
-    serviceRoleClient
-      .from("crew_skill")
-      .select("crew_id, crew_skill_id")
-      .in("crew_id", crewIds),
-    serviceRoleClient
-      .from("crew_item_category")
-      .select("crew_id, item_category_id")
-      .in("crew_id", crewIds),
-    serviceRoleClient
-      .from("crew_item_sub_category")
-      .select("crew_id, item_sub_category_id")
-      .in("crew_id", crewIds),
-    serviceRoleClient
-      .from("crew_images")
-      .select("id, crew_id, url, position")
-      .in("crew_id", crewIds)
-      .order("position", { ascending: true }),
-  ]);
+  const [categoryPivotResult, subCategoryPivotResult, imagesResult] =
+    await Promise.all([
+      serviceRoleClient
+        .from("crew_item_category")
+        .select("crew_id, item_category_id")
+        .in("crew_id", crewIds),
+      serviceRoleClient
+        .from("crew_item_sub_category")
+        .select("crew_id, item_sub_category_id")
+        .in("crew_id", crewIds),
+      serviceRoleClient
+        .from("crew_images")
+        .select("id, crew_id, url, position")
+        .in("crew_id", crewIds)
+        .order("position", { ascending: true }),
+    ]);
 
-  if (skillPivotResult.error) {
-    throw new Error(skillPivotResult.error.message);
-  }
   if (categoryPivotResult.error) {
     throw new Error(categoryPivotResult.error.message);
   }
@@ -415,7 +370,6 @@ export async function listCrewsWithRelations() {
     throw new Error(imagesResult.error.message);
   }
 
-  const skillPivots = (skillPivotResult.data ?? []) as CrewSkillPivotRow[];
   const categoryPivots = (categoryPivotResult.data ??
     []) as CrewItemCategoryPivotRow[];
   const subCategoryPivots = (subCategoryPivotResult.data ??
@@ -446,7 +400,6 @@ export async function listCrewsWithRelations() {
     }
   }
 
-  const skillIds = [...new Set(skillPivots.map((row) => row.crew_skill_id))];
   const categoryIds = [
     ...new Set(categoryPivots.map((row) => row.item_category_id)),
   ];
@@ -454,31 +407,21 @@ export async function listCrewsWithRelations() {
     ...new Set(subCategoryPivots.map((row) => row.item_sub_category_id)),
   ];
 
-  const [skillsResult, categoriesResult, subCategoriesResult] =
-    await Promise.all([
-      skillIds.length > 0
-        ? serviceRoleClient
-            .from("crew_skills")
-            .select("id, name, description")
-            .in("id", skillIds)
-        : Promise.resolve({ data: [], error: null }),
-      categoryIds.length > 0
-        ? serviceRoleClient
-            .from("item_categories")
-            .select("id, name, short_code")
-            .in("id", categoryIds)
-        : Promise.resolve({ data: [], error: null }),
-      subCategoryIds.length > 0
-        ? serviceRoleClient
-            .from("item_sub_categories")
-            .select("id, name, short_code")
-            .in("id", subCategoryIds)
-        : Promise.resolve({ data: [], error: null }),
-    ]);
+  const [categoriesResult, subCategoriesResult] = await Promise.all([
+    categoryIds.length > 0
+      ? serviceRoleClient
+          .from("item_categories")
+          .select("id, name, short_code")
+          .in("id", categoryIds)
+      : Promise.resolve({ data: [], error: null }),
+    subCategoryIds.length > 0
+      ? serviceRoleClient
+          .from("item_sub_categories")
+          .select("id, name, short_code")
+          .in("id", subCategoryIds)
+      : Promise.resolve({ data: [], error: null }),
+  ]);
 
-  if (skillsResult.error) {
-    throw new Error(skillsResult.error.message);
-  }
   if (categoriesResult.error) {
     throw new Error(categoriesResult.error.message);
   }
@@ -486,13 +429,8 @@ export async function listCrewsWithRelations() {
     throw new Error(subCategoriesResult.error.message);
   }
 
-  const skillMap = new Map<number, CrewSkillRow>();
   const categoryMap = new Map<number, ItemCategoryRow>();
   const subCategoryMap = new Map<number, ItemSubCategoryRow>();
-
-  ((skillsResult.data ?? []) as CrewSkillRow[]).forEach((row) => {
-    skillMap.set(row.id, row);
-  });
   ((categoriesResult.data ?? []) as ItemCategoryRow[]).forEach((row) => {
     categoryMap.set(row.id, row);
   });
@@ -501,10 +439,6 @@ export async function listCrewsWithRelations() {
   });
 
   return crews.map((crew) => {
-    const selectedSkillIds = skillPivots
-      .filter((row) => row.crew_id === crew.id)
-      .map((row) => row.crew_skill_id);
-
     const selectedCategoryIds = categoryPivots
       .filter((row) => row.crew_id === crew.id)
       .map((row) => row.item_category_id);
@@ -521,17 +455,10 @@ export async function listCrewsWithRelations() {
       description: String(crew.description ?? ""),
       price: Number(crew.price ?? 0),
       is_available: Boolean(crew.is_available ?? true),
-      skill_ids: selectedSkillIds,
+      skill_ids: [],
       item_category_ids: selectedCategoryIds,
       item_sub_category_ids: selectedSubCategoryIds,
-      skills: selectedSkillIds
-        .map((id) => skillMap.get(id))
-        .filter(Boolean)
-        .map((item) => ({
-          id: item!.id,
-          name: String(item!.name ?? ""),
-          description: String(item!.description ?? ""),
-        })),
+      skills: [],
       item_categories: selectedCategoryIds
         .map((id) => categoryMap.get(id))
         .filter(Boolean)

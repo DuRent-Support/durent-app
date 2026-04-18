@@ -67,75 +67,7 @@ export async function GET() {
       rows = fallbackResult.data as CrewRow[] | null;
     }
 
-    const crewIds = (rows ?? [])
-      .map((row) => Number(row.crew_id ?? row.id))
-      .filter((id) => Number.isFinite(id));
-
- 
-
-    const skillsMap = new Map<number, string[]>();
-    if (crewIds.length > 0) {
-      const pivotResult = await supabase
-        .from("crew_skill")
-        .select("crew_id, crew_skill_id")
-        .in("crew_id", crewIds);
-
-      if (pivotResult.error) {
-    
-      } else {
-        const pivotRows = pivotResult.data ?? [];
-      
-
-        const skillIds = Array.from(
-          new Set(
-            pivotRows
-              .map((row) => Number(row.crew_skill_id))
-              .filter((id) => Number.isFinite(id)),
-          ),
-        );
-
-        const skillsResult = skillIds.length
-          ? await supabase
-              .from("crew_skills")
-              .select("id, name")
-              .in("id", skillIds)
-          : { data: [], error: null };
-
-        if (skillsResult.error) {
-       
-        } else {
-          const nameById = new Map<number, string>();
-          (skillsResult.data ?? []).forEach((row) => {
-            const id = Number(row.id);
-            const name = String(row.name ?? "").trim();
-            if (Number.isFinite(id) && name) {
-              nameById.set(id, name);
-            }
-          });
-
-          pivotRows.forEach((row) => {
-            const crewId = Number(row.crew_id);
-            const skillId = Number(row.crew_skill_id);
-            if (!Number.isFinite(crewId) || !Number.isFinite(skillId)) return;
-            const name = nameById.get(skillId);
-            if (!name) return;
-            const existing = skillsMap.get(crewId) ?? [];
-            existing.push(name);
-            skillsMap.set(crewId, existing);
-          });
-        }
-      }
-    }
-
-    const crews = (rows ?? []).map((row) => {
-      const crewId = Number(row.crew_id ?? row.id);
-      const skills = Number.isFinite(crewId)
-        ? (skillsMap.get(crewId) ?? [])
-        : [];
-      return mapCrewRow(row, skills);
-    });
-
-  
+    const crews = (rows ?? []).map((row) => mapCrewRow(row, []));
 
     return NextResponse.json({ crews }, { status: 200 });
   } catch (error) {

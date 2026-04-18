@@ -107,10 +107,6 @@ export async function DELETE(_request: Request, { params }: RouteContext) {
 
     const cleanupTasks = [
       serviceRoleClient
-        .from("location_tag")
-        .delete()
-        .eq("location_id", locationId),
-      serviceRoleClient
         .from("location_item_category")
         .delete()
         .eq("location_id", locationId),

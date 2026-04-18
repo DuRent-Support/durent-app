@@ -365,13 +365,11 @@ export async function DELETE(request: Request) {
       Array<{ table: string; column: string }>
     > = {
       locations: [
-        { table: "location_tag", column: "location_id" },
         { table: "location_item_category", column: "location_id" },
         { table: "location_item_sub_category", column: "location_id" },
         { table: "location_images", column: "location_id" },
       ],
       crews: [
-        { table: "crew_skill", column: "crew_id" },
         { table: "crew_item_category", column: "crew_id" },
         { table: "crew_item_sub_category", column: "crew_id" },
         { table: "crew_images", column: "crew_id" },
@@ -390,7 +388,6 @@ export async function DELETE(request: Request) {
           table: "food_and_beverage_item_sub_category",
           column: "food_and_beverage_id",
         },
-        { table: "food_and_beverage_tag", column: "food_and_beverage_id" },
         {
           table: "food_and_beverage_images",
           column: "food_and_beverage_id",

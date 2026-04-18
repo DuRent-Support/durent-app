@@ -23,32 +23,6 @@ Table profiles {
   }
 }
 
-Table location_tags {
-  Note: "Master tag untuk location"
-
-  id integer [pk, increment, not null, note: "Primary key tag"]
-  name string [not null, unique, note: "Nama tag location"]
-  created_at timestampz [not null, default: `now()`, note: "Waktu dibuat"]
-
-  indexes {
-    (name)
-  }
-}
-
-Table location_tag {
-  Note: "Table pivot many-to-many antara location_tags dan locations"
-  // jadikan ini composite key dari location_tag_id + location_id
-  location_tag_id integer [pk, not null, note: "FK ke location_tags.id"]
-  location_id integer [pk, not null, note: "FK ke locations.id"]
-  created_at timestampz [not null, default: `now()`, note: "Waktu asosiasi dibuat"]
-
-  indexes {
-    (location_tag_id)
-    (location_id)
-    (location_tag_id, location_id) [unique]
-  }
-}
-
 Table location_images {
   Note: "Menampung gambar location"
 
@@ -179,33 +153,6 @@ Table food_and_beverage {
     (name)
     (is_available)
     (price)
-  }
-}
-
-Table food_and_beverage_tags {
-  Note: "Master tag untuk F&B"
-
-  id integer [pk, increment, not null, note: "Primary key tag F&B"]
-  name text [not null, unique, note: "Nama tag F&B"]
-  created_at timestampz [not null, default: `now()`, note: "Waktu dibuat"]
-
-  indexes {
-    (name)
-  }
-}
-
-Table food_and_beverage_tag {
-  Note: "Pivot many-to-many antara food_and_beverage_tags dan food_and_beverage"
-
-  //jadikan composite key dari food_and_beverage_tag_id + food_and_beverage_id
-  food_and_beverage_tag_id integer [pk, not null, note: "FK ke food_and_beverage_tags.id"]
-  food_and_beverage_id integer [pk, not null, note: "FK ke food_and_beverage.id"]
-  created_at timestampz [not null, default: `now()`, note: "Waktu asosiasi dibuat"]
-
-  indexes {
-    (food_and_beverage_tag_id)
-    (food_and_beverage_id)
-    (food_and_beverage_tag_id, food_and_beverage_id) [unique]
   }
 }
 
@@ -361,22 +308,6 @@ Table bundle_expendables {
     (bundle_id)
     (expendable_id)
     (bundle_id, expendable_id) [unique]
-  }
-}
-
-Table crew_skills {
-  Note: "Master skill per crew"
-
-  id integer [pk, increment, not null, note: "Primary key skill"]
-  crew_id integer [not null, note: "FK ke crews.id"]
-  name string [not null, note: "Nama skill"]
-  description string [null, note: "Deskripsi skill; ini fungsinya apa ya ?"]
-  created_at timestampz [not null, default: `now()`, note: "Waktu dibuat"]
-
-  indexes {
-    (crew_id)
-    (name)
-    (crew_id, name)
   }
 }
 
@@ -670,14 +601,11 @@ Table bundle_bundle_categories {
 }
 
 Ref: "location_embeddings"."location_id" > "locations"."id"
-Ref: "location_tag"."location_tag_id" > "location_tags"."id"
-Ref: "location_tag"."location_id" > "locations"."id"
 Ref: "location_images"."location_id" > "locations"."id"
 
 Ref: "expendable_images"."expendable_id" > "expendables"."id"
 Ref: "rental_images"."rental_id" > "rentals"."id"
 Ref: "food_and_beverage_images"."food_and_beverage_id" > "food_and_beverage"."id"
-Ref: "crew_skills"."crew_id" > "crews"."id"
 Ref: "crew_images"."crew_id" > "crews"."id"
 
 Ref: "bundle_crews"."bundle_id" > "bundles"."id"
@@ -688,9 +616,6 @@ Ref: "bundle_expendables"."bundle_id" > "bundles"."id"
 Ref: "bundle_expendables"."expendable_id" > "expendables"."id"
 Ref: "bundle_rentals"."bundle_id" > "bundles"."id"
 Ref: "bundle_rentals"."rental_id" > "rentals"."id"
-
-Ref: "food_and_beverage_tag"."food_and_beverage_tag_id" > "food_and_beverage_tags"."id"
-Ref: "food_and_beverage_tag"."food_and_beverage_id" > "food_and_beverage"."id"
 
 Ref: "orders"."user_uuid" > "profiles"."uuid"
 Ref: "orders"."promo_code_id" > "promo_codes"."id"

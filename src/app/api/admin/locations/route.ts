@@ -73,34 +73,20 @@ export async function POST(request: Request) {
 
     await syncLocationRelations(createResult.data.id, parsedPayload.data);
 
-    const [tagsResult, itemCategoriesResult, itemSubCategoriesResult] =
-      await Promise.all([
-        parsedPayload.data.tag_ids.length > 0
-          ? serviceRoleClient
-              .from("location_tags")
-              .select("name")
-              .in("id", parsedPayload.data.tag_ids)
-          : Promise.resolve({ data: [], error: null }),
-        parsedPayload.data.item_category_ids.length > 0
-          ? serviceRoleClient
-              .from("item_categories")
-              .select("name")
-              .in("id", parsedPayload.data.item_category_ids)
-          : Promise.resolve({ data: [], error: null }),
-        parsedPayload.data.item_sub_category_ids.length > 0
-          ? serviceRoleClient
-              .from("item_sub_categories")
-              .select("name")
-              .in("id", parsedPayload.data.item_sub_category_ids)
-          : Promise.resolve({ data: [], error: null }),
-      ]);
-
-    if (tagsResult.error) {
-      return NextResponse.json(
-        { message: tagsResult.error.message },
-        { status: 400 },
-      );
-    }
+    const [itemCategoriesResult, itemSubCategoriesResult] = await Promise.all([
+      parsedPayload.data.item_category_ids.length > 0
+        ? serviceRoleClient
+            .from("item_categories")
+            .select("name")
+            .in("id", parsedPayload.data.item_category_ids)
+        : Promise.resolve({ data: [], error: null }),
+      parsedPayload.data.item_sub_category_ids.length > 0
+        ? serviceRoleClient
+            .from("item_sub_categories")
+            .select("name")
+            .in("id", parsedPayload.data.item_sub_category_ids)
+        : Promise.resolve({ data: [], error: null }),
+    ]);
 
     if (itemCategoriesResult.error) {
       return NextResponse.json(
@@ -127,9 +113,7 @@ export async function POST(request: Request) {
       pax: parsedPayload.data.pax,
       rating: 0,
       is_available: parsedPayload.data.is_available,
-      tags: (tagsResult.data ?? [])
-        .map((row) => String((row as { name?: string | null }).name ?? ""))
-        .filter(Boolean),
+      tags: [],
       item_categories: (itemCategoriesResult.data ?? [])
         .map((row) => String((row as { name?: string | null }).name ?? ""))
         .filter(Boolean),

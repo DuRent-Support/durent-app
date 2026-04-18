@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "seed:master-data": "bun run src/database/seeders/run_all.ts"
+    "seed:all": "bun run src/database/seeders/run_all.ts"
   },
   "dependencies": {
     "@ai-sdk/react": "^3.0.118",

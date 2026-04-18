@@ -113,7 +113,6 @@ export default function AdminLocationsPage() {
     null,
   );
   const [locations, setLocations] = useState<LocationItem[]>([]);
-  const [availableTags, setAvailableTags] = useState<RelationItem[]>([]);
   const [availableItemCategories, setAvailableItemCategories] = useState<
     RelationItem[]
   >([]);
@@ -204,35 +203,21 @@ export default function AdminLocationsPage() {
   // Fetch relation options from API
   const fetchOptions = useCallback(async () => {
     try {
-      const [tagResponse, categoryResponse, subCategoryResponse] =
-        await Promise.all([
-          fetch("/api/admin/locations/tags", {
-            method: "GET",
-            cache: "no-store",
-          }),
-          fetch("/api/admin/categories", {
-            method: "GET",
-            cache: "no-store",
-          }),
-          fetch("/api/admin/sub-categories", {
-            method: "GET",
-            cache: "no-store",
-          }),
-        ]);
+      const [categoryResponse, subCategoryResponse] = await Promise.all([
+        fetch("/api/admin/categories", {
+          method: "GET",
+          cache: "no-store",
+        }),
+        fetch("/api/admin/sub-categories", {
+          method: "GET",
+          cache: "no-store",
+        }),
+      ]);
 
-      const [tagData, categoryData, subCategoryData] = await Promise.all([
-        tagResponse.json(),
+      const [categoryData, subCategoryData] = await Promise.all([
         categoryResponse.json(),
         subCategoryResponse.json(),
       ]);
-
-      if (tagResponse.ok) {
-        setAvailableTags(
-          ((tagData.items ?? []) as Array<{ id: string; name: string }>).map(
-            (item) => ({ id: Number(item.id), name: item.name }),
-          ),
-        );
-      }
 
       if (categoryResponse.ok) {
         setAvailableItemCategories(
@@ -441,15 +426,6 @@ export default function AdminLocationsPage() {
     }
   };
 
-  const toggleMultiSelect = (key: "tag_ids", value: number) => {
-    setFormData((prev) => ({
-      ...prev,
-      [key]: prev[key].includes(value)
-        ? prev[key].filter((item) => item !== value)
-        : [...prev[key], value],
-    }));
-  };
-
   const selectSingleRelation = (
     key: "item_category_ids" | "item_sub_category_ids",
     value: number,
@@ -598,8 +574,8 @@ export default function AdminLocationsPage() {
             Kelola Lokasi
           </h1>
           <p className="text-muted-foreground text-sm">
-            Tambah, edit, atau hapus lokasi beserta relasi tag, kategori, dan
-            sub kategori.
+            Tambah, edit, atau hapus lokasi beserta relasi kategori dan sub
+            kategori.
           </p>
         </div>
 
@@ -651,7 +627,6 @@ export default function AdminLocationsPage() {
                 <TableHead>Nama</TableHead>
                 <TableHead className="hidden md:table-cell">Kota</TableHead>
                 <TableHead className="hidden sm:table-cell">Harga</TableHead>
-                <TableHead className="hidden lg:table-cell">Tag</TableHead>
                 <TableHead className="hidden lg:table-cell">Status</TableHead>
                 <TableHead className="w-24 text-right">Aksi</TableHead>
               </TableRow>
@@ -659,14 +634,14 @@ export default function AdminLocationsPage() {
             <TableBody>
               {loading ? (
                 <TableRow>
-                  <TableCell colSpan={7} className="text-center py-12">
+                  <TableCell colSpan={6} className="text-center py-12">
                     <Loader2 className="h-6 w-6 animate-spin text-muted-foreground mx-auto" />
                   </TableCell>
                 </TableRow>
               ) : visibleLocations.length === 0 ? (
                 <TableRow>
                   <TableCell
-                    colSpan={7}
+                    colSpan={6}
                     className="text-center py-12 text-sm text-muted-foreground"
                   >
                     {searchQuery.trim()
@@ -689,19 +664,7 @@ export default function AdminLocationsPage() {
                     <TableCell className="hidden sm:table-cell text-muted-foreground">
                       {formatPrice(loc.price)}
                     </TableCell>
-                    <TableCell className="hidden lg:table-cell">
-                      <div className="flex flex-wrap gap-1">
-                        {loc.tags.map((tag) => (
-                          <Badge
-                            key={`${loc.id}-${tag.id}`}
-                            variant="secondary"
-                            className="text-[10px]"
-                          >
-                            {tag.name}
-                          </Badge>
-                        ))}
-                      </div>
-                    </TableCell>
+
                     <TableCell className="hidden lg:table-cell text-muted-foreground">
                       {loc.is_available ? "Available" : "Unavailable"}
                     </TableCell>
@@ -910,26 +873,6 @@ export default function AdminLocationsPage() {
                 >
                   Unavailable
                 </Button>
-              </div>
-            </div>
-
-            <div className="grid gap-1.5">
-              <Label>Tag</Label>
-              <div className="flex flex-wrap gap-2">
-                {availableTags.map((tag) => (
-                  <button
-                    key={tag.id}
-                    type="button"
-                    onClick={() => toggleMultiSelect("tag_ids", Number(tag.id))}
-                    className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
-                      formData.tag_ids.includes(Number(tag.id))
-                        ? "bg-primary text-primary-foreground"
-                        : "bg-secondary text-secondary-foreground hover:bg-secondary/80"
-                    }`}
-                  >
-                    {tag.name}
-                  </button>
-                ))}
               </div>
             </div>
 

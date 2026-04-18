@@ -24,42 +24,17 @@ export async function GET() {
       return NextResponse.json({ locations: [] }, { status: 200 });
     }
 
-    const [tagPivotResult, tagsResult, imagesResult] = await Promise.all([
-      serviceRoleClient
-        .from("location_tag")
-        .select("location_id, location_tag_id")
-        .in("location_id", locationIds),
-      serviceRoleClient.from("location_tags").select("id, name"),
-      serviceRoleClient
-        .from("location_images")
-        .select("location_id, url, position")
-        .in("location_id", locationIds)
-        .order("position", { ascending: true }),
-    ]);
+    const { data: imagesData, error: imagesError } = await serviceRoleClient
+      .from("location_images")
+      .select("location_id, url, position")
+      .in("location_id", locationIds)
+      .order("position", { ascending: true });
 
-    if (tagPivotResult.error) {
-      return NextResponse.json(
-        { error: tagPivotResult.error.message },
-        { status: 400 },
-      );
-    }
-    if (tagsResult.error) {
-      return NextResponse.json(
-        { error: tagsResult.error.message },
-        { status: 400 },
-      );
-    }
-    if (imagesResult.error) {
-      return NextResponse.json(
-        { error: imagesResult.error.message },
-        { status: 400 },
-      );
+    if (imagesError) {
+      return NextResponse.json({ error: imagesError.message }, { status: 400 });
     }
 
-    const tagsById = new Map<number, string>();
-    (tagsResult.data ?? []).forEach((row) => {
-      tagsById.set(Number(row.id), String(row.name ?? ""));
-    });
+    const imagesResult = { data: imagesData, error: imagesError };
 
     const imagePaths = Array.from(
       new Set(
@@ -100,10 +75,7 @@ export async function GET() {
           const path = String(row.url ?? "");
           return signedMap.get(path) ?? path;
         }),
-      tags: (tagPivotResult.data ?? [])
-        .filter((pivot) => Number(pivot.location_id) === Number(loc.id))
-        .map((pivot) => tagsById.get(Number(pivot.location_tag_id)) || "")
-        .filter((tag) => tag.length > 0),
+      tags: [],
       created_at: loc.updated_at,
     }));
 
@@ -208,26 +180,6 @@ export async function POST(request: Request) {
         await supabase.storage.from("shooting_locations").remove([path]);
       }
       return NextResponse.json({ error: insertError.message }, { status: 400 });
-    }
-
-    // Insert location tags if any
-    if (tags.length > 0 && newLocation) {
-      // Get tag IDs from tag names
-      const { data: tagRecords } = await supabase
-        .from("tags")
-        .select("tag_id, tag")
-        .in("tag", tags);
-
-      if (tagRecords && tagRecords.length > 0) {
-        const locationTags = tagRecords.map(
-          (tag: { tag_id: string; tag: string }) => ({
-            shooting_location_id: newLocation.shooting_location_id,
-            tag_id: tag.tag_id,
-          }),
-        );
-
-        await supabase.from("shooting_location_tag").insert(locationTags);
-      }
     }
 
     // Generate and store embedding (non-blocking)

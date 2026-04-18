@@ -26,11 +26,6 @@ type ItemSubCategoryRow = {
   short_code: string | null;
 };
 
-type TagRow = {
-  id: number;
-  name: string | null;
-};
-
 type FoodAndBeverageItemCategoryPivotRow = {
   food_and_beverage_id: number;
   item_category_id: number;
@@ -39,11 +34,6 @@ type FoodAndBeverageItemCategoryPivotRow = {
 type FoodAndBeverageItemSubCategoryPivotRow = {
   food_and_beverage_id: number;
   item_sub_category_id: number;
-};
-
-type FoodAndBeverageTagPivotRow = {
-  food_and_beverage_id: number;
-  food_and_beverage_tag_id: number;
 };
 
 type FoodAndBeverageImageRow = {
@@ -279,49 +269,26 @@ export async function syncFoodAndBeverageRelations(
 ) {
   const serviceRoleClient = createServiceRoleClient();
 
-  const [deleteTags, deleteCategory, deleteSubCategory, deleteImages] =
-    await Promise.all([
-      serviceRoleClient
-        .from("food_and_beverage_tag")
-        .delete()
-        .eq("food_and_beverage_id", foodAndBeverageId),
-      serviceRoleClient
-        .from("food_and_beverage_item_category")
-        .delete()
-        .eq("food_and_beverage_id", foodAndBeverageId),
-      serviceRoleClient
-        .from("food_and_beverage_item_sub_category")
-        .delete()
-        .eq("food_and_beverage_id", foodAndBeverageId),
-      serviceRoleClient
-        .from("food_and_beverage_images")
-        .delete()
-        .eq("food_and_beverage_id", foodAndBeverageId),
-    ]);
+  const [deleteCategory, deleteSubCategory, deleteImages] = await Promise.all([
+    serviceRoleClient
+      .from("food_and_beverage_item_category")
+      .delete()
+      .eq("food_and_beverage_id", foodAndBeverageId),
+    serviceRoleClient
+      .from("food_and_beverage_item_sub_category")
+      .delete()
+      .eq("food_and_beverage_id", foodAndBeverageId),
+    serviceRoleClient
+      .from("food_and_beverage_images")
+      .delete()
+      .eq("food_and_beverage_id", foodAndBeverageId),
+  ]);
 
   const deleteError =
-    deleteTags.error ||
-    deleteCategory.error ||
-    deleteSubCategory.error ||
-    deleteImages.error;
+    deleteCategory.error || deleteSubCategory.error || deleteImages.error;
 
   if (deleteError) {
     throw new Error(deleteError.message);
-  }
-
-  if (payload.tag_ids.length > 0) {
-    const insertTags = await serviceRoleClient
-      .from("food_and_beverage_tag")
-      .insert(
-        payload.tag_ids.map((tagId) => ({
-          food_and_beverage_id: foodAndBeverageId,
-          food_and_beverage_tag_id: tagId,
-        })),
-      );
-
-    if (insertTags.error) {
-      throw new Error(insertTags.error.message);
-    }
   }
 
   if (payload.item_category_ids.length > 0) {
@@ -392,34 +359,23 @@ export async function listFoodAndBeverageWithRelations() {
 
   const ids = records.map((item) => item.id);
 
-  const [
-    tagPivotResult,
-    categoryPivotResult,
-    subCategoryPivotResult,
-    imagesResult,
-  ] = await Promise.all([
-    serviceRoleClient
-      .from("food_and_beverage_tag")
-      .select("food_and_beverage_id, food_and_beverage_tag_id")
-      .in("food_and_beverage_id", ids),
-    serviceRoleClient
-      .from("food_and_beverage_item_category")
-      .select("food_and_beverage_id, item_category_id")
-      .in("food_and_beverage_id", ids),
-    serviceRoleClient
-      .from("food_and_beverage_item_sub_category")
-      .select("food_and_beverage_id, item_sub_category_id")
-      .in("food_and_beverage_id", ids),
-    serviceRoleClient
-      .from("food_and_beverage_images")
-      .select("id, food_and_beverage_id, url, position")
-      .in("food_and_beverage_id", ids)
-      .order("position", { ascending: true }),
-  ]);
+  const [categoryPivotResult, subCategoryPivotResult, imagesResult] =
+    await Promise.all([
+      serviceRoleClient
+        .from("food_and_beverage_item_category")
+        .select("food_and_beverage_id, item_category_id")
+        .in("food_and_beverage_id", ids),
+      serviceRoleClient
+        .from("food_and_beverage_item_sub_category")
+        .select("food_and_beverage_id, item_sub_category_id")
+        .in("food_and_beverage_id", ids),
+      serviceRoleClient
+        .from("food_and_beverage_images")
+        .select("id, food_and_beverage_id, url, position")
+        .in("food_and_beverage_id", ids)
+        .order("position", { ascending: true }),
+    ]);
 
-  if (tagPivotResult.error) {
-    throw new Error(tagPivotResult.error.message);
-  }
   if (categoryPivotResult.error) {
     throw new Error(categoryPivotResult.error.message);
   }
@@ -430,7 +386,6 @@ export async function listFoodAndBeverageWithRelations() {
     throw new Error(imagesResult.error.message);
   }
 
-  const tagPivots = (tagPivotResult.data ?? []) as FoodAndBeverageTagPivotRow[];
   const categoryPivots = (categoryPivotResult.data ??
     []) as FoodAndBeverageItemCategoryPivotRow[];
   const subCategoryPivots = (subCategoryPivotResult.data ??
@@ -461,9 +416,6 @@ export async function listFoodAndBeverageWithRelations() {
     }
   }
 
-  const tagIds = [
-    ...new Set(tagPivots.map((row) => row.food_and_beverage_tag_id)),
-  ];
   const categoryIds = [
     ...new Set(categoryPivots.map((row) => row.item_category_id)),
   ];
@@ -471,32 +423,21 @@ export async function listFoodAndBeverageWithRelations() {
     ...new Set(subCategoryPivots.map((row) => row.item_sub_category_id)),
   ];
 
-  const [tagsResult, categoriesResult, subCategoriesResult] = await Promise.all(
-    [
-      tagIds.length > 0
-        ? serviceRoleClient
-            .from("food_and_beverage_tags")
-            .select("id, name")
-            .in("id", tagIds)
-        : Promise.resolve({ data: [], error: null }),
-      categoryIds.length > 0
-        ? serviceRoleClient
-            .from("item_categories")
-            .select("id, name, short_code")
-            .in("id", categoryIds)
-        : Promise.resolve({ data: [], error: null }),
-      subCategoryIds.length > 0
-        ? serviceRoleClient
-            .from("item_sub_categories")
-            .select("id, name, short_code")
-            .in("id", subCategoryIds)
-        : Promise.resolve({ data: [], error: null }),
-    ],
-  );
+  const [categoriesResult, subCategoriesResult] = await Promise.all([
+    categoryIds.length > 0
+      ? serviceRoleClient
+          .from("item_categories")
+          .select("id, name, short_code")
+          .in("id", categoryIds)
+      : Promise.resolve({ data: [], error: null }),
+    subCategoryIds.length > 0
+      ? serviceRoleClient
+          .from("item_sub_categories")
+          .select("id, name, short_code")
+          .in("id", subCategoryIds)
+      : Promise.resolve({ data: [], error: null }),
+  ]);
 
-  if (tagsResult.error) {
-    throw new Error(tagsResult.error.message);
-  }
   if (categoriesResult.error) {
     throw new Error(categoriesResult.error.message);
   }
@@ -504,13 +445,8 @@ export async function listFoodAndBeverageWithRelations() {
     throw new Error(subCategoriesResult.error.message);
   }
 
-  const tagMap = new Map<number, TagRow>();
   const categoryMap = new Map<number, ItemCategoryRow>();
   const subCategoryMap = new Map<number, ItemSubCategoryRow>();
-
-  ((tagsResult.data ?? []) as TagRow[]).forEach((row) => {
-    tagMap.set(row.id, row);
-  });
   ((categoriesResult.data ?? []) as ItemCategoryRow[]).forEach((row) => {
     categoryMap.set(row.id, row);
   });
@@ -519,10 +455,6 @@ export async function listFoodAndBeverageWithRelations() {
   });
 
   return records.map((record) => {
-    const selectedTagIds = tagPivots
-      .filter((row) => row.food_and_beverage_id === record.id)
-      .map((row) => row.food_and_beverage_tag_id);
-
     const selectedCategoryIds = categoryPivots
       .filter((row) => row.food_and_beverage_id === record.id)
       .map((row) => row.item_category_id);
@@ -539,16 +471,10 @@ export async function listFoodAndBeverageWithRelations() {
       description: String(record.description ?? ""),
       price: Number(record.price ?? 0),
       is_available: Boolean(record.is_available ?? true),
-      tag_ids: selectedTagIds,
+      tag_ids: [],
       item_category_ids: selectedCategoryIds,
       item_sub_category_ids: selectedSubCategoryIds,
-      tags: selectedTagIds
-        .map((id) => tagMap.get(id))
-        .filter(Boolean)
-        .map((item) => ({
-          id: item!.id,
-          name: String(item!.name ?? ""),
-        })),
+      tags: [],
       item_categories: selectedCategoryIds
         .map((id) => categoryMap.get(id))
         .filter(Boolean)
