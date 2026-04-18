@@ -118,6 +118,12 @@ const convertToWebpUnderLimit = async (file: File) => {
   });
 };
 
+type PendingUpload = {
+  tempId: string;
+  previewUrl: string;
+  fileName: string;
+};
+
 export default function ImageUploadCards<
   T extends ImageUploadItem = ImageUploadItem,
 >({
@@ -131,36 +137,59 @@ export default function ImageUploadCards<
   onUpdateOrderAction,
 }: ImageUploadCardsProps<T>) {
   const [isDragActive, setIsDragActive] = useState(false);
+  const [pendingUploads, setPendingUploads] = useState<PendingUpload[]>([]);
 
-  const processAndUploadFile = async (selectedFile: File) => {
-    try {
-      const webpFile = await convertToWebpUnderLimit(selectedFile);
-      await onFileChangeAction(webpFile);
-    } catch (error) {
-      const message =
-        error instanceof Error
-          ? error.message
-          : "Terjadi kesalahan saat memproses gambar";
-      toast.error(message);
+  const isAnyUploading = uploading || pendingUploads.length > 0;
+
+  const processFiles = async (files: File[]) => {
+    const imageFiles = files.filter((f) => f.type.startsWith("image/"));
+    if (imageFiles.length === 0) {
+      toast.error("File harus berupa gambar");
+      return;
     }
+
+    const pending: PendingUpload[] = imageFiles.map((f) => ({
+      tempId: crypto.randomUUID(),
+      previewUrl: URL.createObjectURL(f),
+      fileName: f.name,
+    }));
+
+    setPendingUploads((prev) => [...prev, ...pending]);
+
+    await Promise.all(
+      imageFiles.map(async (file, i) => {
+        try {
+          const webpFile = await convertToWebpUnderLimit(file);
+          await onFileChangeAction(webpFile);
+        } catch (error) {
+          const message =
+            error instanceof Error
+              ? error.message
+              : "Terjadi kesalahan saat memproses gambar";
+          toast.error(`${file.name}: ${message}`);
+        } finally {
+          URL.revokeObjectURL(pending[i].previewUrl);
+          setPendingUploads((prev) =>
+            prev.filter((p) => p.tempId !== pending[i].tempId),
+          );
+        }
+      }),
+    );
   };
 
   const handleLocalFileChange = async (
     event: React.ChangeEvent<HTMLInputElement>,
   ) => {
-    const selectedFile = event.target.files?.[0];
+    const files = Array.from(event.target.files ?? []);
     event.target.value = "";
-    if (!selectedFile) return;
-
-    await processAndUploadFile(selectedFile);
+    if (files.length === 0) return;
+    await processFiles(files);
   };
 
   const handleDropZoneDragOver = (event: DragEvent<HTMLButtonElement>) => {
     event.preventDefault();
     event.stopPropagation();
-    if (!uploading) {
-      setIsDragActive(true);
-    }
+    if (!isAnyUploading) setIsDragActive(true);
   };
 
   const handleDropZoneDragLeave = (event: DragEvent<HTMLButtonElement>) => {
@@ -173,24 +202,11 @@ export default function ImageUploadCards<
     event.preventDefault();
     event.stopPropagation();
     setIsDragActive(false);
+    if (isAnyUploading) return;
 
-    if (uploading) {
-      return;
-    }
-
-    const droppedFiles = event.dataTransfer?.files;
-    const selectedFile = droppedFiles?.[0];
-
-    if (!selectedFile) {
-      return;
-    }
-
-    if (!selectedFile.type.startsWith("image/")) {
-      toast.error("File harus berupa gambar");
-      return;
-    }
-
-    await processAndUploadFile(selectedFile);
+    const files = Array.from(event.dataTransfer?.files ?? []);
+    if (files.length === 0) return;
+    await processFiles(files);
   };
 
   return (
@@ -200,6 +216,7 @@ export default function ImageUploadCards<
         ref={fileInputRef}
         type="file"
         accept="image/*"
+        multiple
         className="hidden"
         onChange={handleLocalFileChange}
       />
@@ -237,7 +254,10 @@ export default function ImageUploadCards<
               )}
               <button
                 type="button"
-                onClick={() => onRemoveImageAction(index)}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onRemoveImageAction(index);
+                }}
                 className="absolute right-1 top-1 rounded-full bg-background/90 p-1 text-muted-foreground hover:text-destructive"
                 aria-label="Hapus gambar"
               >
@@ -267,10 +287,38 @@ export default function ImageUploadCards<
           </div>
         ))}
 
+        {pendingUploads.map((pending) => (
+          <div
+            key={pending.tempId}
+            className="rounded-lg border border-border bg-card p-3 opacity-80"
+          >
+            <div
+              className="relative h-28 w-full overflow-hidden rounded-md border border-border bg-muted"
+              style={{
+                backgroundImage: `url(${pending.previewUrl})`,
+                backgroundSize: "cover",
+                backgroundPosition: "center",
+              }}
+            >
+              <div className="absolute inset-0 flex flex-col items-center justify-center gap-1 bg-background/60 backdrop-blur-sm">
+                <Loader2 className="h-5 w-5 animate-spin text-foreground" />
+                <span className="text-[10px] font-medium text-foreground">
+                  Uploading...
+                </span>
+              </div>
+            </div>
+            <div className="mt-3">
+              <p className="truncate text-[11px] text-muted-foreground">
+                {pending.fileName}
+              </p>
+            </div>
+          </div>
+        ))}
+
         <button
           type="button"
           onClick={() => onPickImageAction(null)}
-          disabled={uploading}
+          disabled={isAnyUploading}
           onDragOver={handleDropZoneDragOver}
           onDragEnter={handleDropZoneDragOver}
           onDragLeave={handleDropZoneDragLeave}
@@ -283,13 +331,13 @@ export default function ImageUploadCards<
         >
           <div className="flex h-full min-h-[180px] items-center justify-center">
             <div className="flex flex-col items-center gap-1 text-muted-foreground">
-              {uploading ? (
+              {isAnyUploading ? (
                 <Loader2 className="h-6 w-6 animate-spin" />
               ) : (
                 <Plus className="h-6 w-6" />
               )}
               <span className="text-xs font-medium">
-                {uploading
+                {isAnyUploading
                   ? "Uploading..."
                   : isDragActive
                     ? "Lepas foto untuk upload"
