@@ -20,7 +20,6 @@ import {
   CarouselPrevious,
 } from "@/components/ui/carousel";
 import { AppCardType } from "@/types/app-card";
-import { useCart } from "@/hooks/use-cart";
 import type { Bundle } from "@/types/bundle";
 import type { Crew } from "@/types/crew";
 import type { Expendable } from "@/types/expendable";
@@ -136,7 +135,6 @@ const getFnbTagNames = (item: FoodAndBeverage) => {
 
 const ExplorePage = () => {
   const router = useRouter();
-  const { addItem, isInCart } = useCart();
   const [locations, setLocations] = useState<LocationWithTags[]>([]);
   const [crews, setCrews] = useState<Crew[]>([]);
   const [fnbs, setFnbs] = useState<FoodAndBeverage[]>([]);
@@ -272,7 +270,7 @@ const ExplorePage = () => {
         </div>
       </div>
 
-      <div className="mx-auto max-w-7xl px-6 py-8 space-y-12">
+      <div className=" px-6 py-8 space-y-12">
         {/* Recommended */}
         <section>
           <div className="grid grid-flow-col auto-cols-max items-center gap-2 mb-5">
@@ -301,7 +299,6 @@ const ExplorePage = () => {
                       ? (() => {
                           const locationId =
                             entry.location.shooting_location_id;
-                          const added = isInCart(locationId, "location");
                           return (
                             <AppCard
                               type={AppCardType.Location}
@@ -317,41 +314,21 @@ const ExplorePage = () => {
                               tags={entry.location.tags}
                               imageUrl={getLocationImage(entry.location)}
                               onClick={() => router.push("/login")}
-                              action={
-                                <Button
-                                  type="button"
-                                  className="w-full"
-                                  variant={added ? "secondary" : "default"}
-                                  onClick={(event) => {
-                                    event.stopPropagation();
-                                    addItem({
-                                      id: locationId,
-                                      itemType: "location",
-                                      name: entry.location
-                                        .shooting_location_name,
-                                      subtitle:
-                                        entry.location.shooting_location_city,
-                                      price:
-                                        entry.location.shooting_location_price,
-                                      imageUrl: getLocationImage(
-                                        entry.location,
-                                      ),
-                                      tags: entry.location.tags,
-                                      requiresDateRange: true,
-                                    });
-                                  }}
-                                >
-                                  {added
-                                    ? "Sudah di keranjang"
-                                    : "Tambah ke keranjang"}
-                                </Button>
-                              }
+                              cartItem={{
+                                id: locationId,
+                                itemType: "location",
+                                name: entry.location.shooting_location_name,
+                                subtitle: entry.location.shooting_location_city,
+                                price: entry.location.shooting_location_price,
+                                imageUrl: getLocationImage(entry.location),
+                                tags: entry.location.tags,
+                                requiresDateRange: true,
+                              }}
                             />
                           );
                         })()
                       : (() => {
                           const crewId = entry.crew.crew_id;
-                          const added = isInCart(crewId, "crew");
                           return (
                             <AppCard
                               type={AppCardType.Crew}
@@ -364,31 +341,17 @@ const ExplorePage = () => {
                               )}
                               imageUrl={entry.crew.images?.[0] || fallbackImage}
                               onClick={() => router.push("/login")}
-                              action={
-                                <Button
-                                  type="button"
-                                  className="w-full"
-                                  variant={added ? "secondary" : "default"}
-                                  onClick={(event) => {
-                                    event.stopPropagation();
-                                    addItem({
-                                      id: crewId,
-                                      itemType: "crew",
-                                      name: entry.crew.name,
-                                      subtitle: "Crew",
-                                      price: entry.crew.price,
-                                      imageUrl:
-                                        entry.crew.images?.[0] || fallbackImage,
-                                      tags: parseSkillTags(entry.crew.skills),
-                                      requiresDateRange: false,
-                                    });
-                                  }}
-                                >
-                                  {added
-                                    ? "Sudah di keranjang"
-                                    : "Tambah ke keranjang"}
-                                </Button>
-                              }
+                              cartItem={{
+                                id: crewId,
+                                itemType: "crew",
+                                name: entry.crew.name,
+                                subtitle: "Crew",
+                                price: entry.crew.price,
+                                imageUrl:
+                                  entry.crew.images?.[0] || fallbackImage,
+                                tags: parseSkillTags(entry.crew.skills),
+                                requiresDateRange: false,
+                              }}
                             />
                           );
                         })()}
@@ -436,49 +399,29 @@ const ExplorePage = () => {
                       key={loc.shooting_location_id}
                       className="basis-1/2 md:basis-1/3"
                     >
-                      {(() => {
-                        const locationId = loc.shooting_location_id;
-                        const added = isInCart(locationId, "location");
-                        return (
-                          <AppCard
-                            type={AppCardType.Location}
-                            name={loc.shooting_location_name}
-                            description={loc.shooting_location_description}
-                            city={loc.shooting_location_city}
-                            price={loc.shooting_location_price}
-                            area={loc.shooting_location_area}
-                            pax={loc.shooting_location_pax}
-                            rating={loc.shooting_location_rate}
-                            tags={loc.tags}
-                            imageUrl={getLocationImage(loc)}
-                            onClick={() => router.push("/login")}
-                            action={
-                              <Button
-                                type="button"
-                                className="w-full"
-                                variant={added ? "secondary" : "default"}
-                                onClick={(event) => {
-                                  event.stopPropagation();
-                                  addItem({
-                                    id: locationId,
-                                    itemType: "location",
-                                    name: loc.shooting_location_name,
-                                    subtitle: loc.shooting_location_city,
-                                    price: loc.shooting_location_price,
-                                    imageUrl: getLocationImage(loc),
-                                    tags: loc.tags,
-                                    requiresDateRange: true,
-                                  });
-                                }}
-                              >
-                                {added
-                                  ? "Sudah di keranjang"
-                                  : "Tambah ke keranjang"}
-                              </Button>
-                            }
-                          />
-                        );
-                      })()}
+                      <AppCard
+                        type={AppCardType.Location}
+                        name={loc.shooting_location_name}
+                        description={loc.shooting_location_description}
+                        city={loc.shooting_location_city}
+                        price={loc.shooting_location_price}
+                        area={loc.shooting_location_area}
+                        pax={loc.shooting_location_pax}
+                        rating={loc.shooting_location_rate}
+                        tags={loc.tags}
+                        imageUrl={getLocationImage(loc)}
+                        onClick={() => router.push("/login")}
+                        cartItem={{
+                          id: loc.shooting_location_id,
+                          itemType: "location",
+                          name: loc.shooting_location_name,
+                          subtitle: loc.shooting_location_city,
+                          price: loc.shooting_location_price,
+                          imageUrl: getLocationImage(loc),
+                          tags: loc.tags,
+                          requiresDateRange: true,
+                        }}
+                      />
                     </CarouselItem>
                   ))}
                 </CarouselContent>
@@ -501,50 +444,32 @@ const ExplorePage = () => {
             ) : (
               <Carousel opts={{ align: "start" }} className="w-full mb-8 px-10">
                 <CarouselContent>
-                  {crews.slice(0, 6).map((crew) => {
-                    const crewId = crew.crew_id;
-                    const added = isInCart(crewId, "crew");
-                    return (
-                      <CarouselItem
-                        key={crewId}
-                        className="basis-1/2 md:basis-1/3"
-                      >
-                        <AppCard
-                          type={AppCardType.Crew}
-                          name={crew.name}
-                          description={crew.description}
-                          price={crew.price}
-                          skills={parseSkillTags(crew.skills).slice(0, 3)}
-                          imageUrl={crew.images?.[0] || fallbackImage}
-                          onClick={() => router.push("/login")}
-                          action={
-                            <Button
-                              type="button"
-                              className="w-full"
-                              variant={added ? "secondary" : "default"}
-                              onClick={(event) => {
-                                event.stopPropagation();
-                                addItem({
-                                  id: crewId,
-                                  itemType: "crew",
-                                  name: crew.name,
-                                  subtitle: "Crew",
-                                  price: crew.price,
-                                  imageUrl: crew.images?.[0] || fallbackImage,
-                                  tags: parseSkillTags(crew.skills),
-                                  requiresDateRange: false,
-                                });
-                              }}
-                            >
-                              {added
-                                ? "Sudah di keranjang"
-                                : "Tambah ke keranjang"}
-                            </Button>
-                          }
-                        />
-                      </CarouselItem>
-                    );
-                  })}
+                  {crews.slice(0, 6).map((crew) => (
+                    <CarouselItem
+                      key={crew.crew_id}
+                      className="basis-1/2 md:basis-1/3"
+                    >
+                      <AppCard
+                        type={AppCardType.Crew}
+                        name={crew.name}
+                        description={crew.description}
+                        price={crew.price}
+                        skills={parseSkillTags(crew.skills).slice(0, 3)}
+                        imageUrl={crew.images?.[0] || fallbackImage}
+                        onClick={() => router.push("/login")}
+                        cartItem={{
+                          id: crew.crew_id,
+                          itemType: "crew",
+                          name: crew.name,
+                          subtitle: "Crew",
+                          price: crew.price,
+                          imageUrl: crew.images?.[0] || fallbackImage,
+                          tags: parseSkillTags(crew.skills),
+                          requiresDateRange: false,
+                        }}
+                      />
+                    </CarouselItem>
+                  ))}
                 </CarouselContent>
                 <CarouselPrevious className="left-2" />
                 <CarouselNext className="right-2" />
@@ -568,50 +493,32 @@ const ExplorePage = () => {
             ) : (
               <Carousel opts={{ align: "start" }} className="w-full mb-8 px-10">
                 <CarouselContent>
-                  {fnbs.slice(0, 6).map((item) => {
-                    const itemId = String(item.id);
-                    const added = isInCart(itemId, "food_and_beverage");
-                    return (
-                      <CarouselItem
-                        key={itemId}
-                        className="basis-1/2 md:basis-1/3"
-                      >
-                        <AppCard
-                          type={AppCardType.Fnb}
-                          name={item.name}
-                          description={item.description}
-                          price={item.price}
-                          fnbTags={getFnbTagNames(item).slice(0, 3)}
-                          imageUrl={getPrimaryImage(item.images)}
-                          onClick={() => router.push("/login")}
-                          action={
-                            <Button
-                              type="button"
-                              className="w-full"
-                              variant={added ? "secondary" : "default"}
-                              onClick={(event) => {
-                                event.stopPropagation();
-                                addItem({
-                                  id: itemId,
-                                  itemType: "food_and_beverage",
-                                  name: item.name,
-                                  subtitle: "Food & Beverage",
-                                  price: item.price,
-                                  imageUrl: getPrimaryImage(item.images),
-                                  tags: getFnbTagNames(item),
-                                  requiresDateRange: false,
-                                });
-                              }}
-                            >
-                              {added
-                                ? "Sudah di keranjang"
-                                : "Tambah ke keranjang"}
-                            </Button>
-                          }
-                        />
-                      </CarouselItem>
-                    );
-                  })}
+                  {fnbs.slice(0, 6).map((item) => (
+                    <CarouselItem
+                      key={String(item.id)}
+                      className="basis-1/2 md:basis-1/3"
+                    >
+                      <AppCard
+                        type={AppCardType.Fnb}
+                        name={item.name}
+                        description={item.description}
+                        price={item.price}
+                        fnbTags={getFnbTagNames(item).slice(0, 3)}
+                        imageUrl={getPrimaryImage(item.images)}
+                        onClick={() => router.push("/login")}
+                        cartItem={{
+                          id: String(item.id),
+                          itemType: "food_and_beverage",
+                          name: item.name,
+                          subtitle: "Food & Beverage",
+                          price: item.price,
+                          imageUrl: getPrimaryImage(item.images),
+                          tags: getFnbTagNames(item),
+                          requiresDateRange: false,
+                        }}
+                      />
+                    </CarouselItem>
+                  ))}
                 </CarouselContent>
                 <CarouselPrevious className="left-2" />
                 <CarouselNext className="right-2" />
@@ -635,51 +542,31 @@ const ExplorePage = () => {
             ) : (
               <Carousel opts={{ align: "start" }} className="w-full mb-8 px-10">
                 <CarouselContent>
-                  {rentals.slice(0, 6).map((item) => {
-                    const itemId = String(item.id);
-                    const added = isInCart(itemId, "rental");
-                    return (
-                      <CarouselItem
-                        key={itemId}
-                        className="basis-1/2 md:basis-1/3"
-                      >
-                        <AppCard
-                          type={AppCardType.Rental}
-                          name={item.name}
-                          description={item.description}
-                          price={item.price}
-                          imageUrl={getPrimaryImage(item.images)}
-                          onClick={() => router.push("/login")}
-                          action={
-                            <Button
-                              type="button"
-                              className="w-full"
-                              variant={added ? "secondary" : "default"}
-                              onClick={(event) => {
-                                event.stopPropagation();
-                                addItem({
-                                  id: itemId,
-                                  itemType: "rental",
-                                  name: item.name,
-                                  subtitle: "Rental",
-                                  price: item.price,
-                                  imageUrl: getPrimaryImage(item.images),
-                                  tags: item.item_categories.map(
-                                    (category) => category.name,
-                                  ),
-                                  requiresDateRange: false,
-                                });
-                              }}
-                            >
-                              {added
-                                ? "Sudah di keranjang"
-                                : "Tambah ke keranjang"}
-                            </Button>
-                          }
-                        />
-                      </CarouselItem>
-                    );
-                  })}
+                  {rentals.slice(0, 6).map((item) => (
+                    <CarouselItem
+                      key={String(item.id)}
+                      className="basis-1/2 md:basis-1/3"
+                    >
+                      <AppCard
+                        type={AppCardType.Rental}
+                        name={item.name}
+                        description={item.description}
+                        price={item.price}
+                        imageUrl={getPrimaryImage(item.images)}
+                        onClick={() => router.push("/login")}
+                        cartItem={{
+                          id: String(item.id),
+                          itemType: "rental",
+                          name: item.name,
+                          subtitle: "Rental",
+                          price: item.price,
+                          imageUrl: getPrimaryImage(item.images),
+                          tags: item.item_categories.map((cat) => cat.name),
+                          requiresDateRange: false,
+                        }}
+                      />
+                    </CarouselItem>
+                  ))}
                 </CarouselContent>
                 <CarouselPrevious className="left-2" />
                 <CarouselNext className="right-2" />
@@ -703,51 +590,31 @@ const ExplorePage = () => {
             ) : (
               <Carousel opts={{ align: "start" }} className="w-full mb-8 px-10">
                 <CarouselContent>
-                  {expendables.slice(0, 6).map((item) => {
-                    const itemId = String(item.id);
-                    const added = isInCart(itemId, "expendable");
-                    return (
-                      <CarouselItem
-                        key={itemId}
-                        className="basis-1/2 md:basis-1/3"
-                      >
-                        <AppCard
-                          type={AppCardType.Expendable}
-                          name={item.name}
-                          description={item.description}
-                          price={item.price}
-                          imageUrl={getPrimaryImage(item.images)}
-                          onClick={() => router.push("/login")}
-                          action={
-                            <Button
-                              type="button"
-                              className="w-full"
-                              variant={added ? "secondary" : "default"}
-                              onClick={(event) => {
-                                event.stopPropagation();
-                                addItem({
-                                  id: itemId,
-                                  itemType: "expendable",
-                                  name: item.name,
-                                  subtitle: "Expendable",
-                                  price: item.price,
-                                  imageUrl: getPrimaryImage(item.images),
-                                  tags: item.item_categories.map(
-                                    (category) => category.name,
-                                  ),
-                                  requiresDateRange: false,
-                                });
-                              }}
-                            >
-                              {added
-                                ? "Sudah di keranjang"
-                                : "Tambah ke keranjang"}
-                            </Button>
-                          }
-                        />
-                      </CarouselItem>
-                    );
-                  })}
+                  {expendables.slice(0, 6).map((item) => (
+                    <CarouselItem
+                      key={String(item.id)}
+                      className="basis-1/2 md:basis-1/3"
+                    >
+                      <AppCard
+                        type={AppCardType.Expendable}
+                        name={item.name}
+                        description={item.description}
+                        price={item.price}
+                        imageUrl={getPrimaryImage(item.images)}
+                        onClick={() => router.push("/login")}
+                        cartItem={{
+                          id: String(item.id),
+                          itemType: "expendable",
+                          name: item.name,
+                          subtitle: "Expendable",
+                          price: item.price,
+                          imageUrl: getPrimaryImage(item.images),
+                          tags: item.item_categories.map((cat) => cat.name),
+                          requiresDateRange: false,
+                        }}
+                      />
+                    </CarouselItem>
+                  ))}
                 </CarouselContent>
                 <CarouselPrevious className="left-2" />
                 <CarouselNext className="right-2" />
@@ -771,52 +638,32 @@ const ExplorePage = () => {
             ) : (
               <Carousel opts={{ align: "start" }} className="w-full mb-8 px-10">
                 <CarouselContent>
-                  {bundles.slice(0, 6).map((item) => {
-                    const itemId = String(item.id);
-                    const added = isInCart(itemId, "bundle");
-                    return (
-                      <CarouselItem
-                        key={itemId}
-                        className="basis-1/2 md:basis-1/3"
-                      >
-                        <AppCard
-                          type={AppCardType.Bundle}
-                          name={item.name}
-                          description={item.description}
-                          basePrice={item.base_price}
-                          finalPrice={item.final_price}
-                          imageUrl={getPrimaryImage(item.images)}
-                          onClick={() => router.push("/login")}
-                          action={
-                            <Button
-                              type="button"
-                              className="w-full"
-                              variant={added ? "secondary" : "default"}
-                              onClick={(event) => {
-                                event.stopPropagation();
-                                addItem({
-                                  id: itemId,
-                                  itemType: "bundle",
-                                  name: item.name,
-                                  subtitle: "Bundle",
-                                  price: item.final_price,
-                                  imageUrl: getPrimaryImage(item.images),
-                                  tags: item.bundle_categories.map(
-                                    (category) => category.name,
-                                  ),
-                                  requiresDateRange: false,
-                                });
-                              }}
-                            >
-                              {added
-                                ? "Sudah di keranjang"
-                                : "Tambah ke keranjang"}
-                            </Button>
-                          }
-                        />
-                      </CarouselItem>
-                    );
-                  })}
+                  {bundles.slice(0, 6).map((item) => (
+                    <CarouselItem
+                      key={String(item.id)}
+                      className="basis-1/2 md:basis-1/3"
+                    >
+                      <AppCard
+                        type={AppCardType.Bundle}
+                        name={item.name}
+                        description={item.description}
+                        basePrice={item.base_price}
+                        finalPrice={item.final_price}
+                        imageUrl={getPrimaryImage(item.images)}
+                        onClick={() => router.push("/login")}
+                        cartItem={{
+                          id: String(item.id),
+                          itemType: "bundle",
+                          name: item.name,
+                          subtitle: "Bundle",
+                          price: item.final_price,
+                          imageUrl: getPrimaryImage(item.images),
+                          tags: item.bundle_categories.map((cat) => cat.name),
+                          requiresDateRange: false,
+                        }}
+                      />
+                    </CarouselItem>
+                  ))}
                 </CarouselContent>
                 <CarouselPrevious className="left-2" />
                 <CarouselNext className="right-2" />

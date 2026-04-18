@@ -5,9 +5,7 @@ import { Loader2, Search } from "lucide-react";
 
 import AppCard from "@/components/app-card/AppCard";
 import CartDefaultDateRangePicker from "@/components/cart/CartDefaultDateRangePicker";
-import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { useCart } from "@/hooks/use-cart";
 import { AppCardType } from "@/types/app-card";
 import type { FoodAndBeverage } from "@/types";
 
@@ -19,11 +17,12 @@ type FoodAndBeverageApiResponse = {
 function getPrimaryImage(item: FoodAndBeverage) {
   const firstImage = (item.images ?? [])[0];
   if (!firstImage) return "/placeholder_durent.webp";
-  return String(firstImage.preview_url || firstImage.url || "/placeholder_durent.webp");
+  return String(
+    firstImage.preview_url || firstImage.url || "/placeholder_durent.webp",
+  );
 }
 
 export default function FoodAndBeveragePage() {
-  const { addItem, isInCart } = useCart();
   const [items, setItems] = useState<FoodAndBeverage[]>([]);
   const [loading, setLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState("");
@@ -42,9 +41,7 @@ export default function FoodAndBeveragePage() {
 
       if (!response.ok) {
         setItems([]);
-        setErrorMessage(
-          data.message || "Gagal mengambil data food & beverage.",
-        );
+        setErrorMessage(data.message || "Gagal mengambil data food & beverage.");
         return;
       }
 
@@ -64,33 +61,18 @@ export default function FoodAndBeveragePage() {
 
   const filteredItems = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
-
     return items.filter((item) => {
-      const itemName = String(item.name ?? "").toLowerCase();
-      const itemDescription = String(item.description ?? "").toLowerCase();
       return (
-        !query || itemName.includes(query) || itemDescription.includes(query)
+        !query ||
+        String(item.name ?? "").toLowerCase().includes(query) ||
+        String(item.description ?? "").toLowerCase().includes(query)
       );
     });
   }, [items, searchQuery]);
 
-  const addToCart = (item: FoodAndBeverage) => {
-    const firstImage = getPrimaryImage(item);
-    addItem({
-      id: String(item.id),
-      itemType: "food_and_beverage",
-      name: item.name,
-      subtitle: "Food & Beverage",
-      price: item.price,
-      imageUrl: firstImage,
-      tags: [],
-      requiresDateRange: false,
-    });
-  };
-
   return (
-    <main className="px-4 py-8 md:px-6 md:py-10">
-      <section className="mx-auto w-full max-w-7xl">
+    <main className="p-6 md:p-8">
+      <section className="w-full">
         <div className="mb-6 flex flex-col gap-3">
           <h1 className="font-display text-3xl font-bold tracking-tight md:text-4xl">
             Catalog Food & Beverage
@@ -101,17 +83,29 @@ export default function FoodAndBeveragePage() {
           </p>
         </div>
 
-        <div className="mb-4 rounded-xl border border-border bg-card p-3 md:p-4">
-          <CartDefaultDateRangePicker className="mb-3" />
+        <div className="mb-4 rounded-xl">
+          <div className="flex flex-col gap-3 md:flex-row">
+            <div className="flex min-w-0 flex-1 flex-col gap-2 md:basis-1/2">
+              <p className="text-sm font-medium text-foreground">
+                Cari berdasarkan nama atau deskripsi
+              </p>
+              <div className="relative rounded-xl border border-white">
+                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  value={searchQuery}
+                  onChange={(event) => setSearchQuery(event.target.value)}
+                  placeholder="Cari nama atau deskripsi food & beverage"
+                  className="rounded-xl border-0 pl-10"
+                />
+              </div>
+            </div>
 
-          <div className="relative">
-            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              value={searchQuery}
-              onChange={(event) => setSearchQuery(event.target.value)}
-              placeholder="Cari nama atau deskripsi food & beverage"
-              className="pl-10"
-            />
+            <div className="flex min-w-0 flex-1 flex-col gap-2 md:basis-1/2">
+              <p className="text-sm font-medium text-foreground">
+                Tanggal default checkout
+              </p>
+              <CartDefaultDateRangePicker className="mb-0" />
+            </div>
           </div>
         </div>
 
@@ -125,15 +119,12 @@ export default function FoodAndBeveragePage() {
           </div>
         ) : filteredItems.length === 0 ? (
           <div className="rounded-xl border border-border bg-card p-8 text-center text-sm text-muted-foreground">
-            Food & beverage tidak ditemukan untuk filter atau pencarian saat
-            ini.
+            Food & beverage tidak ditemukan untuk filter atau pencarian saat ini.
           </div>
         ) : (
-          <div className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-3">
+          <div className="grid grid-cols-1 gap-6 md:grid-cols-3 lg:grid-cols-3 2xl:grid-cols-4">
             {filteredItems.map((item) => {
               const itemId = String(item.id);
-              const added = isInCart(itemId, "food_and_beverage");
-
               return (
                 <AppCard
                   key={itemId}
@@ -143,16 +134,16 @@ export default function FoodAndBeveragePage() {
                   price={item.price}
                   fnbTags={[]}
                   imageUrl={getPrimaryImage(item)}
-                  action={
-                    <Button
-                      type="button"
-                      className="w-full"
-                      variant={added ? "secondary" : "default"}
-                      onClick={() => addToCart(item)}
-                    >
-                      {added ? "Sudah di keranjang" : "Tambah ke keranjang"}
-                    </Button>
-                  }
+                  cartItem={{
+                    id: itemId,
+                    itemType: "food_and_beverage",
+                    name: item.name,
+                    subtitle: "Food & Beverage",
+                    price: item.price,
+                    imageUrl: getPrimaryImage(item),
+                    tags: [],
+                    requiresDateRange: false,
+                  }}
                 />
               );
             })}

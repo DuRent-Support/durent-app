@@ -1,8 +1,4 @@
-import { AppSidebar } from "@/components/app-sidebar/AppSidebar";
-import AppHeader from "@/components/app-header/AppHeader";
-import { SidebarProvider } from "@/components/ui/sidebar";
 import { createClient } from "@/lib/supabase/server";
-import { AuthProvider } from "@/providers/AuthProvider";
 import { redirect } from "next/navigation";
 import type { Profile } from "@/types";
 
@@ -39,15 +35,5 @@ export default async function AdminLayout({
     redirect("/"); // User authenticated but not admin, redirect to home
   }
 
-  return (
-    <SidebarProvider>
-      <AuthProvider>
-        <AppHeader />
-        <AppSidebar />
-        <main className="relative z-10 min-h-screen w-full pt-16 md:pl-24">
-          {children}
-        </main>
-      </AuthProvider>
-    </SidebarProvider>
-  );
+  return <>{children}</>;
 }

@@ -1493,8 +1493,8 @@ export default function CartPage() {
   );
 
   return (
-    <main className="px-4 py-8 md:px-6 md:py-10">
-      <section className="mx-auto w-full max-w-7xl">
+    <main className="p-6 md:p-8">
+      <section className="w-full ">
         <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
           <div className="space-y-2">
             <h1 className="font-display text-3xl font-bold tracking-tight md:text-4xl">

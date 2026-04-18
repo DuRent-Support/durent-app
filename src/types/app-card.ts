@@ -1,4 +1,5 @@
 import type React from "react";
+import type { CartItemInput } from "@/types/cart";
 
 export enum AppCardType {
   Location = "location",
@@ -15,6 +16,7 @@ type AppCardBase = {
   imageUrl?: string | null;
   action?: React.ReactNode;
   onClick?: () => void;
+  cartItem?: CartItemInput;
 };
 
 type LocationCardData = AppCardBase & {
@@ -24,19 +26,19 @@ type LocationCardData = AppCardBase & {
   area: number;
   pax: number;
   rating: number | null;
-  tags: string[];
+  tags?: string[];
 };
 
 type CrewCardData = AppCardBase & {
   type: AppCardType.Crew;
   price: number;
-  skills: string[];
+  skills?: string[];
 };
 
 type FnbCardData = AppCardBase & {
   type: AppCardType.Fnb;
   price: number;
-  fnbTags: string[];
+  fnbTags?: string[];
 };
 
 type ExpendableCardData = AppCardBase & {

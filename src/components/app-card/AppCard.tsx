@@ -1,7 +1,11 @@
 "use client";
 
+import { useState } from "react";
 import Image from "next/image";
-import { MapPin, Maximize, Star, Users } from "lucide-react";
+import { Check, MapPin, Maximize, ShoppingCart, Star, Users } from "lucide-react";
+
+import { Button } from "@/components/ui/button";
+import { useCart } from "@/hooks/use-cart";
 
 import formatPrice from "@/lib/formatPrice";
 import { AppCardType, type AppCardProps } from "@/types/app-card";
@@ -14,18 +18,21 @@ function formatRating(value: number | null) {
 }
 
 export default function AppCard(props: AppCardProps) {
+  const { addItem, isInCart } = useCart();
+  const [justAdded, setJustAdded] = useState(false);
   const imageSrc = props.imageUrl || fallbackImage;
   const isLocation = props.type === AppCardType.Location;
-  const isCrew = props.type === AppCardType.Crew;
-  const isFnb = props.type === AppCardType.Fnb;
 
-  const tags = isLocation
-    ? props.tags
-    : isCrew
-      ? props.skills
-      : isFnb
-        ? props.fnbTags
-        : [];
+  const inCart = props.cartItem
+    ? isInCart(props.cartItem.id, props.cartItem.itemType)
+    : false;
+
+  const handleCartClick = () => {
+    if (!props.cartItem || justAdded) return;
+    addItem(props.cartItem);
+    setJustAdded(true);
+    setTimeout(() => setJustAdded(false), 1500);
+  };
 
   const priceLabel =
     props.type === AppCardType.Bundle
@@ -53,18 +60,6 @@ export default function AppCard(props: AppCardProps) {
               <Star className="h-3.5 w-3.5 fill-star text-star" />
             ) : null}
             <span>{formatRating(props.rating)}</span>
-          </div>
-        ) : null}
-        {tags.length > 0 ? (
-          <div className="absolute bottom-2.5 left-2.5 flex flex-wrap gap-1.5 sm:bottom-3 sm:left-3">
-            {tags.slice(0, 3).map((tag) => (
-              <span
-                key={tag}
-                className="rounded-full bg-background/80 px-2 py-0.5 text-[11px] font-medium text-foreground backdrop-blur-sm sm:text-xs"
-              >
-                {tag}
-              </span>
-            ))}
           </div>
         ) : null}
       </div>
@@ -112,7 +107,29 @@ export default function AppCard(props: AppCardProps) {
         ) : null}
       </div>
 
-      {props.action ? (
+      {props.cartItem ? (
+        <div className="mt-auto pt-3 sm:pt-4">
+          <Button
+            type="button"
+            disabled={justAdded}
+            className={`w-full gap-2 font-semibold transition-colors ${
+              inCart
+                ? "bg-green-600 text-white hover:bg-green-700"
+                : "bg-green-500 text-white hover:bg-green-600"
+            }`}
+            onClick={handleCartClick}
+          >
+            {justAdded ? (
+              <Check className="h-4 w-4" />
+            ) : (
+              <>
+                <ShoppingCart className="h-4 w-4" />
+                {inCart ? "Sudah di keranjang" : "Tambah ke keranjang"}
+              </>
+            )}
+          </Button>
+        </div>
+      ) : props.action ? (
         <div className="mt-auto pt-3 sm:pt-4">{props.action}</div>
       ) : null}
     </div>

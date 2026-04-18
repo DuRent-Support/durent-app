@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Space_Grotesk, Figtree, JetBrains_Mono } from "next/font/google";
 import { CartProvider } from "@/providers/CartProvider";
 import { ThemeProvider } from "@/providers/ThemeProvider";
+import { AuthProvider } from "@/providers/AuthProvider";
 import { Toaster } from "@/components/ui/sonner";
 
 import "./globals.css";
@@ -45,7 +46,9 @@ export default function RootLayout({
           forcedTheme="dark"
           enableSystem={false}
         >
-          <CartProvider>{children}</CartProvider>
+          <AuthProvider>
+            <CartProvider>{children}</CartProvider>
+          </AuthProvider>
           <Toaster />
         </ThemeProvider>
       </body>

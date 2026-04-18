@@ -183,7 +183,7 @@ export default function SettingsPage() {
   };
 
   return (
-    <div className="mx-auto w-full max-w-3xl space-y-6 px-4 py-8 md:px-6 md:py-10">
+    <div className="w-full space-y-6 p-6 md:p-8">
       <div className="space-y-1">
         <h1 className="text-3xl font-bold tracking-tight">Settings</h1>
         <p className="text-sm text-muted-foreground">

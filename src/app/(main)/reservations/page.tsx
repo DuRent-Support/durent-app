@@ -140,7 +140,7 @@ export default function ReservationsPage() {
   );
 
   return (
-    <div className="mx-auto w-full max-w-6xl px-6 py-8">
+    <div className=" w-full  px-6 py-8">
       <div className="mb-6 flex items-center justify-between gap-3">
         <div className="flex items-center gap-3">
           <Button

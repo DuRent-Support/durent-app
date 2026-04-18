@@ -2,14 +2,15 @@
 
 import { AppSidebar } from "@/components/app-sidebar/AppSidebar";
 import AppHeader from "@/components/app-header/AppHeader";
+import AppFooter from "@/components/app-footer/AppFooter";
 import { Skeleton } from "@/components/ui/skeleton";
 import { SidebarProvider } from "@/components/ui/sidebar";
-import { AuthProvider, useAuth } from "@/providers/AuthProvider";
+import { useAuth } from "@/providers/AuthProvider";
 
 function SidebarLoadingSkeleton() {
   return (
     <>
-      <aside className="fixed left-0 top-16 z-30 hidden h-[calc(100svh-4rem)] w-64 border-r border-border/60 bg-sidebar md:block">
+      <aside className="fixed left-0 top-16 z-30 hidden h-[calc(100svh-4rem)] w-64 border-r border-border/60 bg-sidebar lg:block">
         <div className="space-y-4 px-3 py-3">
           <div className="space-y-2">
             <Skeleton className="h-3 w-14" />
@@ -33,7 +34,7 @@ function SidebarLoadingSkeleton() {
         </div>
       </aside>
 
-      <header className="fixed inset-x-0 top-0 z-40 flex h-16 items-center justify-between border-b border-border/60 bg-background/95 px-4 backdrop-blur md:hidden">
+      <header className="fixed inset-x-0 top-0 z-40 flex h-16 items-center justify-between border-b border-border/60 bg-background/95 px-4 backdrop-blur lg:hidden">
         <div className="flex items-center gap-2">
           <Skeleton className="h-9 w-9 rounded-lg" />
           <Skeleton className="h-4 w-24" />
@@ -46,7 +47,7 @@ function SidebarLoadingSkeleton() {
 
 function MainContentLoadingSkeleton() {
   return (
-    <div className="flex-1 space-y-6 px-6 py-6 md:px-10 md:py-8 md:pl-[18rem]">
+    <div className="flex-1 space-y-6 px-6 py-6 md:px-10 md:py-8 lg:pl-[18rem]">
       <div className="space-y-2">
         <Skeleton className="h-9 w-64" />
         <Skeleton className="h-4 w-80 max-w-full" />
@@ -85,17 +86,7 @@ function MainLayoutFrame({ children }: { children: React.ReactNode }) {
           {isLoading ? <MainContentLoadingSkeleton /> : children}
         </div>
 
-        <footer className="flex items-center justify-center gap-2 border-t border-border/30 px-6 py-4 text-sm text-muted-foreground">
-          <span>Ada pertanyaan?</span>
-          <a
-            href="https://wa.me/628111029064"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-1.5 font-medium text-foreground transition-colors hover:text-primary"
-          >
-            Hubungi Kami via WhatsApp
-          </a>
-        </footer>
+        <AppFooter />
       </main>
     </>
   );
@@ -108,9 +99,7 @@ export default function MainLayout({
 }) {
   return (
     <SidebarProvider>
-      <AuthProvider>
-        <MainLayoutFrame>{children}</MainLayoutFrame>
-      </AuthProvider>
+      <MainLayoutFrame>{children}</MainLayoutFrame>
     </SidebarProvider>
   );
 }

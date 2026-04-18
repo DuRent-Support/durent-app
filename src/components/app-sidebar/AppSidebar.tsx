@@ -493,7 +493,7 @@ export function AppSidebar() {
 
   return (
     <>
-      <div className="hidden md:block">
+      <div className="hidden lg:block">
         <Sidebar
           variant="sidebar"
           collapsible="icon"
@@ -508,7 +508,7 @@ export function AppSidebar() {
         </Sidebar>
       </div>
 
-      <header className="fixed inset-x-0 top-0 z-40 flex h-16 items-center justify-between border-b border-border/60 bg-background/95 px-4 backdrop-blur md:hidden">
+      <header className="fixed inset-x-0 top-0 z-40 flex h-16 items-center justify-between border-b border-border/60 bg-background/95 px-4 backdrop-blur lg:hidden">
         <div className="flex items-center gap-2">
           <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-foreground">
             <Image

@@ -7,7 +7,6 @@ import AppCard from "@/components/app-card/AppCard";
 import CartDefaultDateRangePicker from "@/components/cart/CartDefaultDateRangePicker";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { useCart } from "@/hooks/use-cart";
 import { AppCardType } from "@/types/app-card";
 
 type RentalRelation = {
@@ -42,11 +41,12 @@ type RentalApiResponse = {
 function getPrimaryImage(item: RentalItem) {
   const firstImage = (item.images ?? [])[0];
   if (!firstImage) return "/placeholder_durent.webp";
-  return String(firstImage.preview_url || firstImage.url || "/placeholder_durent.webp");
+  return String(
+    firstImage.preview_url || firstImage.url || "/placeholder_durent.webp",
+  );
 }
 
 export default function RentalsPage() {
-  const { addItem, isInCart } = useCart();
   const [items, setItems] = useState<RentalItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState("");
@@ -89,56 +89,31 @@ export default function RentalsPage() {
     items.forEach((item) => {
       item.item_categories.forEach((category) => {
         const normalized = String(category.name ?? "").trim();
-        if (normalized) {
-          categorySet.add(normalized);
-        }
+        if (normalized) categorySet.add(normalized);
       });
     });
-
-    return [
-      "Semua",
-      ...Array.from(categorySet).sort((a, b) => a.localeCompare(b)),
-    ];
+    return ["Semua", ...Array.from(categorySet).sort((a, b) => a.localeCompare(b))];
   }, [items]);
 
   const filteredItems = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
-
     return items.filter((item) => {
-      const itemName = String(item.name ?? "").toLowerCase();
-      const itemDescription = String(item.description ?? "").toLowerCase();
       const matchNameOrDescription =
-        !query || itemName.includes(query) || itemDescription.includes(query);
-
+        !query ||
+        String(item.name ?? "").toLowerCase().includes(query) ||
+        String(item.description ?? "").toLowerCase().includes(query);
       const matchCategory =
         selectedCategory === "Semua" ||
         item.item_categories.some(
-          (category) =>
-            String(category.name ?? "").toLowerCase() ===
-            selectedCategory.toLowerCase(),
+          (cat) => String(cat.name ?? "").toLowerCase() === selectedCategory.toLowerCase(),
         );
-
       return matchNameOrDescription && matchCategory;
     });
   }, [items, searchQuery, selectedCategory]);
 
-  const addToCart = (item: RentalItem) => {
-    addItem({
-      id: String(item.id),
-      itemType: "rental",
-      name: item.name,
-      subtitle: "Rental",
-      price: item.price,
-      imageUrl: getPrimaryImage(item),
-      tags: item.item_categories.map((category) => category.name),
-      requiresDateRange: false,
-    });
-    // router.push("/cart");
-  };
-
   return (
-    <main className="px-4 py-8 md:px-6 md:py-10">
-      <section className="mx-auto w-full max-w-7xl">
+    <main className="p-6 md:p-8">
+      <section className="w-full">
         <div className="mb-6 flex flex-col gap-3">
           <h1 className="font-display text-3xl font-bold tracking-tight md:text-4xl">
             Catalog Rentals
@@ -148,17 +123,29 @@ export default function RentalsPage() {
           </p>
         </div>
 
-        <div className="mb-4 rounded-xl border border-border bg-card p-3 md:p-4">
-          <CartDefaultDateRangePicker className="mb-3" />
+        <div className="mb-4 rounded-xl">
+          <div className="flex flex-col gap-3 md:flex-row">
+            <div className="flex min-w-0 flex-1 flex-col gap-2 md:basis-1/2">
+              <p className="text-sm font-medium text-foreground">
+                Cari berdasarkan nama atau deskripsi
+              </p>
+              <div className="relative rounded-xl border border-white">
+                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  value={searchQuery}
+                  onChange={(event) => setSearchQuery(event.target.value)}
+                  placeholder="Cari nama atau deskripsi rental"
+                  className="rounded-xl border-0 pl-10"
+                />
+              </div>
+            </div>
 
-          <div className="relative">
-            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              value={searchQuery}
-              onChange={(event) => setSearchQuery(event.target.value)}
-              placeholder="Cari nama atau deskripsi rental"
-              className="pl-10"
-            />
+            <div className="flex min-w-0 flex-1 flex-col gap-2 md:basis-1/2">
+              <p className="text-sm font-medium text-foreground">
+                Tanggal default checkout
+              </p>
+              <CartDefaultDateRangePicker className="mb-0" />
+            </div>
           </div>
 
           <div className="mt-3 flex flex-wrap gap-2">
@@ -167,9 +154,7 @@ export default function RentalsPage() {
                 key={category}
                 type="button"
                 size="sm"
-                variant={
-                  selectedCategory === category ? "default" : "secondary"
-                }
+                variant={selectedCategory === category ? "default" : "secondary"}
                 onClick={() => setSelectedCategory(category)}
               >
                 {category}
@@ -191,28 +176,27 @@ export default function RentalsPage() {
             Rental tidak ditemukan untuk filter atau pencarian saat ini.
           </div>
         ) : (
-          <div className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-3">
+          <div className="grid grid-cols-1 gap-6 md:grid-cols-3 lg:grid-cols-3 2xl:grid-cols-4">
             {filteredItems.map((item) => {
-              const rentalId = String(item.id);
-              const added = isInCart(rentalId, "rental");
+              const itemId = String(item.id);
               return (
                 <AppCard
-                  key={rentalId}
+                  key={itemId}
                   type={AppCardType.Rental}
                   name={item.name}
                   description={item.description}
                   price={item.price}
                   imageUrl={getPrimaryImage(item)}
-                  action={
-                    <Button
-                      type="button"
-                      className="w-full"
-                      variant={added ? "secondary" : "default"}
-                      onClick={() => addToCart(item)}
-                    >
-                      {added ? "Sudah di keranjang" : "Tambah ke keranjang"}
-                    </Button>
-                  }
+                  cartItem={{
+                    id: itemId,
+                    itemType: "rental",
+                    name: item.name,
+                    subtitle: "Rental",
+                    price: item.price,
+                    imageUrl: getPrimaryImage(item),
+                    tags: item.item_categories.map((cat) => cat.name),
+                    requiresDateRange: false,
+                  }}
                 />
               );
             })}
