@@ -394,6 +394,15 @@ export function CartProvider({ children }: { children: ReactNode }) {
       persistCart([]);
     };
 
+    const clearAllDateRanges = () => {
+      persistCart(
+        readCartSnapshot().map((currentItem) => {
+          if (!currentItem.requiresDateRange) return currentItem;
+          return { ...currentItem, dateRange: null };
+        }),
+      );
+    };
+
     const isInCart = (_id: string, _itemType?: CartItemType) => {
       void _id;
       void _itemType;
@@ -415,6 +424,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
       defaultDateRange,
       setDefaultDateRange,
       clearCart,
+      clearAllDateRanges,
       isInCart,
       getDays,
     };

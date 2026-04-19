@@ -142,6 +142,14 @@ function formatDateLabel(value: Date | null | undefined) {
   }).format(value);
 }
 
+function formatRangeLabel(from: Date | null | undefined, to: Date | null | undefined) {
+  if (!from) return null;
+  const fmt = (d: Date) =>
+    new Intl.DateTimeFormat("id-ID", { day: "numeric", month: "short", year: "numeric" }).format(d);
+  const toDate = to ?? from;
+  return from.getTime() === toDate.getTime() ? fmt(from) : `${fmt(from)} – ${fmt(toDate)}`;
+}
+
 function startOfDay(value: Date) {
   const next = new Date(value);
   next.setHours(0, 0, 0, 0);
@@ -217,6 +225,7 @@ export default function CartPage() {
     items,
     totalItems,
     clearCart,
+    clearAllDateRanges,
     removeItem,
     getDays,
     updateDateRange,
@@ -245,12 +254,11 @@ export default function CartPage() {
   const [selectedItemIds, setSelectedItemIds] = useState<
     Record<string, boolean>
   >({});
-  const [globalDateRange, setGlobalDateRange] = useState<BookedRange | null>(
-    null,
-  );
   const [bulkDateRange, setBulkDateRange] = useState<BookedRange | null>(null);
-  const [isConfirmGlobalDialogOpen, setIsConfirmGlobalDialogOpen] =
-    useState(false);
+  const [draftBulkDateRange, setDraftBulkDateRange] = useState<{ from: Date; to?: Date } | null>(null);
+  const [draftDateRanges, setDraftDateRanges] = useState<
+    Record<string, { from: Date; to?: Date } | null>
+  >({});
   const [isConfirmBulkDialogOpen, setIsConfirmBulkDialogOpen] = useState(false);
   const [manualConflictItemIds, setManualConflictItemIds] = useState<string[]>(
     [],
@@ -949,15 +957,6 @@ export default function CartPage() {
     setSelectedItemIds(next);
   };
 
-  const handleGlobalDateApply = () => {
-    if (!globalDateRange) {
-      setCheckoutError("Pilih range global terlebih dahulu.");
-      return;
-    }
-
-    applyDateRangeToItems(dateMutableItems, globalDateRange);
-  };
-
   const handleBulkSelectedApply = () => {
     if (!bulkDateRange) {
       setCheckoutError("Pilih range untuk item terpilih terlebih dahulu.");
@@ -965,11 +964,6 @@ export default function CartPage() {
     }
 
     applyDateRangeToItems(selectedDateMutableItems, bulkDateRange);
-  };
-
-  const handleConfirmGlobalDateApply = () => {
-    setIsConfirmGlobalDialogOpen(false);
-    handleGlobalDateApply();
   };
 
   const handleConfirmBulkDateApply = () => {
@@ -1197,19 +1191,46 @@ export default function CartPage() {
     }
   };
 
+  const clearItemDraft = (itemId: string) => {
+    setDraftDateRanges((prev) => {
+      if (!(itemId in prev)) return prev;
+      const next = { ...prev };
+      delete next[itemId];
+      return next;
+    });
+  };
+
   const handleSelectDateRange = (
     item: CheckoutItem,
     range?: { from?: Date; to?: Date },
   ) => {
-    const normalizedRange = normalizeSelectedRange(range);
+    if (!range?.from) {
+      clearItemDraft(item.id);
+      return;
+    }
 
+    // First click only — keep as draft so react-day-picker stays in
+    // mid-selection mode. Committing early would cause the next click to
+    // start a new range instead of picking the end date.
+    if (!range.to) {
+      setDraftDateRanges((prev) => ({
+        ...prev,
+        [item.id]: { from: startOfDay(range.from!) },
+      }));
+      return;
+    }
+
+    // Both dates selected — validate and commit
+    const normalizedRange = normalizeSelectedRange(range);
     if (!normalizedRange) {
+      clearItemDraft(item.id);
       return;
     }
 
     if (
       hasLocationRangeOverlap(item, normalizedRange.from, normalizedRange.to)
     ) {
+      clearItemDraft(item.id);
       setManualConflictItemIds([item.id]);
       setCheckoutError(
         "Range tanggal lokasi bentrok dengan booking lain. Pilih range tanpa tanggal merah.",
@@ -1225,6 +1246,7 @@ export default function CartPage() {
     });
 
     if (sameItemConflictIds.length > 0) {
+      clearItemDraft(item.id);
       setManualConflictItemIds(sameItemConflictIds);
       setCheckoutError(
         "Item yang sama tidak boleh memiliki tanggal booking yang overlap.",
@@ -1237,6 +1259,7 @@ export default function CartPage() {
       to: normalizedRange.to,
     });
 
+    clearItemDraft(item.id);
     setManualConflictItemIds([]);
     setShowMissingDateFrame(false);
     setCheckoutError("");
@@ -1323,11 +1346,27 @@ export default function CartPage() {
           return (
             <div
               key={item.id}
-              className={`rounded-lg border bg-background p-3 ${
+              onClick={(e) => {
+                if (!canBulkChangeDate) return;
+                if (
+                  (e.target as HTMLElement).closest(
+                    "button, input, [data-radix-popper-content-wrapper]",
+                  )
+                )
+                  return;
+                toggleSelectDateMutableItem(item.id, !isSelected);
+              }}
+              className={[
+                "rounded-lg border p-3 transition-colors",
+                canBulkChangeDate ? "cursor-pointer" : "",
                 isMissingDateRange || hasInvalidBooking || hasInvalidQuantity
-                  ? "border-red-500"
-                  : "border-border/60"
-              }`}
+                  ? "border-red-500 bg-red-50/40 dark:bg-red-950/20"
+                  : isSelected
+                    ? "border-primary/40 bg-primary/5"
+                    : "border-border/60 bg-background hover:bg-muted/40",
+              ]
+                .filter(Boolean)
+                .join(" ")}
             >
               <div className="flex gap-3">
                 <div className="relative h-24 w-32 shrink-0 overflow-hidden rounded-md border border-border/60">
@@ -1348,6 +1387,7 @@ export default function CartPage() {
                                 event.target.checked,
                               )
                             }
+                            onClick={(e) => e.stopPropagation()}
                             aria-label={`Pilih ${item.name} untuk ubah tanggal bulk`}
                           />
                         ) : null}
@@ -1366,7 +1406,10 @@ export default function CartPage() {
                       variant="destructive"
                       aria-label="Hapus item"
                       className="h-8 w-8 shrink-0 bg-red-600 text-white hover:bg-red-700"
-                      onClick={() => handleRemoveSingleItem(item.id)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleRemoveSingleItem(item.id);
+                      }}
                     >
                       <Trash2 className="h-4 w-4" />
                     </Button>
@@ -1392,6 +1435,7 @@ export default function CartPage() {
                           value={
                             itemQuantities[item.id] ?? String(item.quantity)
                           }
+                          onClick={(e) => e.stopPropagation()}
                           onChange={(event) =>
                             handleChangeQuantity(item.id, event.target.value)
                           }
@@ -1424,6 +1468,7 @@ export default function CartPage() {
                             size="sm"
                             variant="outline"
                             className="h-7 gap-1.5 px-2 text-xs"
+                            onClick={(e) => e.stopPropagation()}
                           >
                             <CalendarDays className="h-3.5 w-3.5" />
                             Pilih Range Tanggal
@@ -1433,12 +1478,14 @@ export default function CartPage() {
                           <Calendar
                             mode="range"
                             selected={
-                              item.dateRange?.from
-                                ? {
-                                    from: item.dateRange.from,
-                                    to: item.dateRange.to,
-                                  }
-                                : undefined
+                              draftDateRanges[item.id]
+                                ? draftDateRanges[item.id]
+                                : item.dateRange?.from
+                                  ? {
+                                      from: item.dateRange.from,
+                                      to: item.dateRange.to,
+                                    }
+                                  : undefined
                             }
                             onSelect={(range) =>
                               handleSelectDateRange(item, range)
@@ -1519,132 +1566,82 @@ export default function CartPage() {
         </div>
 
         {checkoutItems.length > 0 ? (
-          <div className="mb-6 grid grid-cols-1 gap-4 lg:grid-cols-2">
-            <section className="rounded-xl border border-border bg-card p-4">
-              <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="mb-6">
+            {/* Panel — ubah tanggal item tertentu */}
+            <section className="rounded-xl border border-border bg-card p-4 space-y-3">
+              <div className="flex items-start justify-between gap-3">
                 <div>
-                  <h3 className="text-base font-semibold">Global Date Range</h3>
-                  <p className="text-xs text-muted-foreground">
-                    Pilih sekali, lalu terapkan ke semua item bertanggal.
+                  <h3 className="text-base font-semibold">Ubah tanggal item</h3>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    Pilih item dulu, lalu ubah tanggalnya sekaligus
                   </p>
                 </div>
-                <Badge variant="secondary">
-                  {dateMutableItems.length} item
-                </Badge>
+                <div className="flex items-center gap-2 shrink-0">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant={areAllDateMutableItemsSelected ? "default" : "outline"}
+                    className="h-8 text-xs"
+                    onClick={() => toggleSelectAllDateMutableItems(!areAllDateMutableItemsSelected)}
+                    disabled={dateMutableItems.length === 0}
+                  >
+                    {areAllDateMutableItemsSelected ? "Batal Semua" : "Pilih Semua"}
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    className="h-8 text-xs text-destructive border-destructive/40 hover:bg-destructive/10"
+                    onClick={() => clearAllDateRanges()}
+                    disabled={dateMutableItems.length === 0}
+                  >
+                    Reset Tanggal
+                  </Button>
+                </div>
               </div>
 
-              <div className="mt-3 flex flex-wrap gap-2">
-                <Popover>
-                  <PopoverTrigger asChild>
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="outline"
-                      className="h-8 gap-1.5"
-                    >
-                      <CalendarDays className="h-3.5 w-3.5" />
-                      Pilih Range Global
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-auto p-0" align="start">
-                    <Calendar
-                      mode="range"
-                      selected={
-                        globalDateRange
-                          ? {
-                              from: globalDateRange.from,
-                              to: globalDateRange.to,
-                            }
-                          : undefined
-                      }
-                      onSelect={(range) => {
-                        const normalizedRange = normalizeSelectedRange(range);
-                        if (!normalizedRange) {
-                          return;
-                        }
-
-                        setGlobalDateRange(normalizedRange);
-                        setCheckoutError("");
-                      }}
-                      disabled={(date) => startOfDay(date) < minBookingDate}
-                      initialFocus
-                    />
-                  </PopoverContent>
-                </Popover>
-
-                <Button
-                  type="button"
-                  size="sm"
-                  onClick={() => setIsConfirmGlobalDialogOpen(true)}
-                  disabled={dateMutableItems.length === 0 || !globalDateRange}
-                >
-                  Terapkan ke semua item
-                </Button>
-              </div>
-
-              <p className="mt-2 text-xs text-muted-foreground">
-                Global: {formatDateLabel(globalDateRange?.from)} -{" "}
-                {formatDateLabel(globalDateRange?.to)}
+              <p className="text-xs text-muted-foreground">
+                {selectedDateMutableItems.length > 0
+                  ? bulkDateRange
+                    ? `Tanggal: ${formatRangeLabel(bulkDateRange.from, bulkDateRange.to)}`
+                    : `${selectedDateMutableItems.length} item dipilih — belum pilih tanggal`
+                  : "0 item dipilih"}
               </p>
-            </section>
 
-            <section className="rounded-xl border border-border bg-card p-4">
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <div>
-                  <h3 className="text-base font-semibold">
-                    Bulk Select & Apply
-                  </h3>
-                  <p className="text-xs text-muted-foreground">
-                    Pilih checkbox item, lalu ubah tanggal sekaligus.
-                  </p>
-                </div>
-                <Badge variant="secondary">
-                  {selectedDateMutableItems.length} terpilih
-                </Badge>
-              </div>
-
-              <div className="mt-3 flex flex-wrap items-center gap-2">
-                <label className="flex items-center gap-2 text-xs text-muted-foreground">
-                  <input
-                    type="checkbox"
-                    checked={areAllDateMutableItemsSelected}
-                    onChange={(event) =>
-                      toggleSelectAllDateMutableItems(event.target.checked)
-                    }
-                  />
-                  Pilih semua item yang bisa diubah tanggalnya
-                </label>
-
+              <div className="flex flex-wrap gap-2">
                 <Popover>
                   <PopoverTrigger asChild>
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="outline"
-                      className="h-8 gap-1.5"
-                    >
+                    <Button type="button" size="sm" variant="outline" className="h-8 gap-1.5">
                       <CalendarDays className="h-3.5 w-3.5" />
-                      Pilih Range Bulk
+                      Pilih tanggal
                     </Button>
                   </PopoverTrigger>
                   <PopoverContent className="w-auto p-0" align="start">
                     <Calendar
                       mode="range"
                       selected={
-                        bulkDateRange
-                          ? {
-                              from: bulkDateRange.from,
-                              to: bulkDateRange.to,
-                            }
-                          : undefined
+                        draftBulkDateRange !== null
+                          ? draftBulkDateRange
+                          : bulkDateRange
+                            ? { from: bulkDateRange.from, to: bulkDateRange.to }
+                            : undefined
                       }
                       onSelect={(range) => {
-                        const normalizedRange = normalizeSelectedRange(range);
-                        if (!normalizedRange) {
+                        if (!range?.from) {
+                          setDraftBulkDateRange(null);
                           return;
                         }
-
+                        if (!range.to) {
+                          setDraftBulkDateRange({ from: startOfDay(range.from) });
+                          return;
+                        }
+                        const normalizedRange = normalizeSelectedRange(range);
+                        if (!normalizedRange) {
+                          setDraftBulkDateRange(null);
+                          return;
+                        }
                         setBulkDateRange(normalizedRange);
+                        setDraftBulkDateRange(null);
                         setCheckoutError("");
                       }}
                       disabled={(date) => startOfDay(date) < minBookingDate}
@@ -1657,18 +1654,11 @@ export default function CartPage() {
                   type="button"
                   size="sm"
                   onClick={() => setIsConfirmBulkDialogOpen(true)}
-                  disabled={
-                    selectedDateMutableItems.length === 0 || !bulkDateRange
-                  }
+                  disabled={selectedDateMutableItems.length === 0 || !bulkDateRange}
                 >
-                  Ubah tanggal untuk item terpilih
+                  Terapkan ke item terpilih
                 </Button>
               </div>
-
-              <p className="mt-2 text-xs text-muted-foreground">
-                Bulk: {formatDateLabel(bulkDateRange?.from)} -{" "}
-                {formatDateLabel(bulkDateRange?.to)}
-              </p>
             </section>
           </div>
         ) : null}
@@ -1949,34 +1939,6 @@ export default function CartPage() {
             </div>
           </aside>
         </div>
-
-        <Dialog
-          open={isConfirmGlobalDialogOpen}
-          onOpenChange={setIsConfirmGlobalDialogOpen}
-        >
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Terapkan ke semua item?</DialogTitle>
-              <DialogDescription>
-                Semua item bertanggal ({dateMutableItems.length} item) akan
-                diganti ke range {formatDateLabel(globalDateRange?.from)} -{" "}
-                {formatDateLabel(globalDateRange?.to)}.
-              </DialogDescription>
-            </DialogHeader>
-            <DialogFooter>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => setIsConfirmGlobalDialogOpen(false)}
-              >
-                Batal
-              </Button>
-              <Button type="button" onClick={handleConfirmGlobalDateApply}>
-                Ya, terapkan semua
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
 
         <Dialog
           open={isConfirmBulkDialogOpen}

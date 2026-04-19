@@ -48,6 +48,7 @@ export interface CartContextValue {
   defaultDateRange: CartDateRange | null;
   setDefaultDateRange: (dateRange: Partial<CartDateRange> | null) => void;
   clearCart: () => void;
+  clearAllDateRanges: () => void;
   isInCart: (id: string, itemType?: CartItemType) => boolean;
   getDays: (item: CartItem) => number;
 }

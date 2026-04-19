@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 
+import { insertAdminLocationEmbedding } from "@/lib/embedding";
 import { createServiceRoleClient } from "@/lib/supabase/server";
 
 import {
@@ -55,7 +56,7 @@ export async function PUT(request: Request, { params }: RouteContext) {
         is_available: parsedPayload.data.is_available,
       })
       .eq("id", locationId)
-      .select("id")
+      .select("id, rating")
       .maybeSingle();
 
     if (updateResult.error) {
@@ -73,6 +74,41 @@ export async function PUT(request: Request, { params }: RouteContext) {
     }
 
     await syncLocationRelations(locationId, parsedPayload.data);
+
+    const [itemCategoriesResult, itemSubCategoriesResult] = await Promise.all([
+      parsedPayload.data.item_category_ids.length > 0
+        ? serviceRoleClient
+            .from("item_categories")
+            .select("name")
+            .in("id", parsedPayload.data.item_category_ids)
+        : Promise.resolve({ data: [], error: null }),
+      parsedPayload.data.item_sub_category_ids.length > 0
+        ? serviceRoleClient
+            .from("item_sub_categories")
+            .select("name")
+            .in("id", parsedPayload.data.item_sub_category_ids)
+        : Promise.resolve({ data: [], error: null }),
+    ]);
+
+    insertAdminLocationEmbedding({
+      location_id: locationId,
+      code: generatedCode,
+      name: parsedPayload.data.name,
+      city: parsedPayload.data.city,
+      description: parsedPayload.data.description,
+      price: parsedPayload.data.price,
+      area: parsedPayload.data.area,
+      pax: parsedPayload.data.pax,
+      rating: Number(updateResult.data.rating ?? 0),
+      is_available: parsedPayload.data.is_available,
+      tags: [],
+      item_categories: (itemCategoriesResult.data ?? [])
+        .map((row) => String((row as { name?: string | null }).name ?? ""))
+        .filter(Boolean),
+      item_sub_categories: (itemSubCategoriesResult.data ?? [])
+        .map((row) => String((row as { name?: string | null }).name ?? ""))
+        .filter(Boolean),
+    });
 
     return NextResponse.json(
       { message: "Lokasi berhasil diupdate." },

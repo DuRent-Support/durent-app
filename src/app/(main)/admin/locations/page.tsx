@@ -127,6 +127,7 @@ export default function AdminLocationsPage() {
   const [deleteConfirm, setDeleteConfirm] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [uploadingImage, setUploadingImage] = useState(false);
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
   const [searchQuery, setSearchQuery] = useState("");
@@ -407,6 +408,7 @@ export default function AdminLocationsPage() {
   // Delete location
   const deleteLocation = async (id: number) => {
     try {
+      setDeleting(true);
       const response = await fetch(`/api/admin/locations/${id}`, {
         method: "DELETE",
       });
@@ -423,6 +425,8 @@ export default function AdminLocationsPage() {
     } catch (error) {
       console.error("Delete location error:", error);
       toast.error("Terjadi kesalahan saat menghapus lokasi");
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -946,13 +950,21 @@ export default function AdminLocationsPage() {
           </p>
           <DialogFooter>
             <DialogClose asChild>
-              <Button variant="ghost">Batal</Button>
+              <Button variant="ghost" disabled={deleting}>Batal</Button>
             </DialogClose>
             <Button
               variant="destructive"
+              disabled={deleting}
               onClick={() => deleteConfirm && deleteLocation(deleteConfirm)}
             >
-              Hapus
+              {deleting ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Menghapus...
+                </>
+              ) : (
+                "Hapus"
+              )}
             </Button>
           </DialogFooter>
         </DialogContent>
