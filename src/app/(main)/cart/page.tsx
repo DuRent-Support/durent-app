@@ -1479,7 +1479,7 @@ export default function CartPage() {
                             mode="range"
                             selected={
                               draftDateRanges[item.id]
-                                ? draftDateRanges[item.id]
+                                ? (draftDateRanges[item.id] as { from: Date; to?: Date })
                                 : item.dateRange?.from
                                   ? {
                                       from: item.dateRange.from,
