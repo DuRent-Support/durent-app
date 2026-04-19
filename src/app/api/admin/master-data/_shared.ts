@@ -103,7 +103,7 @@ async function buildCountMap(
   );
   for (const result of results) {
     if (result.error || !result.data) continue;
-    for (const row of result.data as Record<string, unknown>[]) {
+    for (const row of result.data as unknown as Record<string, unknown>[]) {
       const id = Number(row[countConfig.foreignKey]);
       if (!Number.isFinite(id)) continue;
       countMap.set(id, (countMap.get(id) ?? 0) + 1);
