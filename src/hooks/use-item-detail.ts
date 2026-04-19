@@ -92,6 +92,25 @@ export type ItemDetail =
   | ExpendableDetail
   | BundleDetail;
 
+const MEDIA_BUCKET = "media";
+const SIGNED_URL_EXPIRY = 60 * 60;
+
+async function resolveImageUrls(
+  supabase: ReturnType<typeof createClient>,
+  images: ImageItem[],
+): Promise<ImageItem[]> {
+  if (images.length === 0) return images;
+  return Promise.all(
+    images.map(async (img) => {
+      if (!img.url || img.url.startsWith("http")) return img;
+      const { data, error } = await supabase.storage
+        .from(MEDIA_BUCKET)
+        .createSignedUrl(img.url, SIGNED_URL_EXPIRY);
+      return { ...img, url: error || !data ? img.url : data.signedUrl };
+    }),
+  );
+}
+
 export function useItemDetail(
   id: number | null,
   type: AppCardType | null,
@@ -288,7 +307,10 @@ export function useItemDetail(
           };
         }
 
-        if (!cancelled) setData(result);
+        if (!cancelled && result) {
+          result.images = await resolveImageUrls(supabase, result.images);
+          setData(result);
+        }
       } catch {
         if (!cancelled) setError("Gagal memuat detail");
       } finally {

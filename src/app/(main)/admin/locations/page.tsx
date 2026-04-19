@@ -628,13 +628,14 @@ export default function AdminLocationsPage() {
                 <TableHead className="hidden md:table-cell">Kota</TableHead>
                 <TableHead className="hidden sm:table-cell">Harga</TableHead>
                 <TableHead className="hidden lg:table-cell">Status</TableHead>
+                <TableHead className="hidden sm:table-cell">Gambar</TableHead>
                 <TableHead className="w-24 text-right">Aksi</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {loading ? (
                 <TableRow>
-                  <TableCell colSpan={6} className="text-center py-12">
+                  <TableCell colSpan={7} className="text-center py-12">
                     <Loader2 className="h-6 w-6 animate-spin text-muted-foreground mx-auto" />
                   </TableCell>
                 </TableRow>
@@ -667,6 +668,9 @@ export default function AdminLocationsPage() {
 
                     <TableCell className="hidden lg:table-cell text-muted-foreground">
                       {loc.is_available ? "Available" : "Unavailable"}
+                    </TableCell>
+                    <TableCell className="hidden sm:table-cell text-muted-foreground">
+                      {loc.images.length}
                     </TableCell>
                     <TableCell className="text-right">
                       <div className="flex justify-end gap-1">

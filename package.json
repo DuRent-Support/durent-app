@@ -24,6 +24,7 @@
     "date-fns": "^4.1.0",
     "durent": ".",
     "embla-carousel-react": "^8.6.0",
+    "jspdf": "^4.2.1",
     "langchain": "^1.2.30",
     "lucide-react": "^0.577.0",
     "midtrans-client": "^1.4.3",

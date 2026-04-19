@@ -10,6 +10,11 @@ export type MasterDataRow = {
   created_at?: string | null;
 };
 
+type CountConfig = {
+  tables: string[];
+  foreignKey: string;
+};
+
 type PayloadResult =
   | { ok: true; name: string; shortCode: string }
   | { ok: false; response: NextResponse };
@@ -86,7 +91,28 @@ async function parsePayload(request: Request): Promise<PayloadResult> {
   return { ok: true, name, shortCode };
 }
 
-export async function listMasterData(table: string) {
+async function buildCountMap(
+  serviceRoleClient: ReturnType<typeof createServiceRoleClient>,
+  countConfig: CountConfig,
+): Promise<Map<number, number>> {
+  const countMap = new Map<number, number>();
+  const results = await Promise.all(
+    countConfig.tables.map((t) =>
+      serviceRoleClient.from(t).select(countConfig.foreignKey),
+    ),
+  );
+  for (const result of results) {
+    if (result.error || !result.data) continue;
+    for (const row of result.data as Record<string, unknown>[]) {
+      const id = Number(row[countConfig.foreignKey]);
+      if (!Number.isFinite(id)) continue;
+      countMap.set(id, (countMap.get(id) ?? 0) + 1);
+    }
+  }
+  return countMap;
+}
+
+export async function listMasterData(table: string, countConfig?: CountConfig) {
   try {
     const admin = await requireAdmin();
     if (!admin.ok) {
@@ -129,8 +155,17 @@ export async function listMasterData(table: string) {
       rows = fallbackResult.data as MasterDataRow[] | null;
     }
 
+    const countMap = countConfig
+      ? await buildCountMap(serviceRoleClient, countConfig)
+      : null;
+
     return NextResponse.json(
-      { items: (rows ?? []).map((row) => mapMasterDataRow(row)) },
+      {
+        items: (rows ?? []).map((row) => ({
+          ...mapMasterDataRow(row),
+          items: countMap ? (countMap.get(Number(row.id)) ?? 0) : 0,
+        })),
+      },
       { status: 200 },
     );
   } catch (error) {

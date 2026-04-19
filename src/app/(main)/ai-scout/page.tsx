@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useState, useRef, useEffect } from "react";
 import {
   Sparkles,
@@ -45,6 +45,7 @@ interface Message {
 }
 
 export default function AiScoutPage() {
+  const router = useRouter();
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
@@ -203,10 +204,10 @@ export default function AiScoutPage() {
     setIsDragOver(false);
   };
 
-  const detailHref =
-    sceneResults.length > 0
-      ? `/ai-scout/detail?data=${encodeURIComponent(JSON.stringify(sceneResults))}`
-      : "/ai-scout/detail";
+  const handleViewDetail = () => {
+    sessionStorage.setItem("ai-scout-results", JSON.stringify(sceneResults));
+    router.push("/ai-scout/detail");
+  };
 
   return (
     <>
@@ -382,8 +383,8 @@ export default function AiScoutPage() {
             <DrawerDescription>
               {sceneResults.length} scene dianalisis dari naskah kamu
             </DrawerDescription>
-            <Button asChild className="mt-3 w-fit">
-              <Link href={detailHref}>Lihat detail halaman lengkap</Link>
+            <Button className="mt-3 w-fit" onClick={handleViewDetail}>
+              Lihat detail halaman lengkap
             </Button>
           </DrawerHeader>
 

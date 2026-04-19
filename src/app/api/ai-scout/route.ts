@@ -1,15 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
-import { ChatGoogleGenerativeAI } from "@langchain/google-genai";
+import { ChatOpenAI } from "@langchain/openai";
 import { HumanMessage, SystemMessage } from "@langchain/core/messages";
 import pdfParse from "pdf-parse";
 import { searchSimilarLocations, type SimilarLocation } from "@/lib/embedding";
+import { createClient } from "@/lib/supabase/server";
 
 const SIMILARITY_TOP_K = 5;
 const SIMILARITY_MIN_SCORE = 0.6;
 
-const model = new ChatGoogleGenerativeAI({
-  model: "gemini-2.5-flash",
-  apiKey: process.env.GOOGLE_API_KEY,
+const model = new ChatOpenAI({
+  model: "deepseek-chat",
+  apiKey: process.env.DEEPSEEK_API_KEY,
+  configuration: { baseURL: "https://api.deepseek.com" },
   temperature: 0.7,
 });
 
@@ -86,7 +88,7 @@ Tugasmu: diberikan beberapa scene beserta daftar kandidat lokasi per scene, pili
 Instruksi:
 1. Baca setiap scene dengan cermat — perhatikan suasana, pencahayaan, setting (interior/eksterior), dan mood yang dibutuhkan.
 2. Tentukan tags untuk setiap scene (maks 8 tags): tipe setting, mood, pencahayaan, dll.
-3. Pilih 1–3 lokasi dari DAFTAR LOKASI masing-masing scene yang paling cocok dan jelaskan alasannya secara spesifik.
+3. Pilih TEPAT 3 lokasi dari DAFTAR LOKASI masing-masing scene yang paling cocok, diurutkan dari yang terbaik. Jika tersedia kurang dari 3, pilih semua yang ada. Jelaskan alasan spesifik untuk setiap lokasi.
 4. WAJIB pilih setidaknya 1 lokasi per scene. Jika tidak ada yang sempurna, pilih yang paling mendekati dan jelaskan jujur.
 5. JANGAN mengarang nama lokasi — hanya gunakan lokasi dari daftar yang diberikan per scene.
 
@@ -104,17 +106,22 @@ Balas HANYA dengan JSON array valid (tanpa markdown fence) dalam format ini:
 
 type SceneWithLocations = { scene: RawScene; locations: SimilarLocation[] };
 
-async function analyzeAllScenes(
+const LLM_BATCH_SIZE = 15;
+
+async function analyzeBatch(
   items: SceneWithLocations[],
 ): Promise<SceneResult[]> {
   const scenesBlock = items
     .map((item, i) => {
-      const locationList = item.locations
-        .map(
-          (loc, j) =>
-            `  ${j + 1}. ${loc.content.name} (${loc.content.city}) [similarity: ${loc.similarity.toFixed(4)}]\n     Deskripsi: ${loc.content.description}\n     Area: ${loc.content.area}m², Kapasitas: ${loc.content.pax} orang`,
-        )
-        .join("\n\n");
+      const locationList =
+        item.locations.length > 0
+          ? item.locations
+              .map(
+                (loc, j) =>
+                  `  ${j + 1}. ${loc.content.name} (${loc.content.city}) [similarity: ${loc.similarity.toFixed(4)}]\n     Deskripsi: ${loc.content.description}\n     Area: ${loc.content.area}m², Kapasitas: ${loc.content.pax} orang`,
+              )
+              .join("\n\n")
+          : "  (Tidak ada lokasi yang cocok ditemukan)";
 
       return `=== SCENE ${i + 1} ===\nHeading: ${item.scene.heading}\nScript:\n${item.scene.script}\n\nDAFTAR LOKASI TERSEDIA:\n${locationList}`;
     })
@@ -130,7 +137,9 @@ async function analyzeAllScenes(
       ? response.content
       : JSON.stringify(response.content);
 
-  console.log(`[AI Scout] Raw AI response:\n${raw.slice(0, 800)}`);
+  console.log(
+    `[AI Scout] Raw AI response (${items.length} scenes):\n${raw.slice(0, 600)}`,
+  );
 
   try {
     const cleaned = raw
@@ -149,7 +158,12 @@ async function analyzeAllScenes(
         location: Array.isArray(p?.location) ? p.location : [],
       };
     });
-  } catch {
+  } catch (err) {
+    console.error(
+      `[AI Scout] JSON parse failed for batch of ${items.length} scenes:`,
+      err,
+    );
+    console.error(`[AI Scout] Raw response tail: ...${raw.slice(-300)}`);
     return items.map((item) => ({
       heading: item.scene.heading,
       script: item.scene.script,
@@ -157,6 +171,29 @@ async function analyzeAllScenes(
       location: [],
     }));
   }
+}
+
+async function analyzeAllScenes(
+  items: SceneWithLocations[],
+): Promise<SceneResult[]> {
+  const batches: SceneWithLocations[][] = [];
+  for (let i = 0; i < items.length; i += LLM_BATCH_SIZE) {
+    batches.push(items.slice(i, i + LLM_BATCH_SIZE));
+  }
+
+  console.log(
+    `[AI Scout] Processing ${items.length} scenes in ${batches.length} batch(es) of max ${LLM_BATCH_SIZE} — running parallel`,
+  );
+
+  const batchResults = await Promise.all(
+    batches.map((batch, b) => {
+      console.log(
+        `[AI Scout] Batch ${b + 1}/${batches.length} (${batch.length} scenes) dispatched`,
+      );
+      return analyzeBatch(batch);
+    }),
+  );
+  return batchResults.flat();
 }
 
 // ---------------------------------------------------------------------------
@@ -167,6 +204,7 @@ export async function POST(req: NextRequest) {
   try {
     const contentType = req.headers.get("content-type") ?? "";
     let rawText = "";
+    let inputType: "pdf" | "text" = "text";
 
     if (contentType.includes("multipart/form-data")) {
       const formData = await req.formData();
@@ -178,6 +216,7 @@ export async function POST(req: NextRequest) {
         const parsed = await pdfParse(buffer);
         rawText = parsed.text;
         if (extraMessage) rawText += "\n" + extraMessage;
+        inputType = "pdf";
       } else {
         rawText = extraMessage;
       }
@@ -202,43 +241,53 @@ export async function POST(req: NextRequest) {
       `\n[AI Scout] ========== Processing ${scenes.length} scene(s) ==========`,
     );
 
-    // Phase 1: similarity search per scene
+    // Phase 1: similarity search per scene — semua jalan parallel
+    console.log(
+      `[AI Scout] Phase 1: dispatching ${scenes.length} similarity searches in parallel`,
+    );
+
+    const phase1Results = await Promise.all(
+      scenes.map(async (scene, i) => {
+        const cacheKey = scene.heading.trim().toLowerCase();
+        if (sceneMemory.has(cacheKey)) {
+          console.log(`[AI Scout] Scene ${i + 1} Cache HIT`);
+          return {
+            cached: true as const,
+            index: i,
+            result: sceneMemory.get(cacheKey)!,
+          };
+        }
+        const searchQuery = `${scene.heading} ${scene.script}`;
+        const locations = await searchSimilarLocations(
+          searchQuery,
+          SIMILARITY_TOP_K,
+          SIMILARITY_MIN_SCORE,
+        );
+        console.log(
+          `[AI Scout] Scene ${i + 1} — ${locations.length} lokasi ditemukan`,
+        );
+        locations.forEach((loc: SimilarLocation, idx: number) => {
+          console.log(
+            `  ${idx + 1}. [${loc.similarity.toFixed(4)}] ${loc.content.name} (${loc.content.city})`,
+          );
+        });
+        return { cached: false as const, index: i, scene, locations };
+      }),
+    );
+
     const cachedResults = new Map<number, SceneResult>();
     const toAnalyze: Array<SceneWithLocations & { index: number }> = [];
 
-    for (let i = 0; i < scenes.length; i++) {
-      const scene = scenes[i];
-      const cacheKey = scene.heading.trim().toLowerCase();
-
-      console.log(
-        `\n[AI Scout] --- Scene ${i + 1}/${scenes.length}: "${scene.heading}" ---`,
-      );
-
-      if (sceneMemory.has(cacheKey)) {
-        console.log(`[AI Scout] Cache HIT — skipping similarity search`);
-        cachedResults.set(i, sceneMemory.get(cacheKey)!);
-        continue;
+    for (const r of phase1Results) {
+      if (r.cached) {
+        cachedResults.set(r.index, r.result);
+      } else {
+        toAnalyze.push({
+          scene: r.scene,
+          locations: r.locations,
+          index: r.index,
+        });
       }
-
-      console.log(`[AI Scout] Cache MISS — running similarity search`);
-
-      const searchQuery = `${scene.heading} ${scene.script}`;
-      const locations = await searchSimilarLocations(
-        searchQuery,
-        SIMILARITY_TOP_K,
-        SIMILARITY_MIN_SCORE,
-      );
-
-      console.log(
-        `[AI Scout] Similarity results (${locations.length} lokasi, min similarity ${SIMILARITY_MIN_SCORE}):`,
-      );
-      locations.forEach((loc: SimilarLocation, idx: number) => {
-        console.log(
-          `  ${idx + 1}. [${loc.similarity.toFixed(4)}] ${loc.content.name} (${loc.content.city})`,
-        );
-      });
-
-      toAnalyze.push({ scene, locations, index: i });
     }
 
     // Phase 2: single LLM call for all uncached scenes
@@ -268,6 +317,32 @@ export async function POST(req: NextRequest) {
     });
 
     console.log(`\n[AI Scout] ========== Done ==========\n`);
+
+    // Simpan ke scout_history
+    try {
+      const supabase = await createClient();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      const { error: insertErr } = await supabase
+        .from("scout_history")
+        .insert({
+          user_uuid: user?.id ?? null,
+          input_type: inputType,
+          prompt_preview: rawText.slice(0, 200),
+          scene_count: results.length,
+          scenes: results,
+        });
+
+      if (insertErr) {
+        console.error("[AI Scout] DB insert error:", insertErr.code, insertErr.message, insertErr.details);
+      } else {
+        console.log("[AI Scout] History saved successfully");
+      }
+    } catch (dbErr) {
+      console.error("[AI Scout] Failed to save history:", dbErr);
+    }
 
     return NextResponse.json({
       message: JSON.stringify({ scenes: results }),

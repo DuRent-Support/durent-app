@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { useSearchParams } from "next/navigation";
 import { ArrowLeft, Loader2, ShoppingCart, Tag } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -24,27 +23,20 @@ type Scene = {
   location: SceneLocation[];
 };
 
-const parseRecommendations = (raw: string | null): Scene[] => {
-  if (!raw) return [];
-
-  try {
-    const decoded = decodeURIComponent(raw);
-    const parsed = JSON.parse(decoded);
-    return Array.isArray(parsed) ? (parsed as Scene[]) : [];
-  } catch {
-    return [];
-  }
-};
-
 export default function AIScoutDetailPage() {
-  const searchParams = useSearchParams();
   const { addItem } = useCart();
   const [allLocations, setAllLocations] = useState<LocationWithTags[]>([]);
   const [loadingLocations, setLoadingLocations] = useState(true);
-  const recommendations = useMemo(
-    () => parseRecommendations(searchParams.get("data")),
-    [searchParams],
-  );
+  const recommendations = useMemo<Scene[]>(() => {
+    try {
+      const raw = sessionStorage.getItem("ai-scout-results");
+      if (!raw) return [];
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed) ? (parsed as Scene[]) : [];
+    } catch {
+      return [];
+    }
+  }, []);
 
   useEffect(() => {
     const fetchLocations = async () => {

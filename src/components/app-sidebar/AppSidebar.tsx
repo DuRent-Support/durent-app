@@ -6,6 +6,7 @@ import {
   CalendarCheck,
   CreditCard,
   FileText,
+  History,
   House,
   LayoutDashboard,
   MapPin,
@@ -135,19 +136,6 @@ function SidebarNavContent({
                   buttonClassName={buttonClassName}
                   badgeCount={totalItems}
                 />
-                <SidebarMenu>
-                  <SidebarNavItem
-                    href="/ai-scout"
-                    label="AI Scout"
-                    icon={Sparkles}
-                    isActive={isPathActive(pathname, "/ai-scout")}
-                    itemClassName={itemClassName}
-                    iconClassName={iconClassName}
-                    labelClassName={labelClassName}
-                    itemWrapperClassName={itemWrapperClassName}
-                    buttonClassName={buttonClassName}
-                  />
-                </SidebarMenu>
                 {isAuthenticated ? (
                   <>
                     <SidebarNavItem
@@ -246,6 +234,40 @@ function SidebarNavContent({
                   label="Bundles"
                   icon={Package}
                   isActive={isPathActive(pathname, "/bundles")}
+                  itemClassName={itemClassName}
+                  iconClassName={iconClassName}
+                  labelClassName={labelClassName}
+                  itemWrapperClassName={itemWrapperClassName}
+                  buttonClassName={buttonClassName}
+                />
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </CollapsibleContent>
+        </Collapsible>
+      </SidebarGroup>
+
+      <SidebarGroup className="px-1 py-0">
+        <Collapsible defaultOpen className="group/collapsible">
+          <SidebarCollapsibleTrigger label="AI Tools" />
+          <CollapsibleContent>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                <SidebarNavItem
+                  href="/ai-scout"
+                  label="AI Scout"
+                  icon={Sparkles}
+                  isActive={isPathActive(pathname, "/ai-scout", { exact: true })}
+                  itemClassName={itemClassName}
+                  iconClassName={iconClassName}
+                  labelClassName={labelClassName}
+                  itemWrapperClassName={itemWrapperClassName}
+                  buttonClassName={buttonClassName}
+                />
+                <SidebarNavItem
+                  href="/ai-scout/history"
+                  label="Scout History"
+                  icon={History}
+                  isActive={isPathActive(pathname, "/ai-scout/history")}
                   itemClassName={itemClassName}
                   iconClassName={iconClassName}
                   labelClassName={labelClassName}

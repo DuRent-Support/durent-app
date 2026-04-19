@@ -1,7 +1,14 @@
 "use client";
 
 import Image from "next/image";
-import { ChevronRight, MapPin, Maximize, Package, Star, Users } from "lucide-react";
+import {
+  ChevronRight,
+  MapPin,
+  Maximize,
+  Package,
+  Star,
+  Users,
+} from "lucide-react";
 
 import {
   Carousel,
@@ -30,8 +37,14 @@ import {
 
 const fallbackImage = "/placeholder_durent.webp";
 
-function DetailImages({ images }: { images: { url: string; position: number }[] }) {
-  const sorted = [...images].sort((a, b) => a.position - b.position);
+function DetailImages({
+  images,
+}: {
+  images: { url: string; position: number }[];
+}) {
+  const sorted = [...images]
+    .sort((a, b) => a.position - b.position)
+    .filter((i) => i.url && i.url.trim() !== "");
   const srcs = sorted.length > 0 ? sorted.map((i) => i.url) : [fallbackImage];
 
   if (srcs.length === 1) {
@@ -104,7 +117,9 @@ function LocationSection({ data }: { data: LocationDetail }) {
         </div>
         <div className="col-span-2 flex flex-col gap-0.5 rounded-lg bg-muted p-3 sm:col-span-3">
           <span className="text-xs text-muted-foreground">Harga</span>
-          <span className="text-sm font-bold text-primary">{formatPrice(data.price)}</span>
+          <span className="text-sm font-bold text-primary">
+            {formatPrice(data.price)}
+          </span>
         </div>
       </div>
 
@@ -115,7 +130,10 @@ function LocationSection({ data }: { data: LocationDetail }) {
             <h4 className="mb-3 text-sm font-semibold">Ulasan</h4>
             <div className="flex flex-col gap-3">
               {data.reviews.map((review, i) => (
-                <div key={i} className="flex flex-col gap-1.5 rounded-lg border p-3">
+                <div
+                  key={i}
+                  className="flex flex-col gap-1.5 rounded-lg border p-3"
+                >
                   <div className="flex items-center justify-between gap-2">
                     <span className="text-sm font-medium">
                       {review.profiles?.full_name ?? "Pengguna"}
@@ -123,7 +141,9 @@ function LocationSection({ data }: { data: LocationDetail }) {
                     <StarRating value={review.rating} />
                   </div>
                   {review.comment && (
-                    <p className="text-sm text-muted-foreground">{review.comment}</p>
+                    <p className="text-sm text-muted-foreground">
+                      {review.comment}
+                    </p>
                   )}
                 </div>
               ))}
@@ -141,7 +161,9 @@ function RentalSection({ data }: { data: RentalDetail }) {
     <div className="flex flex-col gap-3">
       <div className="rounded-lg bg-muted p-3">
         <span className="text-xs text-muted-foreground">Harga</span>
-        <p className="text-sm font-bold text-primary">{formatPrice(data.price)}</p>
+        <p className="text-sm font-bold text-primary">
+          {formatPrice(data.price)}
+        </p>
       </div>
       {specs.length > 0 && (
         <div>
@@ -185,7 +207,9 @@ function BundleSection({ data }: { data: BundleDetail }) {
         </div>
         <div className="rounded-lg bg-primary/10 p-3">
           <span className="text-xs text-muted-foreground">Harga Bundle</span>
-          <p className="text-sm font-bold text-primary">{formatPrice(data.final_price)}</p>
+          <p className="text-sm font-bold text-primary">
+            {formatPrice(data.final_price)}
+          </p>
         </div>
       </div>
 
@@ -251,45 +275,64 @@ type ItemDetailDialogProps = {
   onClose: () => void;
 };
 
-export function ItemDetailDialog({ id, type, isOpen, onClose }: ItemDetailDialogProps) {
+export function ItemDetailDialog({
+  id,
+  type,
+  isOpen,
+  onClose,
+}: ItemDetailDialogProps) {
   const { data, isLoading, error } = useItemDetail(id, type, isOpen);
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="max-h-[90vh] w-full max-w-2xl overflow-y-auto">
-        {(isLoading || error) && (
-          <DialogHeader className="sr-only">
-            <DialogTitle>Detail</DialogTitle>
-          </DialogHeader>
-        )}
-
-        {isLoading && <DialogSkeleton />}
-
-        {error && (
-          <div className="py-8 text-center text-sm text-muted-foreground">{error}</div>
-        )}
-
-        {!isLoading && !error && data && (
-          <div className="flex flex-col gap-4">
-            <DetailImages images={data.images} />
-
-            <DialogHeader>
-              <DialogTitle>{data.name}</DialogTitle>
-              <DialogDescription>{data.description}</DialogDescription>
+      <DialogContent className="flex max-h-[90vh] w-full max-w-2xl flex-col overflow-hidden p-0">
+        <div className="flex-1 overflow-y-auto p-6">
+          {(isLoading || error) && (
+            <DialogHeader className="sr-only">
+              <DialogTitle>Detail</DialogTitle>
             </DialogHeader>
+          )}
 
-            <Separator />
+          {isLoading && <DialogSkeleton />}
 
-            {data.type === AppCardType.Location && <LocationSection data={data} />}
-            {data.type === AppCardType.Rental && <RentalSection data={data} />}
-            {data.type === AppCardType.Crew && <SimplePriceSection price={data.price} />}
-            {data.type === AppCardType.Fnb && <SimplePriceSection price={data.price} />}
-            {data.type === AppCardType.Expendable && (
-              <SimplePriceSection price={data.price} />
-            )}
-            {data.type === AppCardType.Bundle && <BundleSection data={data} />}
-          </div>
-        )}
+          {error && (
+            <div className="py-8 text-center text-sm text-muted-foreground">
+              {error}
+            </div>
+          )}
+
+          {!isLoading && !error && data && (
+            <div className="flex flex-col gap-4">
+              <DetailImages images={data.images} />
+
+              <DialogHeader>
+                <DialogTitle>{data.name}</DialogTitle>
+                <DialogDescription>{data.description}</DialogDescription>
+              </DialogHeader>
+
+              <Separator />
+
+              {data.type === AppCardType.Location && (
+                <LocationSection data={data} />
+              )}
+              {data.type === AppCardType.Rental && (
+                <RentalSection data={data} />
+              )}
+              {data.type === AppCardType.Crew && (
+                <SimplePriceSection price={data.price} />
+              )}
+              {data.type === AppCardType.Fnb && (
+                <SimplePriceSection price={data.price} />
+              )}
+              {data.type === AppCardType.Expendable && (
+                <SimplePriceSection price={data.price} />
+              )}
+              {data.type === AppCardType.Bundle && (
+                <BundleSection data={data} />
+              )}
+            </div>
+          )}
+        </div>
       </DialogContent>
     </Dialog>
   );

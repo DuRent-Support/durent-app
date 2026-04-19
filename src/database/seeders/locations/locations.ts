@@ -57,9 +57,19 @@ const locationRows: LocationRow[] = [
   },
   {
     code: "DS-LC-ID-RK-0003",
-    name: "Rumah Pematang Pauh",
+    name: "Rumah Pematang Pauh (CIPANAS)",
     description:
-      "Rumah di Pematang Pauh dengan nuansa lokal dan lanskap perbukitan, cocok untuk cerita bernuansa daerah atau budaya.",
+      "Rumah di kawasan Cipanas dengan udara sejuk pegunungan dan view alam terbuka, cocok untuk suasana tenang dan natural.",
+    city: "Bogor",
+    price: 1000000,
+    area: 350,
+    pax: 20,
+  },
+  {
+    code: "DS-LC-ID-RK-0003",
+    name: "Rumah Pematang Pauh (Sanggar Wira Kartika)",
+    description:
+      "Rumah dengan nuansa sanggar budaya, memiliki karakter artistik dan cocok untuk aktivitas kreatif atau pertunjukan.",
     city: "Bogor",
     price: 1000000,
     area: 350,
@@ -148,6 +158,46 @@ const locationRows: LocationRow[] = [
   {
     code: "DS-LC-ID-RK-0005",
     name: "Rumah Damansara",
+    description:
+      "Hunian di Damansara dengan nuansa suburban modern, cocok untuk setting keluarga mapan atau internasional.",
+    city: "Jakarta",
+    price: 1000000,
+    area: 400,
+    pax: 25,
+  },
+  {
+    code: "DS-LC-ID-RK-0005",
+    name: "Rumah Cipondoh",
+    description:
+      "Hunian di Damansara dengan nuansa suburban modern, cocok untuk setting keluarga mapan atau internasional.",
+    city: "Jakarta",
+    price: 1000000,
+    area: 400,
+    pax: 25,
+  },
+  {
+    code: "DS-LC-ID-RK-0005",
+    name: "Rumah Cemara",
+    description:
+      "Hunian di Damansara dengan nuansa suburban modern, cocok untuk setting keluarga mapan atau internasional.",
+    city: "Jakarta",
+    price: 1000000,
+    area: 400,
+    pax: 25,
+  },
+  {
+    code: "DS-LC-ID-RK-0005",
+    name: "Rumah Pak Fitrah",
+    description:
+      "Hunian di Damansara dengan nuansa suburban modern, cocok untuk setting keluarga mapan atau internasional.",
+    city: "Jakarta",
+    price: 1000000,
+    area: 400,
+    pax: 25,
+  },
+  {
+    code: "DS-LC-ID-RK-0005",
+    name: "Rumah Simprung Golf",
     description:
       "Hunian di Damansara dengan nuansa suburban modern, cocok untuk setting keluarga mapan atau internasional.",
     city: "Jakarta",
