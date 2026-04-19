@@ -1,8 +1,16 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { Clock, Download, FileText, Loader2, Sparkles } from "lucide-react";
+import {
+  Clock,
+  Download,
+  ExternalLink,
+  FileText,
+  Loader2,
+  Sparkles,
+} from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
@@ -115,9 +123,15 @@ async function downloadPdf(entry: HistoryEntry) {
 }
 
 export default function ScoutHistoryPage() {
+  const router = useRouter();
   const [history, setHistory] = useState<HistoryEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [downloading, setDownloading] = useState<string | null>(null);
+
+  const handleViewDetail = (entry: HistoryEntry) => {
+    sessionStorage.setItem("ai-scout-results", JSON.stringify(entry.scenes));
+    router.push("/ai-scout/detail");
+  };
 
   useEffect(() => {
     fetch("/api/ai-scout/history")
@@ -140,7 +154,7 @@ export default function ScoutHistoryPage() {
   };
 
   return (
-    <div className="px-6 py-8 max-w-3xl mx-auto">
+    <div className="px-6 py-8 ">
       <div className="flex items-center gap-3 mb-8">
         <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10">
           <Clock className="h-5 w-5 text-primary" />
@@ -222,20 +236,30 @@ export default function ScoutHistoryPage() {
                       </p>
                       <p className="text-xs text-muted-foreground">{time}</p>
                     </div>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="gap-1.5 h-7 text-xs"
-                      disabled={downloading === key}
-                      onClick={() => handleDownload(entry)}
-                    >
-                      {downloading === key ? (
-                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                      ) : (
-                        <Download className="h-3.5 w-3.5" />
-                      )}
-                      PDF
-                    </Button>
+                    <div className="flex gap-1.5">
+                      <Button
+                        size="sm"
+                        // variant="outline"
+                        className="gap-1.5 h-7 text-xs bg-white text-black border-border hover:bg-gray-200 hover:text-black"
+                        onClick={() => handleViewDetail(entry)}
+                      >
+                        <ExternalLink className="h-3.5 w-3.5" />
+                        Detail
+                      </Button>
+                      <Button
+                        size="sm"
+                        className="gap-1.5 h-7 text-xs bg-red-600 text-white hover:bg-red-700"
+                        disabled={downloading === key}
+                        onClick={() => handleDownload(entry)}
+                      >
+                        {downloading === key ? (
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        ) : (
+                          <Download className="h-3.5 w-3.5" />
+                        )}
+                        PDF
+                      </Button>
+                    </div>
                   </div>
                 </div>
               </div>

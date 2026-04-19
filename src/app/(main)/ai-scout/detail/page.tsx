@@ -2,13 +2,12 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { ArrowLeft, Loader2, ShoppingCart, Tag } from "lucide-react";
+import { ArrowLeft, Loader2, Tag } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import AppCard from "@/components/app-card/AppCard";
 import { AppCardType } from "@/types/app-card";
 import { LocationWithTags } from "@/types/location";
-import { useCart } from "@/hooks/use-cart";
 
 type SceneLocation = {
   name: string;
@@ -24,7 +23,6 @@ type Scene = {
 };
 
 export default function AIScoutDetailPage() {
-  const { addItem } = useCart();
   const [allLocations, setAllLocations] = useState<LocationWithTags[]>([]);
   const [loadingLocations, setLoadingLocations] = useState(true);
   const recommendations = useMemo<Scene[]>(() => {
@@ -164,29 +162,17 @@ export default function AIScoutDetailPage() {
                           pax={dbLoc.shooting_location_pax}
                           rating={dbLoc.shooting_location_rate}
                           tags={dbLoc.tags}
-                          action={
-                            <Button
-                              type="button"
-                              className="w-full"
-                              onClick={() =>
-                                addItem({
-                                  id: dbLoc.shooting_location_id,
-                                  itemType: "location",
-                                  name: dbLoc.shooting_location_name,
-                                  subtitle: dbLoc.shooting_location_city,
-                                  price: dbLoc.shooting_location_price,
-                                  imageUrl:
-                                    dbLoc.shooting_location_image_url?.[0] ??
-                                    "/placeholder_durent.webp",
-                                  tags: dbLoc.tags,
-                                  requiresDateRange: true,
-                                })
-                              }
-                            >
-                              <ShoppingCart className="h-4 w-4 mr-2" />
-                              Tambah ke Keranjang
-                            </Button>
-                          }
+                          cartItem={{
+                            id: dbLoc.shooting_location_id,
+                            itemType: "location",
+                            name: dbLoc.shooting_location_name,
+                            subtitle: dbLoc.shooting_location_city,
+                            price: dbLoc.shooting_location_price,
+                            imageUrl:
+                              dbLoc.shooting_location_image_url?.[0] ??
+                              "/placeholder_durent.webp",
+                            requiresDateRange: true,
+                          }}
                         />
                       ) : (
                         <AppCard
